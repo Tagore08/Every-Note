@@ -266,10 +266,33 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 
 ---
 
-### [ ] Stage 10: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
-- Eisenhower Matrix 4-quadrant interactive visualization view (`urgent` x `important`).
-- Markdown preview rendering & live toggle in note editor.
-- Checklist / task blocks inside notes.
-- Peer-to-peer / user-owned cloud synchronization (WebRTC / WebDAV).
+### [x] Stage 10: Focus Timer + Eisenhower Matrix
+- **1. Database Schema Extension (Version 7)**:
+  - New `focusSessions` table in Dexie: `id`, `startedAt`, `minutes`, `taskId?`, `createdAt`.
+  - Non-destructive Dexie schema evolution: Versions 1 through 7 preserved sequentially.
+  - Dedicated repository `src/db/focusRepo.ts` with `logFocusSession`, `getRecentSessions`, `deleteSession`, and reactive `useRecentFocusSessions(limit)` resolving task titles.
+- **2. Focus Timer Screen (`/focus`)**:
+  - Default 25:00 countdown with standard presets (15m, 25m, 45m, 60m).
+  - Big countdown display with Start / Pause / Reset controls.
+  - Screen wake lock integration (`navigator.wakeLock`) keeping display on during active sessions with safe auto-release on pause/reset/unmount.
+  - Web Audio API completion chime.
+  - Auto-logs completed sessions to IndexedDB `focusSessions` table with start timestamp and duration.
+  - 5-minute break mode toggle.
+  - Optional "Link to task" picker associating session with an active todo task.
+  - "History" tab showing last 20 sessions (date, duration, linked task chip, and delete session action).
+- **3. Eisenhower Matrix Screen (`/matrix`)**:
+  - 2x2 matrix view over existing tasks using `importance` and `urgency` boolean fields (no new tables needed).
+  - 4 Quadrants: Do (urgent+important), Schedule (not urgent+important), Delegate (urgent+not important), Eliminate (not urgent+not important).
+  - Desktop HTML5 drag-and-drop between quadrants (updates both booleans in IndexedDB).
+  - Mobile long-press gesture (~450ms) opening "Move to..." modal with 4 quadrant options, plus quick menu action.
+  - Tap task opens standard `TaskEditorModal`.
+  - 1-tap circular completion button with 6-second undo snackbar.
+  - Quick-add input per quadrant.
+  - Delete task calls `tasksRepo.deleteTask` with standard 6-second undo snackbar.
+  - Header button on `/tasks` navigating directly to `/matrix`.
+- **4. Data Portability & Settings (Version 7 Envelope)**:
+  - Backup export and import upgraded to Version 7 envelope including `focusSessions`.
+  - Merge and replace import support with undo restoration.
+  - Danger zone reports and wipes focus sessions upon typed confirmation.
 
 

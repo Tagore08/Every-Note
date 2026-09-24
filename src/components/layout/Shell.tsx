@@ -92,6 +92,26 @@ const mainNavItems: NavItem[] = [
     ),
   },
   {
+    name: 'Matrix',
+    path: '/matrix',
+    icon: (active) => (
+      <svg
+        className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+        <rect x="3" y="14" width="7" height="7" />
+      </svg>
+    ),
+  },
+  {
     name: 'Calendar',
     path: '/calendar',
     icon: (active) => (
@@ -108,6 +128,25 @@ const mainNavItems: NavItem[] = [
         <line x1="16" y1="2" x2="16" y2="6" />
         <line x1="8" y1="2" x2="8" y2="6" />
         <line x1="3" y1="10" x2="21" y2="10" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Focus',
+    path: '/focus',
+    icon: (active) => (
+      <svg
+        className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="13" r="8" />
+        <path d="M12 9v4l2 2" />
+        <path d="M10 2h4" />
       </svg>
     ),
   },
@@ -248,11 +287,11 @@ const storageNavItems: NavItem[] = [
 ];
 
 const mobileBottomNavItems: NavItem[] = [
-  mainNavItems[0], // Upcoming
-  mainNavItems[1], // Inbox
-  mainNavItems[2], // Notes
-  mainNavItems[3], // Tasks
-  mainNavItems[4], // Calendar
+  mainNavItems.find((i) => i.path === '/upcoming')!,
+  mainNavItems.find((i) => i.path === '/inbox')!,
+  mainNavItems.find((i) => i.path === '/notes')!,
+  mainNavItems.find((i) => i.path === '/tasks')!,
+  mainNavItems.find((i) => i.path === '/calendar')!,
 ];
 
 export function Shell() {
@@ -508,6 +547,33 @@ export function Shell() {
         </Link>
 
         <div className="flex items-center gap-1">
+          <Link
+            to="/matrix"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Eisenhower Matrix"
+            aria-label="Eisenhower Matrix"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+            </svg>
+          </Link>
+
+          <Link
+            to="/focus"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Focus Timer"
+            aria-label="Focus Timer"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="13" r="8" />
+              <path d="M12 9v4l2 2" />
+              <path d="M10 2h4" />
+            </svg>
+          </Link>
+
           <Link
             to="/habits"
             className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"

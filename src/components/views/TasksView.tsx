@@ -1,4 +1,5 @@
 import { useState, useRef, type KeyboardEvent, type TouchEvent } from 'react';
+import { Link } from 'react-router-dom';
 import type { Task } from '../../types/task';
 import { useTodoTasks, useDoneTasks, tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
@@ -113,30 +114,46 @@ export function TasksView() {
           </span>
         </div>
 
-        {/* Segment Tabs */}
-        <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setSegment('todo')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              segment === 'todo'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
+        {/* Segment Tabs & Matrix View Switcher */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+            <button
+              type="button"
+              onClick={() => setSegment('todo')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                segment === 'todo'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              Todo ({todoTasks?.length ?? 0})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSegment('done')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                segment === 'done'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              Done ({doneTasks?.length ?? 0})
+            </button>
+          </div>
+
+          <Link
+            to="/matrix"
+            className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            title="Eisenhower Matrix view"
+            aria-label="Eisenhower Matrix view"
           >
-            Todo ({todoTasks?.length ?? 0})
-          </button>
-          <button
-            type="button"
-            onClick={() => setSegment('done')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              segment === 'done'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            Done ({doneTasks?.length ?? 0})
-          </button>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+            </svg>
+          </Link>
         </div>
       </div>
 

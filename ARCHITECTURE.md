@@ -28,16 +28,18 @@ notes-app/
     │   ├── task.ts          # Task data contracts (Task, TaskStatus, TaskPriority)
     │   ├── event.ts         # Calendar event and recurrence occurrence contracts
     │   ├── person.ts        # Person contracts (Person interface, contact info, notes)
-    │   └── habit.ts         # Habit & HabitLog data contracts (streaks, frequency)
+    │   ├── habit.ts         # Habit & HabitLog data contracts (streaks, frequency)
+    │   └── focus.ts         # Focus session data contract (FocusSession interface)
     ├── db/
-    │   ├── database.ts      # Dexie 4 database class, schema versions 1-6, and DB singleton
+    │   ├── database.ts      # Dexie 4 database class, schema versions 1-7, and DB singleton
     │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes
     │   ├── attachmentsRepo.ts# Data access layer & reactive hooks for attachments & storage
     │   ├── tasksRepo.ts     # Data access layer & reactive hooks for tasks
     │   ├── eventsRepo.ts    # Data access layer & recurrence occurrence engine
     │   ├── upcomingRepo.ts  # Cross-entity date horizon aggregation engine
     │   ├── peopleRepo.ts    # Data access layer & reactive hooks for people
-    │   └── habitsRepo.ts    # Data access layer, streak calculation engine & reactive hooks
+    │   ├── habitsRepo.ts    # Data access layer, streak calculation engine & reactive hooks
+    │   └── focusRepo.ts     # Data access layer & reactive hooks for focus sessions
     ├── context/
     │   └── SnackbarContext.tsx # Global ~6s snackbar & undo notification system
     ├── hooks/
@@ -65,7 +67,9 @@ notes-app/
             ├── NotesView.tsx        # Active notes list (pinned-first, tag filter, long-press pin, card actions)
             ├── NoteEditorView.tsx   # Full-screen editor (~500ms debounced autosave, attachments, tag pills, person picker)
             ├── TasksView.tsx        # Todo & Done segmentation, quick-add, completion gestures
+            ├── EisenhowerMatrixView.tsx # 2x2 matrix view (Do, Schedule, Delegate, Eliminate), DnD, mobile long-press
             ├── CalendarView.tsx     # Month grid, day agenda, recurring series math, reminders
+            ├── FocusTimerView.tsx   # Focus countdown timer, wake lock, audio chime, break toggle, session history
             ├── HabitsView.tsx       # Habits screen, big tap-to-complete circles, streak counts, 30-day dot grid
             ├── PeopleView.tsx       # Avatar/initial circles, instant name filter, new person dialog
             ├── PersonProfileView.tsx# Editable profile, local photo Blob, auto-lists of events/tasks/notes, delete forever
@@ -73,7 +77,7 @@ notes-app/
             ├── TagsView.tsx         # Tag cloud with usage frequencies and filtered note browser
             ├── ArchiveView.tsx      # Archive management and unarchive browser
             ├── TrashView.tsx        # Soft-deleted notes browser, restore, and permanent deletion dialogs
-            └── SettingsView.tsx     # Theme choice, storage quota estimate, JSON backup export/import (v6), and danger zone
+            └── SettingsView.tsx     # Theme choice, storage quota estimate, JSON backup export/import (v7), and danger zone
 ```
 
 ---
@@ -138,6 +142,20 @@ this.version(6).stores({
   people: '++id, name, trashedAt, createdAt, updatedAt',
   habits: '++id, name, archived, createdAt, updatedAt',
   habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+});
+```
+
+### Schema Version 7 (Stage 10 Focus Sessions Extension)
+```ts
+this.version(7).stores({
+  notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+  attachments: '++id, noteId, ownerType, kind, createdAt',
+  tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+  events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+  people: '++id, name, trashedAt, createdAt, updatedAt',
+  habits: '++id, name, archived, createdAt, updatedAt',
+  habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+  focusSessions: '++id, startedAt, taskId, createdAt',
 });
 ```
 
@@ -246,6 +264,15 @@ this.version(6).stores({
 | `[habitId+date]` | `[number, string]` | `[habitId+date]` | Compound unique day lookup index |
 | `createdAt` | `Date` | `createdAt` | Creation timestamp index |
 
+#### Table: `focusSessions` (Realized in Stage 10)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `startedAt` | `Date` | `startedAt` | Session start timestamp index |
+| `minutes` | `number` | — | Session duration in minutes (e.g. 15, 25, 45, 60) |
+| `taskId` | `number \| null` (optional) | `taskId` | Optional associated task reference index |
+| `createdAt` | `Date` | `createdAt` | Creation timestamp index |
+
 > **CRITICAL Data-Model Rule**: An event's `startAt`/`endAt` represents a fixed scheduled time block. It is completely separate from a task's `dueAt`. These date fields are never merged or conflated.
 
 ### Versioning & Migrations Policy
@@ -260,13 +287,13 @@ this.version(6).stores({
 
 ## 3. Data Access & State Management Approach
 
-### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts`, `src/db/tasksRepo.ts`, `src/db/eventsRepo.ts`, `src/db/upcomingRepo.ts`, `src/db/peopleRepo.ts` & `src/db/habitsRepo.ts`)
+### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts`, `src/db/tasksRepo.ts`, `src/db/eventsRepo.ts`, `src/db/upcomingRepo.ts`, `src/db/peopleRepo.ts`, `src/db/habitsRepo.ts` & `src/db/focusRepo.ts`)
 - **Isolation**: Screens and UI components **never** call Dexie directly. All read queries and write mutations pass through the repository layer.
 - **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into the repos without modifying views.
-- **Cascading Deletions & Reference Cleanup**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Permanent person deletion cleans up references in linked events, tasks, and notes by setting `personId: null` in a single Dexie transaction. Deleting a habit permanently cascades and clears all associated `habitLogs`.
+- **Cascading Deletions & Reference Cleanup**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Permanent person deletion cleans up references in linked events, tasks, and notes by setting `personId: null` in a single Dexie transaction. Deleting a habit permanently cascades and clears all associated `habitLogs`. Focus sessions can be cleared individually or wiped during global backups.
 
 ### Reactive Reads
-- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`, `useOccurrencesForRange`, `useTasksDueForRange`, `useScheduledNotesForRange`, `useEvent`, `useUpcomingData`, `usePeople`, `usePerson`, `usePersonEvents`, `usePersonTasks`, `usePersonNotes`, `useHabitsWithStats`, `useHabitsTodaySummary`) backed by Dexie's `useLiveQuery`.
+- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`, `useOccurrencesForRange`, `useTasksDueForRange`, `useScheduledNotesForRange`, `useEvent`, `useUpcomingData`, `usePeople`, `usePerson`, `usePersonEvents`, `usePersonTasks`, `usePersonNotes`, `useHabitsWithStats`, `useHabitsTodaySummary`, `useRecentFocusSessions`) backed by Dexie's `useLiveQuery`.
 
 ---
 
@@ -446,6 +473,39 @@ this.version(6).stores({
    - JSON export and import envelopes upgraded to Version 6 including `habits` and `habitLogs` with merge/replace and undo rollback.
    - Danger zone includes habits count and wipes habits + logs on typed confirmation.
 
+### Stage 10: Focus Timer + Eisenhower Matrix
+1. **Focus Timer**:
+   - **Dedicated FocusSessions Data Model (Schema Version 7)**:
+     - Dedicated `focusSessions` table: `id`, `startedAt` (Date), `minutes` (number), `taskId` (optional nullable reference), `createdAt` (Date).
+     - Dedicated repository layer `src/db/focusRepo.ts` with `logFocusSession`, `getRecentSessions`, `deleteSession`, and reactive `useRecentFocusSessions(limit)` hook that automatically resolves linked task titles from `db.tasks`.
+   - **Focus Timer Screen (`/focus`)**:
+     - Default 25:00 countdown timer with standard presets (15m, 25m, 45m, 60m).
+     - Big readable countdown display with Start / Pause / Reset controls.
+     - Web Audio chime sound on countdown zero.
+     - Auto-logs completed sessions to IndexedDB `focusSessions` table with start timestamp and duration.
+     - Optional 5-minute break mode toggle.
+     - Optional "Link to task" picker allowing association of a focus session with an active todo task.
+     - `navigator.wakeLock` integration: automatically requests screen wake lock while timer is running and releases on pause, completion, reset, or unmount.
+     - "History" tab displaying recent sessions (last 20) with date, duration, linked task chip, and delete action.
+2. **Eisenhower Matrix**:
+   - **2x2 Matrix View (`/matrix`)**:
+     - Interactive 4-quadrant view over existing tasks table utilizing `importance` and `urgency` boolean fields without requiring any new database tables.
+     - **Do**: Urgent & Important (Quadrant I).
+     - **Schedule**: Not Urgent & Important (Quadrant II).
+     - **Delegate**: Urgent & Not Important (Quadrant III).
+     - **Eliminate**: Not Urgent & Not Important (Quadrant IV).
+     - Desktop HTML5 drag-and-drop: dragging a task card into any quadrant updates both `importance` and `urgency` flags in IndexedDB with immediate UI reflection.
+     - Mobile long-press gesture (~450ms) opening a "Move to..." dialog allowing seamless quadrant reassignment on touchscreens, along with a quick action menu.
+     - Tap opens standard `TaskEditorModal` for editing title, description, priority, tags, and due dates.
+     - Circular checkbox for 1-tap task completion with 6-second undo snackbar.
+     - Quick-add task input per quadrant.
+     - Deleting tasks from the matrix invokes `tasksRepo.deleteTask` with standard undo snackbar.
+     - Accessible via desktop sidebar, mobile header, and direct header button in `/tasks`.
+3. **Data Portability & Danger Zone (Envelope Version 7)**:
+   - JSON export and import envelopes upgraded to Version 7 including `focusSessions`.
+   - Full merge/replace support with undo snapshot rollback.
+   - Danger zone wipes focus sessions upon typed confirmation.
+
 ---
 
 ## 5. Future Extension Points
@@ -457,10 +517,10 @@ this.version(6).stores({
 > - **Upcoming View** (Stage 7): Pure read-only home screen aggregation across events, tasks, and scheduled notes.
 > - **People** (Stage 8): Lightweight local people directory, local photo Blobs, cross-entity links to events, tasks, and notes, profile auto-lists, and inline person creation.
 > - **Habits** (Stage 9): Minimal daily/weekdays/weekly habit tracking, big tap-to-complete circles, streak calculation engine, last 30 days dot grid, Home screen integration, and local reminders.
+> - **Focus Timer** (Stage 10): Local Pomodoro-style countdown timer, screen wake lock, task linkage, and session history logging.
+> - **Eisenhower Matrix** (Stage 10): Reactive 2x2 matrix view over existing tasks with desktop drag-and-drop and mobile long-press quadrant moving.
 
-1. **Eisenhower Matrix View**
-   - **Target**: 4-quadrant interactive visualization utilizing the existing `importance` and `urgency` task fields.
-2. **Sync**
+1. **Sync**
    - **Target**: Cross-device synchronization and backups without a centralized custodial backend.
    - **Design**: Integrated through repository layers with change-vector logging or CRDTs.
 

@@ -5,6 +5,7 @@ import type { Task } from '../types/task';
 import type { CalendarEvent } from '../types/event';
 import type { Person } from '../types/person';
 import type { Habit, HabitLog } from '../types/habit';
+import type { FocusSession } from '../types/focus';
 
 export class AppDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
@@ -14,6 +15,7 @@ export class AppDatabase extends Dexie {
   people!: EntityTable<Person, 'id'>;
   habits!: EntityTable<Habit, 'id'>;
   habitLogs!: EntityTable<HabitLog, 'id'>;
+  focusSessions!: EntityTable<FocusSession, 'id'>;
 
 
   constructor() {
@@ -80,6 +82,20 @@ export class AppDatabase extends Dexie {
       people: '++id, name, trashedAt, createdAt, updatedAt',
       habits: '++id, name, archived, createdAt, updatedAt',
       habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+    });
+
+    // Schema Version 7 (Stage 10: Focus Sessions)
+    // Fields indexed:
+    // - focusSessions: ++id, startedAt, taskId, createdAt
+    this.version(7).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
     });
   }
 }

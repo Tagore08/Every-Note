@@ -9,6 +9,8 @@ import { CalendarView } from './components/views/CalendarView';
 import { HabitsView } from './components/views/HabitsView';
 import { PeopleView } from './components/views/PeopleView';
 import { PersonProfileView } from './components/views/PersonProfileView';
+import { FocusTimerView } from './components/views/FocusTimerView';
+import { EisenhowerMatrixView } from './components/views/EisenhowerMatrixView';
 import { NoteEditorView } from './components/views/NoteEditorView';
 import { SearchView } from './components/views/SearchView';
 import { TagsView } from './components/views/TagsView';
@@ -27,7 +29,9 @@ export function App() {
           <Route path="notes" element={<NotesView />} />
           <Route path="notes/:id" element={<NoteEditorView />} />
           <Route path="tasks" element={<TasksView />} />
+          <Route path="matrix" element={<EisenhowerMatrixView />} />
           <Route path="calendar" element={<CalendarView />} />
+          <Route path="focus" element={<FocusTimerView />} />
           <Route path="habits" element={<HabitsView />} />
           <Route path="people" element={<PeopleView />} />
           <Route path="people/:id" element={<PersonProfileView />} />

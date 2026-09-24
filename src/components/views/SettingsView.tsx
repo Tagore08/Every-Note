@@ -7,6 +7,7 @@ import { tasksRepo } from '../../db/tasksRepo';
 import { eventsRepo } from '../../db/eventsRepo';
 import { peopleRepo } from '../../db/peopleRepo';
 import { habitsRepo } from '../../db/habitsRepo';
+import { focusRepo } from '../../db/focusRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -20,6 +21,7 @@ import type { Task } from '../../types/task';
 import type { CalendarEvent } from '../../types/event';
 import type { Person } from '../../types/person';
 import type { Habit, HabitLog } from '../../types/habit';
+import type { FocusSession } from '../../types/focus';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -40,6 +42,7 @@ interface BackupEnvelope {
   attachments?: ExportAttachment[];
   habits?: Habit[];
   habitLogs?: HabitLog[];
+  focusSessions?: FocusSession[];
   settings?: {
     theme?: string;
   };
@@ -148,6 +151,7 @@ export function SettingsView() {
       const allPeople = await peopleRepo.getAllPeopleForExport();
       const allHabits = await habitsRepo.getAllHabitsForExport();
       const allHabitLogs = await habitsRepo.getAllHabitLogsForExport();
+      const allFocusSessions = await focusRepo.getAllSessionsForExport();
       const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // Convert Blobs to base64 strings
@@ -199,7 +203,7 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 6, // Bumped to Version 6 for Stage 9 Habits
+        version: 7, // Bumped to Version 7 for Stage 10 Focus Sessions
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
@@ -208,6 +212,7 @@ export function SettingsView() {
         people: exportedPeople,
         habits: allHabits,
         habitLogs: allHabitLogs,
+        focusSessions: allFocusSessions,
         attachments: exportedAttachments,
         settings: {
           theme: mode,
@@ -229,7 +234,7 @@ export function SettingsView() {
 
       const formattedFileSize = formatFileSize(blob.size);
       showSnackbar({
-        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allEvents.length} events, ${allPeople.length} people, ${allHabits.length} habits & ${allAttachments.length} attachments (${formattedFileSize}).`,
+        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allEvents.length} events, ${allPeople.length} people, ${allHabits.length} habits, ${allFocusSessions.length} focus sessions & ${allAttachments.length} attachments (${formattedFileSize}).`,
       });
     } catch (err) {
       console.error('Failed to export data:', err);
@@ -268,6 +273,7 @@ export function SettingsView() {
       let attachmentsArray: ExportAttachment[] = [];
       let habitsArray: Habit[] = [];
       let habitLogsArray: HabitLog[] = [];
+      let focusSessionsArray: FocusSession[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
 
@@ -293,6 +299,9 @@ export function SettingsView() {
         if ('habitLogs' in parsed && Array.isArray((parsed as BackupEnvelope).habitLogs)) {
           habitLogsArray = (parsed as BackupEnvelope).habitLogs ?? [];
         }
+        if ('focusSessions' in parsed && Array.isArray((parsed as BackupEnvelope).focusSessions)) {
+          focusSessionsArray = (parsed as BackupEnvelope).focusSessions ?? [];
+        }
       } else if (Array.isArray(parsed)) {
         notesArray = parsed;
       } else {
@@ -311,6 +320,7 @@ export function SettingsView() {
         attachments: attachmentsArray,
         habits: habitsArray,
         habitLogs: habitLogsArray,
+        focusSessions: focusSessionsArray,
       });
       setImportStrategy('merge');
     } catch (err) {
@@ -328,12 +338,13 @@ export function SettingsView() {
     if (!importCandidate) return;
 
     try {
-      // Snapshot existing tasks, events, people, habits, and attachments before mutating (for undo)
+      // Snapshot existing tasks, events, people, habits, focusSessions, and attachments before mutating (for undo)
       const prevTasks = await tasksRepo.getAllTasksForExport();
       const prevEvents = await eventsRepo.getAllEventsForExport();
       const prevPeople = await peopleRepo.getAllPeopleForExport();
       const prevHabits = await habitsRepo.getAllHabitsForExport();
       const prevHabitLogs = await habitsRepo.getAllHabitLogsForExport();
+      const prevFocusSessions = await focusRepo.getAllSessionsForExport();
       const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // 1. Import Notes
@@ -391,7 +402,16 @@ export function SettingsView() {
         importedHabitsCount = habitsCount;
       }
 
-      // 6. Import Attachments (if any in candidate)
+      // 6. Import Focus Sessions
+      let importedFocusCount = 0;
+      if (importCandidate.focusSessions && importCandidate.focusSessions.length > 0) {
+        importedFocusCount = await focusRepo.importSessions(
+          importCandidate.focusSessions,
+          importStrategy
+        );
+      }
+
+      // 7. Import Attachments (if any in candidate)
       let importedAttachmentsCount = 0;
       if (importCandidate.attachments && importCandidate.attachments.length > 0) {
         const restoredAttachments: Attachment[] = [];
@@ -423,7 +443,7 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -440,6 +460,9 @@ export function SettingsView() {
           }
           if (importStrategy === 'replace' && prevHabits) {
             await habitsRepo.importHabits(prevHabits, prevHabitLogs || [], 'replace');
+          }
+          if (importStrategy === 'replace' && prevFocusSessions) {
+            await focusRepo.importSessions(prevFocusSessions, 'replace');
           }
           if (importStrategy === 'replace' && prevAttachments) {
             await attachmentsRepo.importAttachments(prevAttachments, 'replace');
@@ -463,10 +486,11 @@ export function SettingsView() {
       await eventsRepo.deleteAllEvents();
       await peopleRepo.deleteAllPeople();
       await habitsRepo.deleteAllHabits();
+      await focusRepo.deleteAllSessions();
       setShowDeleteAllModal(false);
       setDeleteConfirmationInput('');
       await loadStorageEstimate();
-      showSnackbar({ message: 'All notes, tasks, events, people, habits, and attachments have been completely deleted.' });
+      showSnackbar({ message: 'All notes, tasks, events, people, habits, focus sessions, and attachments have been completely deleted.' });
     } catch (err) {
       console.error('Failed to delete all data:', err);
     }
@@ -932,7 +956,7 @@ export function SettingsView() {
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              This action permanently purges all notes, tasks, events, people, habits, and attachments. To proceed, please type{' '}
+              This action permanently purges all notes, tasks, events, people, habits, focus sessions, and attachments. To proceed, please type{' '}
               <span className="font-mono font-bold text-red-600 dark:text-red-400">DELETE ALL</span> below:
             </p>
 
