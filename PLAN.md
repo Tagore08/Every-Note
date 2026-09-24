@@ -314,4 +314,28 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
   - Successfully compiled debug APK via `./gradlew assembleDebug` (`android/app/build/outputs/apk/debug/app-debug.apk`).
   - Created `ANDROID.md` detailing debug APK builds, keystore creation, Gradle signing, release `.aab` generation, bundletool verification, and version bumping.
 
+---
+
+### [x] Stage 12: Play Store Preparation
+- **1. Play Checklist Reference (`PLAY_STORE.md`)**:
+  - Documented complete release preparation:
+    - Step-by-step signed AAB build instructions.
+    - Google Play App Signing with upload keystore workflow.
+    - Store listing title, 80-character short description, and full description covering all 10 core features.
+    - Graphic asset specs (512x512 app icon, 1024x500 feature graphic, phone & tablet screenshots).
+    - Data safety section responses (confirming zero data collected, zero data shared).
+    - IARC content rating guidance (PEGI 3 / Everyone).
+    - Target API 36 compliance verification.
+- **2. GitHub Pages-Ready Privacy Policy (`public/privacy-policy.html` & `privacy-policy.html`)**:
+  - Standalone, responsive, dark/light theme-adaptive HTML policy.
+  - Transparently explains local-first IndexedDB storage, zero trackers, zero server communication, device permissions, and user data export/deletion.
+- **3. Automated Release Build Script (`scripts/build-release.sh`)**:
+  - One-command release generator (`npm run release` or `./scripts/build-release.sh`).
+  - Auto-increments `versionCode` in `android/app/build.gradle` (or accepts `--no-bump` / custom version flags).
+  - Executes web build, Capacitor sync, and Gradle `bundleRelease`.
+  - Configured `android/app/build.gradle` to sign with `key.properties` or environment variables when present.
+  - Outputs SHA-256 fingerprint, file size, and target versions.
+- **4. Closed Testing 2-Minute Smoke Test Checklist (`SMOKE_TEST.md`)**:
+  - Step-by-step 10-point checklist for testers verifying capture, notes, tasks, matrix, calendar, habits, focus timer, people directory, theme adaptation, and offline restart resilience.
+
 

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Notes App</title>
+  <meta name="description" content="Privacy Policy for Notes App: 100% local-first, zero data collection, zero tracking.">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --border: #334155;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --text: #0f172a;
+        --text-muted: #64748b;
+        --accent: #2563eb;
+        --border: #e2e8f0;
+      }
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      padding: 2.5rem;
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 1.875rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.25rem 0.625rem;
+      border-radius: 9999px;
+      background-color: rgba(59, 130, 246, 0.15);
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+    .date {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 1.75rem 0 0.75rem 0;
+      color: var(--text);
+    }
+    p, li {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 0.75rem;
+    }
+    ul {
+      padding-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    li {
+      margin-bottom: 0.4rem;
+    }
+    .highlight-box {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
+      margin: 1.5rem 0;
+    }
+    .highlight-box p {
+      color: var(--text);
+      font-weight: 500;
+      margin-bottom: 0;
+    }
+    footer {
+      margin-top: 2.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">100% Local-First Application</span>
+      <h1>Privacy Policy</h1>
+      <p class="date">Effective Date: September 2026 · App: Notes App (com.tagore.notes)</p>
+    </header>
+
+    <div class="highlight-box">
+      <p>🛡️ <strong>Summary:</strong> Notes App is an entirely offline, local-first application. We do not collect, store, transmit, sell, or analyze any personal information. All your notes, tasks, events, habits, focus logs, and media attachments stay strictly on your device.</p>
+    </div>
+
+    <h2>1. Data Collection and Transmission</h2>
+    <p>Notes App operates with zero remote servers:</p>
+    <ul>
+      <li><strong>No Account Required:</strong> You do not need to sign up, sign in, or provide an email address, phone number, or credentials to use the app.</li>
+      <li><strong>Zero Telemetry or Analytics:</strong> We do not embed analytics SDKs (such as Google Analytics or Firebase), crash reporters, advertising networks, or user tracking libraries.</li>
+      <li><strong>Zero Server Communication:</strong> The app never transmits your notes, tasks, calendar entries, habit records, contacts, focus logs, or attachments across the internet.</li>
+    </ul>
+
+    <h2>2. How Your Data Is Stored</h2>
+    <p>All data created within Notes App is stored exclusively on your device using client-side <strong>IndexedDB</strong>:</p>
+    <ul>
+      <li><strong>Notes & Attachments:</strong> Markdown text, tags, links, and binary file attachments (such as photos and documents) are saved directly in your device's browser sandbox storage.</li>
+      <li><strong>Tasks & Eisenhower Matrix:</strong> Task items, deadlines, priorities, and matrix quadrants reside entirely in local IndexedDB tables.</li>
+      <li><strong>Events & Schedule:</strong> Calendar dates and recurring series calculations execute client-side on your device.</li>
+      <li><strong>Habits & Streaks:</strong> Daily check-ins, logs, and streak metrics are computed locally.</li>
+      <li><strong>Focus Sessions:</strong> Pomodoro and focus timer history logs are persisted locally.</li>
+      <li><strong>People Directory:</strong> Any contact notes or profile photos you add remain local to the app and are not synced with external address books.</li>
+    </ul>
+
+    <h2>3. Device Permissions & Hardware Features</h2>
+    <p>Notes App requests minimal device permissions strictly to support local features:</p>
+    <ul>
+      <li><strong>Notifications:</strong> Used solely to schedule local, on-device alerts for your reminders and habits while the app is active. No external push tokens are created or transmitted.</li>
+      <li><strong>Wake Lock:</strong> Used temporarily while the Focus Timer is actively counting down to keep the screen on if desired. Released immediately upon pausing or finishing.</li>
+      <li><strong>Photo / File Picker:</strong> Used when you explicitly choose to attach an image or file to a note or person. The file is copied directly into local IndexedDB storage.</li>
+    </ul>
+
+    <h2>4. Data Portability, Backups, and Deletion</h2>
+    <p>You have complete ownership and control over your data at all times:</p>
+    <ul>
+      <li><strong>JSON Export:</strong> Under Settings, you can generate a complete, unencrypted JSON backup of all your notes, tasks, events, people, habits, focus sessions, and attachments at any time.</li>
+      <li><strong>JSON Import:</strong> You can restore your data from a backup using Merge or Replace strategies with instant undo support.</li>
+      <li><strong>Permanent Deletion:</strong> You can purge individual items or completely wipe all database tables at any time via the Settings "Danger Zone". Uninstalling the app completely removes all local database records from your device.</li>
+    </ul>
+
+    <h2>5. Third-Party Services</h2>
+    <p>Notes App does not integrate with, transmit data to, or share information with any third-party services, advertising providers, or data brokers.</p>
+
+    <h2>6. Children's Privacy</h2>
+    <p>Because Notes App does not collect any personal information whatsoever, it does not knowingly collect or solicit personal information from children under the age of 13.</p>
+
+    <h2>7. Changes to This Privacy Policy</h2>
+    <p>If we update this Privacy Policy in the future, the revised policy will be posted at this URL with an updated Effective Date. Since the application does not have a server connection, core offline privacy principles remain invariant.</p>
+
+    <h2>8. Contact</h2>
+    <p>If you have any questions or feedback regarding this Privacy Policy or the app's privacy practices, please contact the developer via the official repository or issue tracker.</p>
+
+    <footer>
+      &copy; 2026 Notes App. Built with privacy and local-first architecture.
+    </footer>
+  </div>
+</body>
+</html>
