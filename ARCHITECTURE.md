@@ -20,29 +20,33 @@ notes-app/
 │   └── favicon.svg          # Application icon
 └── src/
     ├── main.tsx             # Application bootstrap & React 19 root
-    ├── App.tsx              # Route hierarchy (react-router-dom)
+    ├── App.tsx              # Route hierarchy & global providers
     ├── index.css            # Tailwind CSS v4 setup & theme styles
     ├── types/
     │   └── note.ts          # Core TypeScript data contracts (Note interface)
     ├── db/
     │   ├── database.ts      # Dexie 4 database class, schema versions, and DB singleton
     │   └── notesRepo.ts     # Data access layer & reactive hooks (single sync extension point)
+    ├── context/
+    │   └── SnackbarContext.tsx # Global ~6s snackbar & undo notification system
     ├── hooks/
-    │   └── useTheme.ts      # Class-based light/dark theme manager with localStorage
+    │   └── useTheme.ts      # Light / Dark / System theme manager with live OS listener
     ├── utils/
     │   └── format.ts        # Relative date formatting, display titles, and search snippet helpers
     └── components/
         ├── layout/
-        │   └── Shell.tsx    # Responsive shell (Desktop sidebar, mobile bottom nav, global capture FAB)
+        │   └── Shell.tsx    # Responsive shell (Desktop sidebar, mobile bottom nav, capture FAB, auto-purge)
         ├── capture/
         │   └── CaptureModal.tsx # Instant capture dialog (autofocus, Enter to save, Esc to close)
         └── views/
-            ├── InboxView.tsx           # Quick-capture triage view with "File as note" & soft delete
-            ├── NotesView.tsx           # Active notes list (pinned-first, tag filter, card actions)
-            ├── NoteEditorView.tsx      # Full-screen editor (~500ms debounced autosave, tag pills)
-            ├── SearchView.tsx          # Instant as-you-type local search with highlighted snippets
-            ├── TagsView.tsx            # Tag cloud with usage frequencies and filtered note browser
-            └── StageZeroPlaceholder.tsx# Settings view
+            ├── InboxView.tsx        # Quick-capture triage view with "File as note" & soft delete
+            ├── NotesView.tsx        # Active notes list (pinned-first, tag filter, long-press pin, card actions)
+            ├── NoteEditorView.tsx   # Full-screen editor (~500ms debounced autosave, pin/archive/trash, tag pills)
+            ├── SearchView.tsx       # Instant as-you-type local search with highlighted snippets
+            ├── TagsView.tsx         # Tag cloud with usage frequencies and filtered note browser
+            ├── ArchiveView.tsx      # Archive management and unarchive browser
+            ├── TrashView.tsx        # Soft-deleted notes browser, restore, and permanent deletion dialogs
+            └── SettingsView.tsx     # Theme choice, JSON backup export/import (merge/replace), and danger zone
 ```
 
 ---
@@ -89,40 +93,48 @@ The database runs on client-side **IndexedDB** managed by **Dexie 4**. All data 
 - **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into `notesRepo` without requiring changes to views.
 
 ### Reactive Reads
-- Components consume data via reactive hooks (`useInboxNotes`, `useInboxCount`, `useActiveNotes`, `useNote`, `useSearchNotes`, `useTagsWithCounts`) backed by Dexie's `useLiveQuery`.
+- Components consume data via reactive hooks (`useInboxNotes`, `useInboxCount`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useSearchNotes`, `useTagsWithCounts`) backed by Dexie's `useLiveQuery`.
 - When any transaction commits to IndexedDB, Dexie notifies observable queries and active components re-render automatically.
 
-### Transient UI State
-- Pure UI states (dark mode, modal visibility, active tag filters, editor draft buffers) are maintained via standard React state and hooks.
-- Editor drafts autosave with a ~500ms debounce to prevent excessive IndexedDB writes.
+### Reusable Undo Mechanism (`src/context/SnackbarContext.tsx`)
+- Centralized `useSnackbar()` hook and provider.
+- Any state-changing or destructive action (delete, archive, unarchive, pin/unpin, file-as-note, restore) dispatches an elevated snackbar with a 6-second lifespan and a single-click reverse operation.
+
+### Theme Engine (`src/hooks/useTheme.ts`)
+- Three distinct modes: `light`, `dark`, and `system`.
+- `system` mode actively subscribes to OS color scheme changes via `window.matchMedia('(prefers-color-scheme: dark)')` event listener.
+- Synchronized with `localStorage` and toggles `.dark` class on root `<html>`.
 
 ---
 
-## 4. Stage 1: The Tiny Core
+## 4. Feature Milestones
 
-Stage 1 delivers the four core flows:
+### Stage 1: The Tiny Core
+1. **Global Instant Capture**: Quick capture modal with autofocus, Enter to save, Escape to dismiss, sub-3s latency.
+2. **Inbox View**: Reactive inbox triage with relative timestamps, "File as note", and soft delete.
+3. **Notes View & Full-Screen Editor**: Pinned-first sorting, debounced autosave (~500ms), tag chips.
+4. **Instant Search & Tags**: In-memory substring search across titles, content, and tags with snippet highlighting.
 
-1. **Global Instant Capture**:
-   - Visible from every screen: Desktop "+ Capture" button and mobile floating action button (FAB).
-   - Global keyboard shortcuts: `Ctrl+K`, `Cmd+K`, or `N` (ignored when focused in inputs/textareas).
-   - Autofocus single textarea, `Enter` to save, `Shift+Enter` for newlines, `Esc` to dismiss.
-   - Creates a note with `inbox: true`, empty title, and sets timestamps with zero friction.
-   - Sub-3-second workflow from app open to saved capture.
-
-2. **Inbox View**:
-   - Lists unprocessed notes (`inbox: true, trashedAt: null`), newest first.
-   - Real-time badge count on desktop sidebar and mobile navigation bar.
-   - Quick actions: "File as note" (toggles `inbox: false` and opens editor) and "Delete" (soft-delete via `trashedAt`).
-
-3. **Notes View & Full-Screen Editor**:
-   - Lists all filed notes (`inbox: false, archived: false, trashedAt: null`), pinned notes first then sorted by `updatedAt` desc.
-   - Full-screen editor supporting plain text, empty title tolerance, ~500ms debounced autosave, and "Saved" status indicator.
-   - Interactive tag manager: type and press `Enter` or `,` to add, click `x` to remove.
-
-4. **Instant Search & Tags**:
-   - Local, as-you-type substring search across title, content, and tags using Dexie in-memory filters.
-   - Result cards display match snippets with query highlighting.
-   - Tags browser listing all unique tags with note counts and one-click filtering.
+### Stage 2: Trustworthy App & Polish
+1. **Pinning Interactions**:
+   - Mobile touch long-press gesture (~500ms with haptic vibration) to toggle pin.
+   - Desktop hover action and editor action bar toggle.
+   - Pinned notes display first with subtle accent borders and pin icons.
+2. **Archive Flow**:
+   - Archive notes directly from list or editor; archived notes are hidden from active lists.
+   - Dedicated Archive view with one-click unarchive.
+3. **Trash Management & Auto-Purge**:
+   - Trashed notes view with single-note permanent delete and "Empty Trash" bulk purge modals.
+   - Automatic background purge of notes older than 30 days executed on app launch.
+4. **Unified Undo**:
+   - 6-second snackbar with reverse-action invocation across all destructive flows.
+5. **Settings & Data Portability**:
+   - Export backup into expandable JSON envelope (`{ version, app, exportedAt, notes, settings }`).
+   - Import JSON with validation, preview dialog, and choice of "Merge" or "Replace everything" strategies.
+   - Danger zone with typed confirmation (`DELETE ALL`).
+6. **Polish Pass**:
+   - Uniform empty states with gentle iconography and copywriting across Inbox, Notes, Search, Archive, and Trash.
+   - Official header branding: "Notes App".
 
 ---
 

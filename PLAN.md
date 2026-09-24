@@ -13,7 +13,7 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 - Light/Dark theme switching persisted to `localStorage`.
 - Dexie 4 database class with initial Version 1 schema and indexes.
 
-### [x] Stage 1: The Tiny Core (Current)
+### [x] Stage 1: The Tiny Core
 - **1. Fast Capture Flow**:
   - Global `+` action button (desktop sidebar button + mobile bottom-right FAB).
   - Global keyboard shortcuts (`Ctrl/Cmd+K` or `n` outside text inputs).
@@ -44,14 +44,36 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 
 ---
 
-### [ ] Stage 2: Markdown & Organization (Upcoming)
-- Rich plain text / markdown preview rendering.
-- Note archiving and trash management view (restore / empty trash).
-- Multiple tag selection filters and tag renaming.
+### [x] Stage 2: Trustworthy App & Polish (Current)
+- **1. Pinning Interactions**:
+  - Mobile touch long-press gesture (~500ms with haptic vibration) to toggle pin.
+  - Desktop hover action and editor action bar toggle.
+  - Pinned notes render first with subtle accent borders and pin indicators.
+- **2. Archive Flow**:
+  - Archive action on note cards and editor header; archived notes hidden from active list.
+  - Dedicated Archive screen with one-click unarchive.
+- **3. Trash Management & Auto-Purge**:
+  - Trashed notes browser (`/trash`) with restore and permanent delete confirmation dialogs.
+  - "Empty Trash" bulk purge confirmation.
+  - Automatic background purge of trashed notes older than 30 days executed on app launch.
+- **4. Reusable Undo Mechanism**:
+  - Centralized `SnackbarContext` with 6-second lifespan and reverse-action trigger.
+  - Connected to all destructive actions: delete, archive, unarchive, pin, unpin, file-as-note, and restore.
+- **5. Theme System (Light / Dark / System)**:
+  - System mode automatically follows OS `prefers-color-scheme` live without page reload.
+  - Persisted in `localStorage` and synchronized with Tailwind v4 `.dark` class.
+- **6. Settings & Data Portability**:
+  - Full JSON backup export using extensible `{ version, app, exportedAt, notes, settings }` envelope.
+  - JSON backup import with validator, preview dialog, and choice of "Merge" or "Replace everything".
+  - Danger zone with typed confirmation (`DELETE ALL`).
+- **7. Polish Pass**:
+  - Header branding updated to "Notes App" across all screens.
+  - Gentle illustrations and calm copy for Inbox, Notes, Search, Archive, and Trash empty states.
 
 ---
 
-### [ ] Stage 3: Extensions (Tasks, Attachments & People)
+### [ ] Stage 3: Markdown & Extensions (Upcoming)
+- Markdown preview rendering & live toggle.
 - Checklist / task blocks inside notes.
 - File and image attachments stored in IndexedDB / OPFS.
 - People mentions (`@name`).

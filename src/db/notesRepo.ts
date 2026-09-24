@@ -110,6 +110,64 @@ export const notesRepo = {
   },
 
   /**
+   * Archive a note (hides from main active notes list).
+   */
+  async archiveNote(id: number): Promise<void> {
+    await db.notes.update(id, {
+      archived: true,
+      updatedAt: new Date(),
+    });
+  },
+
+  /**
+   * Unarchive a note (moves back to active notes list).
+   */
+  async unarchiveNote(id: number): Promise<void> {
+    await db.notes.update(id, {
+      archived: false,
+      updatedAt: new Date(),
+    });
+  },
+
+  /**
+   * Hard-delete a note permanently from IndexedDB.
+   */
+  async deletePermanently(id: number): Promise<void> {
+    await db.notes.delete(id);
+  },
+
+  /**
+   * Empty trash: permanently delete all soft-deleted notes.
+   */
+  async emptyTrash(): Promise<number> {
+    const trashedNotes = await db.notes
+      .filter((note) => note.trashedAt !== null)
+      .toArray();
+
+    const ids = trashedNotes.map((n) => n.id!).filter((id) => typeof id === 'number');
+    if (ids.length > 0) {
+      await db.notes.bulkDelete(ids);
+    }
+    return ids.length;
+  },
+
+  /**
+   * Automatically purge trashed notes older than specified days (default: 30 days).
+   */
+  async purgeOldTrash(days = 30): Promise<number> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const oldNotes = await db.notes
+      .filter((note) => note.trashedAt !== null && new Date(note.trashedAt) < cutoff)
+      .toArray();
+
+    const ids = oldNotes.map((n) => n.id!).filter((id) => typeof id === 'number');
+    if (ids.length > 0) {
+      await db.notes.bulkDelete(ids);
+    }
+    return ids.length;
+  },
+
+  /**
    * Returns all active inbox notes, newest first.
    */
   async getInboxNotes(): Promise<Note[]> {
@@ -158,6 +216,34 @@ export const notesRepo = {
   },
 
   /**
+   * Returns all archived notes (archived=true, trashedAt=null).
+   * Sorted by newest updatedAt.
+   */
+  async getArchivedNotes(): Promise<Note[]> {
+    const notes = await db.notes
+      .filter((note) => note.archived === true && note.trashedAt === null)
+      .toArray();
+
+    return notes.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  },
+
+  /**
+   * Returns all trashed notes (trashedAt !== null).
+   * Sorted newest trashedAt first.
+   */
+  async getTrashNotes(): Promise<Note[]> {
+    const notes = await db.notes
+      .filter((note) => note.trashedAt !== null)
+      .toArray();
+
+    return notes.sort((a, b) => {
+      const timeA = a.trashedAt ? new Date(a.trashedAt).getTime() : 0;
+      const timeB = b.trashedAt ? new Date(b.trashedAt).getTime() : 0;
+      return timeB - timeA;
+    });
+  },
+
+  /**
    * Search notes across title, content, and tags using case-insensitive substring matching.
    * Only matches non-trashed notes.
    */
@@ -202,8 +288,83 @@ export const notesRepo = {
     }
 
     const list = Array.from(counts.entries()).map(([tag, count]) => ({ tag, count }));
-    // Sort descending by count, then alphabetically by tag name
     return list.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  },
+
+  /**
+   * Retrieves all notes in the database for complete JSON backup export.
+   */
+  async getAllNotesForExport(): Promise<Note[]> {
+    return await db.notes.toArray();
+  },
+
+  /**
+   * Imports notes with support for 'merge' or 'replace' strategy.
+   * Sanitizes date fields and preserves historical integrity.
+   */
+  async importNotes(
+    rawNotes: Partial<Note>[],
+    strategy: 'merge' | 'replace'
+  ): Promise<{ importedCount: number; previousSnapshot?: Note[] }> {
+    const previousSnapshot = await db.notes.toArray();
+
+    const sanitizedNotes: Note[] = rawNotes.map((raw) => {
+      const createdAt = raw.createdAt ? new Date(raw.createdAt) : new Date();
+      const updatedAt = raw.updatedAt ? new Date(raw.updatedAt) : new Date();
+      const trashedAt = raw.trashedAt ? new Date(raw.trashedAt) : null;
+
+      return {
+        id: typeof raw.id === 'number' ? raw.id : undefined,
+        title: typeof raw.title === 'string' ? raw.title : '',
+        content: typeof raw.content === 'string' ? raw.content : '',
+        tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
+        pinned: Boolean(raw.pinned),
+        archived: Boolean(raw.archived),
+        trashedAt: isNaN(trashedAt?.getTime() ?? 0) ? null : trashedAt,
+        inbox: Boolean(raw.inbox),
+        createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
+        updatedAt: isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
+      };
+    });
+
+    if (strategy === 'replace') {
+      await db.notes.clear();
+      if (sanitizedNotes.length > 0) {
+        await db.notes.bulkAdd(sanitizedNotes);
+      }
+      return { importedCount: sanitizedNotes.length, previousSnapshot };
+    }
+
+    // Merge strategy:
+    // If a note with the same ID already exists, newest updatedAt wins.
+    // If no note exists or id is missing, insert.
+    let importedCount = 0;
+    for (const note of sanitizedNotes) {
+      if (typeof note.id === 'number') {
+        const existing = await db.notes.get(note.id);
+        if (existing) {
+          if (new Date(note.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
+            await db.notes.put(note);
+            importedCount++;
+          }
+        } else {
+          await db.notes.put(note);
+          importedCount++;
+        }
+      } else {
+        await db.notes.add(note);
+        importedCount++;
+      }
+    }
+
+    return { importedCount, previousSnapshot };
+  },
+
+  /**
+   * Danger zone: wipes all notes data permanently.
+   */
+  async deleteAllNotes(): Promise<void> {
+    await db.notes.clear();
   },
 };
 
@@ -221,6 +382,14 @@ export function useInboxCount(): number {
 
 export function useActiveNotes(tagFilter?: string): Note[] | undefined {
   return useLiveQuery(() => notesRepo.getActiveNotes(tagFilter), [tagFilter]);
+}
+
+export function useArchivedNotes(): Note[] | undefined {
+  return useLiveQuery(() => notesRepo.getArchivedNotes());
+}
+
+export function useTrashNotes(): Note[] | undefined {
+  return useLiveQuery(() => notesRepo.getTrashNotes());
 }
 
 export function useNote(id: number | null | undefined): Note | null | undefined {

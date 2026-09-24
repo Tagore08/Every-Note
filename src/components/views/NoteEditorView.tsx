@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { notesRepo, useNote } from '../../db/notesRepo';
+import { useSnackbar } from '../../context/SnackbarContext';
 import { formatRelativeTime } from '../../utils/format';
 
 export function NoteEditorView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { showUndo } = useSnackbar();
   const numericId = id && id !== 'new' ? parseInt(id, 10) : null;
 
   const note = useNote(numericId);
@@ -14,6 +16,7 @@ export function NoteEditorView() {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [isPinned, setIsPinned] = useState(false);
+  const [isArchived, setIsArchived] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
 
@@ -43,13 +46,14 @@ export function NoteEditorView() {
       setContent(note.content || '');
       setTags(note.tags || []);
       setIsPinned(note.pinned || false);
+      setIsArchived(note.archived || false);
       initialLoadDone.current = true;
     }
   }, [note]);
 
   // Persist changes to Dexie with ~500ms debounce
   const triggerAutoSave = useCallback(
-    (newTitle: string, newContent: string, newTags: string[], pinnedState: boolean) => {
+    (newTitle: string, newContent: string, newTags: string[], pinnedState: boolean, archivedState: boolean) => {
       if (!numericId) return;
       setSaveStatus('saving');
 
@@ -64,6 +68,7 @@ export function NoteEditorView() {
             content: newContent,
             tags: newTags,
             pinned: pinnedState,
+            archived: archivedState,
           });
           setSaveStatus('saved');
         } catch (err) {
@@ -86,24 +91,45 @@ export function NoteEditorView() {
 
   const handleTitleChange = (val: string) => {
     setTitle(val);
-    triggerAutoSave(val, content, tags, isPinned);
+    triggerAutoSave(val, content, tags, isPinned, isArchived);
   };
 
   const handleContentChange = (val: string) => {
     setContent(val);
-    triggerAutoSave(title, val, tags, isPinned);
+    triggerAutoSave(title, val, tags, isPinned, isArchived);
   };
 
   const handleTogglePin = async () => {
+    if (!numericId) return;
     const nextPinned = !isPinned;
     setIsPinned(nextPinned);
-    triggerAutoSave(title, content, tags, nextPinned);
+    triggerAutoSave(title, content, tags, nextPinned, isArchived);
+
+    showUndo(nextPinned ? 'Note pinned' : 'Note unpinned', async () => {
+      setIsPinned(!nextPinned);
+      triggerAutoSave(title, content, tags, !nextPinned, isArchived);
+    });
+  };
+
+  const handleToggleArchive = async () => {
+    if (!numericId) return;
+    const nextArchived = !isArchived;
+    setIsArchived(nextArchived);
+    triggerAutoSave(title, content, tags, isPinned, nextArchived);
+
+    showUndo(nextArchived ? 'Note archived' : 'Note unarchived', async () => {
+      setIsArchived(!nextArchived);
+      triggerAutoSave(title, content, tags, isPinned, !nextArchived);
+    });
   };
 
   const handleTrash = async () => {
     if (!numericId) return;
     try {
       await notesRepo.trashNote(numericId);
+      showUndo('Note moved to trash', async () => {
+        await notesRepo.restoreNote(numericId);
+      });
       navigate('/notes');
     } catch (err) {
       console.error('Failed to trash note:', err);
@@ -119,13 +145,13 @@ export function NoteEditorView() {
     const updatedTags = [...tags, clean];
     setTags(updatedTags);
     setTagInput('');
-    triggerAutoSave(title, content, updatedTags, isPinned);
+    triggerAutoSave(title, content, updatedTags, isPinned, isArchived);
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
     const updatedTags = tags.filter((t) => t !== tagToRemove);
     setTags(updatedTags);
-    triggerAutoSave(title, content, updatedTags, isPinned);
+    triggerAutoSave(title, content, updatedTags, isPinned, isArchived);
   };
 
   const handleTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -168,7 +194,7 @@ export function NoteEditorView() {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="p-1.5 -ml-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 -ml-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             aria-label="Back"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -201,16 +227,17 @@ export function NoteEditorView() {
 
         {/* Note tools */}
         <div className="flex items-center gap-1.5">
+          {/* Pin action */}
           <button
             type="button"
             onClick={handleTogglePin}
-            className={`p-2 rounded-lg text-xs font-medium transition-colors ${
+            className={`p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
               isPinned
                 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300'
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
-            title={isPinned ? 'Unpin note' : 'Pin note'}
-            aria-label={isPinned ? 'Unpin note' : 'Pin note'}
+            title={isPinned ? 'Unpin note' : 'Pin note to top'}
+            aria-label={isPinned ? 'Unpin note' : 'Pin note to top'}
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill={isPinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
               <line x1="12" y1="17" x2="12" y2="22" />
@@ -218,10 +245,30 @@ export function NoteEditorView() {
             </svg>
           </button>
 
+          {/* Archive action */}
+          <button
+            type="button"
+            onClick={handleToggleArchive}
+            className={`p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              isArchived
+                ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300'
+                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+            title={isArchived ? 'Unarchive note' : 'Archive note'}
+            aria-label={isArchived ? 'Unarchive note' : 'Archive note'}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="3" width="20" height="5" rx="1" />
+              <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+              <path d="M10 12h4" />
+            </svg>
+          </button>
+
+          {/* Delete action */}
           <button
             type="button"
             onClick={handleTrash}
-            className="p-2 rounded-lg text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+            className="p-2 rounded-lg text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
             title="Delete note"
             aria-label="Delete note"
           >
@@ -255,7 +302,7 @@ export function NoteEditorView() {
               <button
                 type="button"
                 onClick={() => handleRemoveTag(tag)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-100 p-0.5 rounded-full"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-100 p-0.5 rounded-full cursor-pointer"
                 aria-label={`Remove tag ${tag}`}
               >
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

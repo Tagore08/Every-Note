@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../hooks/useTheme';
-import { useInboxCount } from '../../db/notesRepo';
+import { useInboxCount, notesRepo } from '../../db/notesRepo';
 import { CaptureModal } from '../capture/CaptureModal';
 
 interface NavItem {
@@ -10,7 +10,7 @@ interface NavItem {
   icon: (active: boolean) => React.ReactNode;
 }
 
-const navItems: NavItem[] = [
+const mainNavItems: NavItem[] = [
   {
     name: 'Inbox',
     path: '/inbox',
@@ -86,6 +86,46 @@ const navItems: NavItem[] = [
       </svg>
     ),
   },
+];
+
+const storageNavItems: NavItem[] = [
+  {
+    name: 'Archive',
+    path: '/archive',
+    icon: (active) => (
+      <svg
+        className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="2" y="3" width="20" height="5" rx="1" />
+        <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+        <path d="M10 12h4" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Trash',
+    path: '/trash',
+    icon: (active) => (
+      <svg
+        className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <polyline points="3 6 5 6 21 6" />
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </svg>
+    ),
+  },
   {
     name: 'Settings',
     path: '/settings',
@@ -106,11 +146,23 @@ const navItems: NavItem[] = [
   },
 ];
 
+const mobileBottomNavItems: NavItem[] = [
+  ...mainNavItems,
+  storageNavItems[2], // Settings
+];
+
 export function Shell() {
-  const { theme, toggleTheme } = useTheme();
+  const { mode, toggleTheme } = useTheme();
   const location = useLocation();
   const inboxCount = useInboxCount();
   const [isCaptureOpen, setIsCaptureOpen] = useState(false);
+
+  // Auto-purge trashed notes older than 30 days on app mount
+  useEffect(() => {
+    notesRepo.purgeOldTrash(30).catch((err) => {
+      console.warn('Auto-purge trash failed:', err);
+    });
+  }, []);
 
   // Global keyboard shortcuts: Ctrl/Cmd+K or 'n'
   useEffect(() => {
@@ -142,16 +194,17 @@ export function Shell() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const allNavItems = [...mainNavItems, ...storageNavItems];
   const currentItem =
-    navItems.find((item) => location.pathname.startsWith(item.path)) ?? navItems[0];
+    allNavItems.find((item) => location.pathname.startsWith(item.path)) ?? mainNavItems[0];
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
       {/* Desktop Sidebar (visible on md+) */}
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 h-screen p-4 justify-between">
         <div className="space-y-5">
-          {/* Logo / App Title */}
-          <div className="flex items-center gap-3 px-3 py-2">
+          {/* Logo / App Name */}
+          <Link to="/inbox" className="flex items-center gap-3 px-3 py-2 cursor-pointer">
             <div className="w-8 h-8 rounded-lg bg-blue-600 dark:bg-blue-500 flex items-center justify-center text-white shadow-sm">
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -159,10 +212,10 @@ export function Shell() {
               </svg>
             </div>
             <div>
-              <h1 className="font-semibold text-base leading-tight tracking-tight">Notes</h1>
+              <h1 className="font-bold text-base leading-tight tracking-tight">Notes App</h1>
               <p className="text-xs text-slate-500 dark:text-slate-400">Local-First</p>
             </div>
-          </div>
+          </Link>
 
           {/* Desktop Capture Action */}
           <button
@@ -182,36 +235,67 @@ export function Shell() {
             </kbd>
           </button>
 
-          {/* Navigation Links */}
-          <nav className="space-y-1">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  `flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <div className="flex items-center gap-3">
-                      {item.icon(isActive)}
-                      <span>{item.name}</span>
-                    </div>
-                    {item.name === 'Inbox' && inboxCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200">
-                        {inboxCount}
-                      </span>
+          {/* Main Navigation Links */}
+          <div className="space-y-1">
+            <nav className="space-y-1">
+              {mainNavItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({ isActive }) =>
+                    `flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <div className="flex items-center gap-3">
+                        {item.icon(isActive)}
+                        <span>{item.name}</span>
+                      </div>
+                      {item.name === 'Inbox' && inboxCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200">
+                          {inboxCount}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+
+            {/* Storage section in sidebar */}
+            <div className="pt-4">
+              <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Storage
+              </div>
+              <nav className="space-y-1">
+                {storageNavItems.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {item.icon(isActive)}
+                        <span>{item.name}</span>
+                      </>
                     )}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </nav>
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
+          </div>
         </div>
 
         {/* Sidebar Footer */}
@@ -219,36 +303,30 @@ export function Shell() {
           <button
             onClick={toggleTheme}
             type="button"
-            className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
-            aria-label="Toggle dark mode"
+            className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Toggle theme mode"
           >
             <span className="flex items-center gap-2">
-              {theme === 'dark' ? (
-                <svg className="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="5" />
-                  <line x1="12" y1="1" x2="12" y2="3" />
-                  <line x1="12" y1="21" x2="12" y2="23" />
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                  <line x1="1" y1="12" x2="3" y2="12" />
-                  <line x1="21" y1="12" x2="23" y2="12" />
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
-              )}
-              <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
+              <svg className="w-4 h-4 text-slate-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+              <span>Theme</span>
             </span>
-            <span className="text-xs px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-              {theme}
+            <span className="text-xs px-2 py-0.5 rounded capitalize bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+              {mode}
             </span>
           </button>
 
           <div className="px-3 py-1 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between">
-            <span>Stage 1 · Core</span>
+            <span>Stage 2 · Reliable</span>
             <span className="w-2 h-2 rounded-full bg-emerald-500" title="Offline ready" />
           </div>
         </div>
@@ -256,40 +334,55 @@ export function Shell() {
 
       {/* Mobile Top Header (visible on <md) */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
-        <div className="flex items-center gap-2">
+        <Link to="/inbox" className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-md bg-blue-600 dark:bg-blue-500 flex items-center justify-center text-white">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
           </div>
-          <span className="font-semibold text-sm">{currentItem.name}</span>
-        </div>
+          <span className="font-bold text-sm">Notes App</span>
+          <span className="text-xs text-slate-400 dark:text-slate-500">· {currentItem.name}</span>
+        </Link>
 
-        <button
-          onClick={toggleTheme}
-          type="button"
-          className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          aria-label="Toggle dark mode"
-        >
-          {theme === 'dark' ? (
-            <svg className="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="flex items-center gap-1">
+          <Link
+            to="/archive"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Archive"
+            aria-label="Archive"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="3" width="20" height="5" rx="1" />
+              <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+            </svg>
+          </Link>
+
+          <Link
+            to="/trash"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Trash"
+            aria-label="Trash"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+            </svg>
+          </Link>
+
+          <button
+            onClick={toggleTheme}
+            type="button"
+            className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Toggle theme mode"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="5" />
               <line x1="12" y1="1" x2="12" y2="3" />
               <line x1="12" y1="21" x2="12" y2="23" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="1" y1="12" x2="3" y2="12" />
-              <line x1="21" y1="12" x2="23" y2="12" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
             </svg>
-          ) : (
-            <svg className="w-5 h-5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          )}
-        </button>
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}
@@ -312,7 +405,7 @@ export function Shell() {
 
       {/* Mobile Bottom Navigation (visible on <md) */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 z-30 px-2 py-1 flex items-center justify-around">
-        {navItems.map((item) => (
+        {mobileBottomNavItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

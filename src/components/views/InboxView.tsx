@@ -1,5 +1,6 @@
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useInboxNotes, notesRepo } from '../../db/notesRepo';
+import { useSnackbar } from '../../context/SnackbarContext';
 import { formatRelativeTime, getDisplayTitle } from '../../utils/format';
 
 interface InboxViewProps {
@@ -9,6 +10,7 @@ interface InboxViewProps {
 export function InboxView(props: InboxViewProps) {
   const notes = useInboxNotes();
   const navigate = useNavigate();
+  const { showUndo } = useSnackbar();
   const outlet = useOutletContext<{ openCapture?: () => void } | null>();
   const onOpenCapture = props.onOpenCapture ?? outlet?.openCapture;
 
@@ -16,6 +18,9 @@ export function InboxView(props: InboxViewProps) {
     if (typeof id !== 'number') return;
     try {
       await notesRepo.fileInboxNote(id);
+      showUndo('Filed as note', async () => {
+        await notesRepo.updateNote(id, { inbox: true });
+      });
       navigate(`/notes/${id}`);
     } catch (err) {
       console.error('Failed to file note:', err);
@@ -26,6 +31,9 @@ export function InboxView(props: InboxViewProps) {
     if (typeof id !== 'number') return;
     try {
       await notesRepo.trashNote(id);
+      showUndo('Note moved to trash', async () => {
+        await notesRepo.restoreNote(id);
+      });
     } catch (err) {
       console.error('Failed to trash note:', err);
     }
