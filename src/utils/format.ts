@@ -99,3 +99,39 @@ export function formatFileSize(bytes: number): string {
   const formatted = (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1);
   return `${formatted} ${units[i] || 'GB'}`;
 }
+
+/**
+ * Checks whether a due date is in the past compared to current time.
+ */
+export function isOverdue(dateInput: Date | string | number | null | undefined): boolean {
+  if (!dateInput) return false;
+  const d = new Date(dateInput);
+  return !isNaN(d.getTime()) && d.getTime() < Date.now();
+}
+
+/**
+ * Formats a due date into a human-friendly string (e.g. "Today", "Tomorrow", "Yesterday", or "Oct 24").
+ */
+export function formatDueDate(dateInput: Date | string | number | null | undefined): string {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays === -1) return 'Yesterday';
+  if (diffDays > 1 && diffDays < 7) {
+    return d.toLocaleDateString(undefined, { weekday: 'short' });
+  }
+
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
+}

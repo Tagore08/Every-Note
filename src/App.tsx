@@ -3,6 +3,7 @@ import { SnackbarProvider } from './context/SnackbarContext';
 import { Shell } from './components/layout/Shell';
 import { InboxView } from './components/views/InboxView';
 import { NotesView } from './components/views/NotesView';
+import { TasksView } from './components/views/TasksView';
 import { NoteEditorView } from './components/views/NoteEditorView';
 import { SearchView } from './components/views/SearchView';
 import { TagsView } from './components/views/TagsView';
@@ -19,6 +20,7 @@ export function App() {
           <Route path="inbox" element={<InboxView />} />
           <Route path="notes" element={<NotesView />} />
           <Route path="notes/:id" element={<NoteEditorView />} />
+          <Route path="tasks" element={<TasksView />} />
           <Route path="search" element={<SearchView />} />
           <Route path="tags" element={<TagsView />} />
           <Route path="archive" element={<ArchiveView />} />

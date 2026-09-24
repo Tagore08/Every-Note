@@ -4,6 +4,7 @@ import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { useTheme } from '../../hooks/useTheme';
 import { useInboxCount, notesRepo } from '../../db/notesRepo';
+import { useTodoCount } from '../../db/tasksRepo';
 import { CaptureModal } from '../capture/CaptureModal';
 
 interface NavItem {
@@ -49,6 +50,24 @@ const mainNavItems: NavItem[] = [
         <line x1="16" y1="13" x2="8" y2="13" />
         <line x1="16" y1="17" x2="8" y2="17" />
         <polyline points="10 9 9 9 8 9" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Tasks',
+    path: '/tasks',
+    icon: (active) => (
+      <svg
+        className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M9 11l3 3L22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
       </svg>
     ),
   },
@@ -149,7 +168,10 @@ const storageNavItems: NavItem[] = [
 ];
 
 const mobileBottomNavItems: NavItem[] = [
-  ...mainNavItems,
+  mainNavItems[0], // Inbox
+  mainNavItems[1], // Notes
+  mainNavItems[2], // Tasks
+  mainNavItems[3], // Search
   storageNavItems[2], // Settings
 ];
 
@@ -158,6 +180,7 @@ export function Shell() {
   const { showSnackbar } = useSnackbar();
   const location = useLocation();
   const inboxCount = useInboxCount();
+  const todoCount = useTodoCount();
   const [isCaptureOpen, setIsCaptureOpen] = useState(false);
 
   // PWA Service Worker Registration & Update Notification
@@ -305,6 +328,11 @@ export function Shell() {
                       {item.name === 'Inbox' && inboxCount > 0 && (
                         <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200">
                           {inboxCount}
+                        </span>
+                      )}
+                      {item.name === 'Tasks' && todoCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200">
+                          {todoCount}
                         </span>
                       )}
                     </>
@@ -470,6 +498,11 @@ export function Shell() {
                   {item.name === 'Inbox' && inboxCount > 0 && (
                     <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full text-[10px] font-bold bg-blue-600 text-white flex items-center justify-center shadow-xs">
                       {inboxCount > 99 ? '99+' : inboxCount}
+                    </span>
+                  )}
+                  {item.name === 'Tasks' && todoCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full text-[10px] font-bold bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                      {todoCount > 99 ? '99+' : todoCount}
                     </span>
                   )}
                 </div>

@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { useTheme, type ThemeMode } from '../../hooks/useTheme';
 import { notesRepo, useArchivedNotes, useTrashNotes } from '../../db/notesRepo';
 import { attachmentsRepo } from '../../db/attachmentsRepo';
+import { tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import type { Note } from '../../types/note';
 import type { Attachment } from '../../types/attachment';
+import type { Task } from '../../types/task';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -17,6 +19,7 @@ interface BackupEnvelope {
   app: string;
   exportedAt: string;
   notes: Note[];
+  tasks?: Task[];
   attachments?: ExportAttachment[];
   settings?: {
     theme?: string;
@@ -105,6 +108,7 @@ export function SettingsView() {
     try {
       setIsExporting(true);
       const allNotes = await notesRepo.getAllNotesForExport();
+      const allTasks = await tasksRepo.getAllTasksForExport();
       const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // Convert Blobs to base64 strings
@@ -133,10 +137,11 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 2, // Bumped to Version 2 for Stage 3 attachments
+        version: 3, // Bumped to Version 3 for Stage 5 tasks
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
+        tasks: allTasks,
         attachments: exportedAttachments,
         settings: {
           theme: mode,
@@ -158,7 +163,7 @@ export function SettingsView() {
 
       const formattedFileSize = formatFileSize(blob.size);
       showSnackbar({
-        message: `Exported ${allNotes.length} notes & ${allAttachments.length} attachments (${formattedFileSize}).`,
+        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks & ${allAttachments.length} attachments (${formattedFileSize}).`,
       });
     } catch (err) {
       console.error('Failed to export data:', err);
@@ -190,6 +195,7 @@ export function SettingsView() {
       }
 
       let notesArray: unknown[] = [];
+      let tasksArray: Task[] = [];
       let attachmentsArray: ExportAttachment[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
@@ -198,6 +204,9 @@ export function SettingsView() {
         notesArray = (parsed as BackupEnvelope).notes;
         exportedAt = (parsed as BackupEnvelope).exportedAt || exportedAt;
         version = (parsed as BackupEnvelope).version || version;
+        if ('tasks' in parsed && Array.isArray((parsed as BackupEnvelope).tasks)) {
+          tasksArray = (parsed as BackupEnvelope).tasks ?? [];
+        }
         if ('attachments' in parsed && Array.isArray((parsed as BackupEnvelope).attachments)) {
           attachmentsArray = (parsed as BackupEnvelope).attachments ?? [];
         }
@@ -213,6 +222,7 @@ export function SettingsView() {
         app: 'notes-app',
         exportedAt,
         notes: notesArray as Note[],
+        tasks: tasksArray,
         attachments: attachmentsArray,
       });
       setImportStrategy('merge');
@@ -226,12 +236,13 @@ export function SettingsView() {
     }
   };
 
-  // 3. Confirm Import (Restores Notes and Attachments)
+  // 3. Confirm Import (Restores Notes, Tasks, and Attachments)
   const handleConfirmImport = async () => {
     if (!importCandidate) return;
 
     try {
-      // Snapshot existing attachments before mutating (for undo)
+      // Snapshot existing tasks and attachments before mutating (for undo)
+      const prevTasks = await tasksRepo.getAllTasksForExport();
       const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // 1. Import Notes
@@ -239,7 +250,13 @@ export function SettingsView() {
       const importedNotesCount = result.importedCount;
       const prevNotes = result.previousSnapshot;
 
-      // 2. Import Attachments (if any in candidate)
+      // 2. Import Tasks
+      let importedTasksCount = 0;
+      if (importCandidate.tasks && importCandidate.tasks.length > 0) {
+        importedTasksCount = await tasksRepo.importTasks(importCandidate.tasks, importStrategy);
+      }
+
+      // 3. Import Attachments (if any in candidate)
       let importedAttachmentsCount = 0;
       if (importCandidate.attachments && importCandidate.attachments.length > 0) {
         const restoredAttachments: Attachment[] = [];
@@ -271,10 +288,13 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
+          }
+          if (importStrategy === 'replace' && prevTasks) {
+            await tasksRepo.importTasks(prevTasks, 'replace');
           }
           if (importStrategy === 'replace' && prevAttachments) {
             await attachmentsRepo.importAttachments(prevAttachments, 'replace');
@@ -294,10 +314,11 @@ export function SettingsView() {
 
     try {
       await notesRepo.deleteAllNotes();
+      await tasksRepo.deleteAllTasks();
       setShowDeleteAllModal(false);
       setDeleteConfirmationInput('');
       await loadStorageEstimate();
-      showSnackbar({ message: 'All notes and attachments have been completely deleted.' });
+      showSnackbar({ message: 'All notes, tasks, and attachments have been completely deleted.' });
     } catch (err) {
       console.error('Failed to delete all data:', err);
     }

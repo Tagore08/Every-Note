@@ -122,8 +122,39 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 
 ---
 
-### [ ] Stage 5: Markdown, Tasks & Sync (Upcoming)
-- Markdown preview rendering & live toggle.
-- Checklist / task blocks inside notes (reusing attachments with `ownerType: 'task'`).
+### [x] Stage 5: Tasks
+- **1. Database Schema Extension (Version 3)**:
+  - New `tasks` table in Dexie: `id`, `title`, `description`, `status ('todo'|'done')`, `priority ('none'|'low'|'medium'|'high')`, `dueAt`, `completedAt`, `createdAt`, `updatedAt`, `importance (bool)`, `urgency (bool)`, `tags[]`, `trashedAt`, `sourceNoteId`.
+  - Non-destructive Dexie schema evolution: Versions 1, 2, and 3 preserved sequentially.
+  - Dedicated data access repository `src/db/tasksRepo.ts` with reactive hooks (`useTodoTasks`, `useDoneTasks`, `useTodoCount`).
+- **2. Tasks Screen (`/tasks`)**:
+  - Todo / Done segment toggles with reactive item count badges.
+  - Quick-add input bar: type title and press `Enter` to create task instantly.
+  - Completion toggle: circular checkbox with animation and swipe gesture on mobile touch devices.
+  - 6-second undo snackbar allowing instant rollback of completion actions.
+  - Prominent overdue styling and warning badges for tasks past their due date in `todo` status.
+- **3. Progressive Disclosure Editor (`TaskEditorModal`)**:
+  - Clean card surface kept focused; tap card to reveal modal with optional fields.
+  - Due date picker with one-click quick presets (*Today*, *Tomorrow*, *Next Week*, *Clear*).
+  - Priority selector (`None`, `Low`, `Medium`, `High`) with colored indicators.
+  - Multiline description text area.
+  - Tag pill manager (add via `Enter` or `,`, remove with backspace or `x`).
+  - Subtle Eisenhower matrix toggles (`importance` & `urgency`) without visual clutter.
+  - Direct navigation backlink to originating note if converted from a note.
+- **4. Explicit Note-to-Task Conversion**:
+  - Note editor: "To Task" action creates a pre-filled task linked via `sourceNoteId` without altering the note, with undo rollback.
+  - Inbox view: "To task" quick action creates a pre-filled task and files the note out of inbox, with undo rollback.
+  - Deleting notes never cascades or destroys converted tasks (independent lifecycles).
+- **5. Data Portability & Danger Zone (Envelope Version 3)**:
+  - JSON backup export upgraded to Version 3 envelope including all `tasks`.
+  - JSON backup import restores and merges/replaces tasks, with undo restoration.
+  - Settings danger zone reports task counts and wipes tasks upon typed confirmation.
+
+---
+
+### [ ] Stage 6: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
+- Eisenhower Matrix 4-quadrant interactive visualization view (`urgent` x `important`).
+- Markdown preview rendering & live toggle in note editor.
+- Checklist / task blocks inside notes.
 - People mentions (`@name`).
 - Peer-to-peer / user-owned cloud synchronization (WebRTC / WebDAV).

@@ -1,7 +1,9 @@
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useInboxNotes, notesRepo } from '../../db/notesRepo';
+import { tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatRelativeTime, getDisplayTitle } from '../../utils/format';
+import type { Note } from '../../types/note';
 
 interface InboxViewProps {
   onOpenCapture?: () => void;
@@ -36,6 +38,20 @@ export function InboxView(props: InboxViewProps) {
       });
     } catch (err) {
       console.error('Failed to trash note:', err);
+    }
+  };
+
+  const handleConvertToTask = async (note: Note) => {
+    if (typeof note.id !== 'number') return;
+    try {
+      const task = await tasksRepo.createTaskFromNote(note);
+      await notesRepo.fileInboxNote(note.id);
+      showUndo('Converted to task', async () => {
+        if (task.id) await tasksRepo.deletePermanently(task.id);
+        await notesRepo.updateNote(note.id!, { inbox: true });
+      });
+    } catch (err) {
+      console.error('Failed to convert note to task:', err);
     }
   };
 
@@ -133,6 +149,18 @@ export function InboxView(props: InboxViewProps) {
                   className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40 transition-colors"
                 >
                   Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConvertToTask(note)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:text-emerald-300 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer"
+                  title="Convert to task and file note"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                  <span>To task</span>
                 </button>
                 <button
                   type="button"

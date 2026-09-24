@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, type KeyboardEvent, type Drag
 import { useParams, useNavigate } from 'react-router-dom';
 import { notesRepo, useNote } from '../../db/notesRepo';
 import { attachmentsRepo, useAttachments } from '../../db/attachmentsRepo';
+import { tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatRelativeTime, formatFileSize } from '../../utils/format';
 import { AttachmentGallery } from '../attachments/AttachmentGallery';
@@ -144,6 +145,23 @@ export function NoteEditorView() {
       navigate('/notes');
     } catch (err) {
       console.error('Failed to trash note:', err);
+    }
+  };
+
+  const handleConvertToTask = async () => {
+    if (!numericId) return;
+    try {
+      const task = await tasksRepo.createTask({
+        title: title.trim() || 'Untitled Task',
+        description: content.trim(),
+        tags: [...tags],
+        sourceNoteId: numericId,
+      });
+      showUndo('Created task from note', async () => {
+        if (task.id) await tasksRepo.deletePermanently(task.id);
+      });
+    } catch (err) {
+      console.error('Failed to create task from note:', err);
     }
   };
 
@@ -415,6 +433,20 @@ export function NoteEditorView() {
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
             </svg>
             <span className="hidden sm:inline">Link</span>
+          </button>
+
+          {/* Convert to task action */}
+          <button
+            type="button"
+            onClick={handleConvertToTask}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Create task from note"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+            <span className="hidden sm:inline">To Task</span>
           </button>
 
           <span className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />

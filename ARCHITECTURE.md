@@ -77,6 +77,15 @@ this.version(2).stores({
 });
 ```
 
+### Schema Version 3 (Stage 5 Tasks Extension)
+```ts
+this.version(3).stores({
+  notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, createdAt, updatedAt',
+  attachments: '++id, noteId, ownerType, kind, createdAt',
+  tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId'
+});
+```
+
 #### Table: `notes`
 | Field | Type | Dexie Index Key | Description |
 |---|---|---|---|
@@ -105,6 +114,24 @@ this.version(2).stores({
 | `data` | `Blob` (optional) | — | Stored inline as raw binary Blob in IndexedDB (never base64 in note) |
 | `url` | `string` (optional) | — | Stored URL for links |
 
+#### Table: `tasks` (Realized in Stage 5)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `title` | `string` | — | Task title |
+| `description` | `string` (optional) | — | Task detailed notes / description |
+| `status` | `'todo' \| 'done'` | `status` | Status index ('todo' or 'done') |
+| `priority` | `'none' \| 'low' \| 'medium' \| 'high'` (optional) | `priority` | Priority level index |
+| `dueAt` | `Date \| null` (optional) | `dueAt` | Due date timestamp index |
+| `completedAt` | `Date \| null` (optional) | `completedAt` | Completion timestamp index |
+| `createdAt` | `Date` | `createdAt` | Creation timestamp index |
+| `updatedAt` | `Date` | `updatedAt` | Last modification timestamp index |
+| `importance` | `boolean` | `importance` | Eisenhower matrix importance flag |
+| `urgency` | `boolean` | `urgency` | Eisenhower matrix urgency flag |
+| `tags` | `string[]` | `*tags` (multiEntry) | Multi-entry index for tag lookup |
+| `trashedAt` | `Date \| null` (optional) | `trashedAt` | Soft-delete timestamp index |
+| `sourceNoteId` | `number` (optional) | `sourceNoteId` | Informational backlink to source note ID |
+
 ### Versioning & Migrations Policy
 1. **Monotonic Version Numbers**: Every schema alteration increments the version number by 1 (`version(1)`, `version(2)`).
 2. **Schema Declaration vs Index Changes**:
@@ -117,13 +144,13 @@ this.version(2).stores({
 
 ## 3. Data Access & State Management Approach
 
-### Repository Pattern (`src/db/notesRepo.ts` & `src/db/attachmentsRepo.ts`)
+### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts` & `src/db/tasksRepo.ts`)
 - **Isolation**: Screens and UI components **never** call Dexie directly. All read queries and write mutations pass through the repository layer.
 - **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into the repos without modifying views.
-- **Cascading Deletions**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments.
+- **Cascading Deletions**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Tasks linked via `sourceNoteId` are informational and are never deleted when notes are removed.
 
 ### Reactive Reads
-- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`) backed by Dexie's `useLiveQuery`.
+- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`) backed by Dexie's `useLiveQuery`.
 
 ---
 
@@ -180,16 +207,37 @@ this.version(2).stores({
    - `registerType: 'autoUpdate'` with Workbox `clientsClaim: true` and `skipWaiting: true`.
    - Connected to central `useSnackbar` via `useRegisterSW`: prompts user with "Update available — reload to apply latest changes" and a "Reload" action invoking `updateServiceWorker(true)`.
 
+### Stage 5: Tasks
+1. **Dedicated Tasks Data Model (Schema Version 3)**:
+   - Separate `tasks` table storing `id`, `title`, `description`, `status ('todo'|'done')`, `priority`, `dueAt`, `completedAt`, `importance`, `urgency`, `tags`, `trashedAt`, `sourceNoteId`.
+   - Dedicated repository layer `src/db/tasksRepo.ts` with reactive hooks (`useTodoTasks`, `useDoneTasks`, `useTodoCount`).
+2. **Tasks Screen (`/tasks`)**:
+   - Segments: Todo / Done with reactive badge counts.
+   - Quick-add bar: Type task title and press `Enter` to create immediately.
+   - Completion toggle: Circular checkbox tap or swipe gesture on touch devices, accompanied by a 6-second undo snackbar.
+   - Overdue styling: Tasks with past due dates in `todo` status render with distinct red urgency styling and badges.
+   - Tag badges and priority indicators on cards.
+3. **Progressive Disclosure Editor (`TaskEditorModal`)**:
+   - Cards open a clean modal exposing rich optional fields: due date with presets (*Today*, *Tomorrow*, *Next Week*, *Clear*), priority selector, multiline description, tag pill manager, and subtle Eisenhower matrix toggles (`importance` & `urgency`).
+4. **Note-to-Task Conversions**:
+   - Note editor: "To Task" action creates a pre-filled task linked to the note via `sourceNoteId` without modifying the note, with undo rollback.
+   - Inbox view: "To task" action creates a pre-filled task and files the note out of inbox, with undo rollback.
+   - Tasks display a clickable backlink chip navigating directly to the source note when present. Notes and tasks maintain separate lifecycles.
+5. **Data Portability & Danger Zone (Envelope Version 3)**:
+   - JSON export and import envelopes upgraded to Version 3 including `tasks`.
+   - Import supports merging or replacing tasks, with full undo restoration.
+   - Danger zone includes task counts and wipes tasks upon typed confirmation.
+
 ---
 
 ## 5. Future Extension Points
 
-> **Realized Extension Point**: Attachments is an extension point now realized in Stage 3. It includes entity-type generalization for tasks/events later via an optional `ownerType` field (`'note' | 'task' | 'event'`, indexed, defaulting to `'note'`), allowing future entities to reuse the `attachments` table directly without schema rewrites.
+> **Realized Extension Points**:
+> - **Attachments** (Stage 3): Generalized entity-type attachments (`ownerType: 'note' | 'task' | 'event'`).
+> - **Tasks** (Stage 5): Standalone tasks with due dates, priority, tags, Eisenhower flags (`importance` & `urgency`), and note backlinks.
 
-1. **Tasks**
-   - **Target**: Action items, subtasks, checklists.
-   - **DB Extension**: `tasks` table (`++id, noteId, title, completed, dueDate, priority, createdAt`).
-   - **Integration**: Can reuse `attachments` table with `ownerType: 'task'`.
+1. **Eisenhower Matrix View**
+   - **Target**: 4-quadrant visualization utilizing the existing `importance` and `urgency` task fields.
 2. **Events**
    - **Target**: Calendar scheduling, date-time reminders, and agenda planning.
    - **DB Extension**: `events` table (`++id, noteId, title, startTime, endTime, allDay, recurrenceRule`).
