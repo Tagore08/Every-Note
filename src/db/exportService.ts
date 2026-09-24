@@ -7,6 +7,8 @@ import type { CalendarEvent } from '../types/event';
 import type { Person } from '../types/person';
 import type { Habit, HabitLog } from '../types/habit';
 import type { FocusSession } from '../types/focus';
+import type { LifeArea } from '../types/area';
+import type { Template } from '../types/template';
 
 export interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -28,6 +30,8 @@ export interface BackupEnvelope {
   habits?: Habit[];
   habitLogs?: HabitLog[];
   focusSessions?: FocusSession[];
+  lifeAreas?: LifeArea[];
+  templates?: Template[];
   settings?: {
     theme?: string;
     flags?: Record<string, boolean>;
@@ -69,6 +73,8 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   const allHabitLogs = await db.habitLogs.toArray();
   const allFocusSessions = await db.focusSessions.toArray();
   const allAttachments = await db.attachments.toArray();
+  const allLifeAreas = await db.lifeAreas.toArray();
+  const allTemplates = await db.templates.toArray();
 
   const exportedAttachments: ExportAttachment[] = [];
   for (const att of allAttachments) {
@@ -120,7 +126,7 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   const currentFlags = getStoredFlags();
 
   return {
-    version: 8,
+    version: 9,
     app: 'notes-app',
     exportedAt: new Date().toISOString(),
     notes: allNotes,
@@ -131,6 +137,8 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
     habitLogs: allHabitLogs,
     focusSessions: allFocusSessions,
     attachments: exportedAttachments,
+    lifeAreas: allLifeAreas,
+    templates: allTemplates,
     settings: {
       theme: currentTheme,
       flags: currentFlags,

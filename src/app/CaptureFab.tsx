@@ -1,10 +1,14 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { notesRepo } from '../db/notesRepo';
+import { tasksRepo } from '../db/tasksRepo';
 import { useFlag } from './flags';
 import { Sheet } from '../design/ui/Sheet';
 import { FAB } from '../design/ui/FAB';
 import { TaskEditorModal } from '../components/tasks/TaskEditorModal';
+import { TemplatePickerSheet } from '../features/templates/TemplatePickerSheet';
+import { useSnackbar } from '../context/SnackbarContext';
+import type { Template } from '../types/template';
 
 interface CaptureFabProps {
   isOpen?: boolean;
@@ -22,6 +26,8 @@ export function CaptureFab({
   const [internalOpen, setInternalOpen] = useState(false);
   const [isDirectInbox, setIsDirectInbox] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
+  const { showSnackbar } = useSnackbar();
 
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalOpen;
   const setOpen = (open: boolean) => {
@@ -109,6 +115,41 @@ export function CaptureFab({
   const handleCanvas = () => {
     setOpen(false);
     navigate('/canvas');
+  };
+
+  const handleApplyTemplate = async (template: Template) => {
+    if (template.kind === 'task') {
+      const dueAt = template.body.dueOffsetDays
+        ? new Date(Date.now() + template.body.dueOffsetDays * 86400000)
+        : null;
+
+      const task = await tasksRepo.createTask({
+        title: template.body.title || template.name,
+        priority: (template.body.priority as any) || 'none',
+        lifeAreaId: template.body.lifeAreaId ?? null,
+        dueAt,
+      });
+
+      if (template.body.subtasks && Array.isArray(template.body.subtasks)) {
+        for (const st of template.body.subtasks) {
+          if (st.trim() && task.id) {
+            await tasksRepo.createSubtask(task.id, st.trim());
+          }
+        }
+      }
+
+      showSnackbar({ message: `Created task from "${template.name}"` });
+      navigate('/tasks');
+    } else if (template.kind === 'note') {
+      const note = await notesRepo.createNote({
+        title: template.body.title || template.name,
+        content: template.body.content || '',
+        lifeAreaId: template.body.lifeAreaId ?? null,
+      });
+
+      showSnackbar({ message: `Created note from "${template.name}"` });
+      navigate(`/notes/${note.id}`);
+    }
   };
 
   return (
@@ -249,7 +290,7 @@ export function CaptureFab({
                     type="button"
                     onClick={() => {
                       setOpen(false);
-                      navigate('/settings/templates');
+                      setIsTemplatePickerOpen(true);
                     }}
                     className="flex items-center gap-2.5 p-3 rounded-card bg-surface-2 hover:bg-surface border border-border text-ink text-sm font-medium transition-colors text-left cursor-pointer min-h-[44px]"
                   >
@@ -265,6 +306,13 @@ export function CaptureFab({
           )}
         </div>
       </Sheet>
+
+      {/* Template Picker Sheet */}
+      <TemplatePickerSheet
+        isOpen={isTemplatePickerOpen}
+        onClose={() => setIsTemplatePickerOpen(false)}
+        onSelectTemplate={handleApplyTemplate}
+      />
 
       {/* Task Creation Modal if user chose New Task */}
       {isTaskModalOpen && (

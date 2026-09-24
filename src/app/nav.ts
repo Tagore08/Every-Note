@@ -94,7 +94,6 @@ export const NAV_ITEMS: NavItemConfig[] = [
     route: '/areas',
     group: 'organize',
     iconName: 'Compass',
-    flag: 'smartInbox',
     inLibrarySheet: true,
   },
   {

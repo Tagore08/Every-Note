@@ -45,6 +45,7 @@ export const notesRepo = {
       scheduledAt: draft.scheduledAt ?? null,
       reminderAt: draft.reminderAt ?? null,
       personId: draft.personId ?? null,
+      lifeAreaId: draft.lifeAreaId ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -337,6 +338,8 @@ export const notesRepo = {
         inbox: Boolean(raw.inbox),
         scheduledAt: scheduledAt && !isNaN(scheduledAt.getTime()) ? scheduledAt : null,
         reminderAt: reminderAt && !isNaN(reminderAt.getTime()) ? reminderAt : null,
+        personId: typeof raw.personId === 'number' ? raw.personId : null,
+        lifeAreaId: typeof raw.lifeAreaId === 'number' ? raw.lifeAreaId : null,
         createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
         updatedAt: isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
       };

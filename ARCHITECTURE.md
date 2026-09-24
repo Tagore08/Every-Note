@@ -30,24 +30,46 @@ notes-app/
     ├── main.tsx             # Application bootstrap & React 19 root
     ├── App.tsx              # Route hierarchy & global providers
     ├── index.css            # Tailwind CSS v4 setup & theme styles
+    ├── app/                 # Application shell, navigation, feature flags, capture FAB
+    │   ├── AppShell.tsx     # Responsive desktop sidebar / mobile 5-slot bottom bar + library sheet
+    │   ├── CaptureFab.tsx   # Capture FAB with spring scaling, long-press, template launcher
+    │   ├── flags.ts         # Feature flags registry & useFlag hook
+    │   └── nav.ts           # Centralized navigation item declarations & groups
+    ├── design/
+    │   ├── tokens.css       # Tailwind v4 @theme design tokens and .dark mode overrides
+    │   └── ui/              # Reusable UI kit: Sheet, Segmented, StatCard, EmptyState, Skeleton, etc.
     ├── types/
-    │   ├── note.ts          # Core TypeScript data contracts (Note interface)
-    │   ├── attachment.ts    # Attachment interfaces (Attachment, AttachmentKind)
-    │   ├── task.ts          # Task data contracts (Task, TaskStatus, TaskPriority)
-    │   ├── event.ts         # Calendar event and recurrence occurrence contracts
+    │   ├── note.ts          # Core TypeScript data contracts (Note interface, lifeAreaId)
+    │   ├── task.ts          # Task data contracts (Task, parentTaskId, lifeAreaId, subtasks)
+    │   ├── event.ts         # Calendar event and recurrence occurrence contracts (lifeAreaId)
+    │   ├── area.ts          # LifeArea data contract & default palette
+    │   ├── template.ts      # Template & TemplateBody contracts (task & note templates)
     │   ├── person.ts        # Person contracts (Person interface, contact info, notes)
     │   ├── habit.ts         # Habit & HabitLog data contracts (streaks, frequency)
     │   └── focus.ts         # Focus session data contract (FocusSession interface)
     ├── db/
-    │   ├── database.ts      # Dexie 4 database class, schema versions 1-7, and DB singleton
+    │   ├── database.ts      # Dexie 4 database class, schema versions 1-9 (append-only)
+    │   ├── backupGate.ts    # Pre-upgrade OPFS and JSON file backup safety gate (TARGET_VERSION=9)
+    │   ├── exportService.ts # JSON envelope serialization & import engine (Envelope v9)
     │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes
-    │   ├── attachmentsRepo.ts# Data access layer & reactive hooks for attachments & storage
-    │   ├── tasksRepo.ts     # Data access layer & reactive hooks for tasks
+    │   ├── tasksRepo.ts     # Data access layer & subtask tree manipulation hooks
     │   ├── eventsRepo.ts    # Data access layer & recurrence occurrence engine
     │   ├── upcomingRepo.ts  # Cross-entity date horizon aggregation engine
     │   ├── peopleRepo.ts    # Data access layer & reactive hooks for people
     │   ├── habitsRepo.ts    # Data access layer, streak calculation engine & reactive hooks
-    │   └── focusRepo.ts     # Data access layer & reactive hooks for focus sessions
+    │   ├── focusRepo.ts     # Data access layer & reactive hooks for focus sessions
+    │   └── repos/
+    │       ├── areasRepo.ts # Life Areas CRUD, sortOrder, and idempotent default seeding
+    │       └── templatesRepo.ts # Starter templates CRUD, usage counts, and default seeding
+    ├── lib/
+    │   ├── quickAdd.ts      # Natural language parser using chrono-node (#tag, @Area, dates)
+    │   └── quickAdd.test.ts # 13 Vitest unit tests for quick-add NLP logic
+    ├── features/
+    │   ├── areas/           # LifeAreaPicker & AreasScreen management
+    │   ├── templates/       # TemplatePickerSheet & TemplatesScreen management
+    │   ├── inbox/           # InboxAnalyticsHeader & FileAsSheet triage
+    │   ├── settings/        # LabsScreen feature flags management
+    │   └── debug/           # MigrateDebugScreen & SeedDebugScreen
     ├── context/
     │   └── SnackbarContext.tsx # Global ~6s snackbar & undo notification system
     ├── hooks/
@@ -680,14 +702,118 @@ this.version(7).stores({
 > - **Android App Wrapper** (Stage 11): Native Android wrapper with Capacitor 8, API Level 36 target, native splash screen, status bar theme sync, and offline WebView IndexedDB.
 > - **Play Store Prep** (Stage 12): Automated release pipeline (`scripts/build-release.sh`), Data Safety declarations, store listing copy, GitHub Pages privacy policy, and 2-minute smoke test checklist.
 > - **v2.0 Phase 0 Foundation**: Design system tokens, Navigation v2 (5-slot mobile bottom nav + grouped desktop sidebar), Feature Flags (Settings → Labs), Pre-upgrade Backup Gate (JSON + OPFS), Migration Dry-Run (`/debug/migrate`), Virtualized Lists (`@tanstack/react-virtual`), and Route Code-Splitting baseline.
+> - **v2.0 Phase 1: Life Areas & Smart Inbox**: Dexie Schema Version 9, Life Areas taxonomy & picker, Subtasks hierarchy & progress chips, Natural language quick-add (`chrono-node`), Templates engine & picker, and Smart Inbox with analytics header & triage sheet.
 
-1. **Phase 1: Life Areas & Smart Inbox**
-   - Life Areas taxonomy, task subtasks, quick-add NLP date parser (`chrono-node`), templates engine, and inbox analytics header.
-2. **Phase 2A & 2B: Journal & Knowledge Graph**
+---
+
+## 6. v2.0 Phase 1: Life Areas & Smart Inbox
+
+### 1. Safety Contract & Dexie Schema Version 9
+- **Append-Only Schema Evolution**:
+  - Schema changes adhere strictly to §0 Safety Contract.
+  - Version 9 re-declares all table schemas with **complete index sets**.
+  - New tables:
+    - `lifeAreas: '++id, name, archived, sortOrder, createdAt'`
+    - `templates: '++id, kind, name, usageCount, createdAt'`
+  - Updated tables:
+    - `tasks`: gained `lifeAreaId`, `parentTaskId`, `routineRunId`, `sortOrder`, `estimatedMin`
+    - `notes`: gained `lifeAreaId`
+    - `events`: gained `lifeAreaId`
+- **Complete Version 9 Index Declaration**:
+  ```ts
+  this.version(9).stores({
+    notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, createdAt, updatedAt',
+    attachments: '++id, noteId, ownerType, kind, createdAt',
+    tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+    events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+    people: '++id, name, trashedAt, createdAt, updatedAt',
+    habits: '++id, name, archived, createdAt, updatedAt',
+    habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+    focusSessions: '++id, startedAt, taskId, createdAt',
+    appMeta: 'key',
+    lifeAreas: '++id, name, archived, sortOrder, createdAt',
+    templates: '++id, kind, name, usageCount, createdAt',
+  });
+  ```
+- **Pre-Upgrade Backup Gate (`src/db/backupGate.ts`)**:
+  - `TARGET_VERSION = 9` ensures pre-upgrade auto-backup to JSON download and OPFS before schema mutation executes.
+- **Backup & Restore v9 Envelope (`src/db/exportService.ts` & `src/components/views/SettingsView.tsx`)**:
+  - Export and import routines include `lifeAreas` and `templates` collections with full backward and forward compatibility.
+
+### 2. Life Areas System (Always-On Data Layer)
+- **Data Architecture (`src/types/area.ts`, `src/db/repos/areasRepo.ts`)**:
+  - Seven default areas seeded idempotently on first launch:
+    - Health (`--area-1`)
+    - Work (`--area-2`)
+    - Personal (`--area-3`)
+    - Finance (`--area-4`)
+    - Learning (`--area-5`)
+    - Home (`--area-6`)
+    - Relationships (`--area-7`)
+  - Full CRUD operations with soft-archive, reordering, and color customization.
+- **Life Area Picker (`src/features/areas/LifeAreaPicker.tsx`)**:
+  - Accessible dropdown with colored dot indicators, area names, and clear action.
+  - Integrated across Task Editor (`TaskEditorModal`), Note Editor optional tray (`NoteEditorView`), Calendar Event Editor (`EventEditorModal`), Template Editor, and Triage Sheet.
+- **Areas Screen (`src/features/areas/AreasScreen.tsx`)**:
+  - Route: `/areas` (accessible from Organize sidebar, mobile Library sheet, and Settings).
+  - Manage area names, color palette dots, icon symbols, archive status, and inspect global tag usage counts.
+
+### 3. Task Subtasks & Parent Progress Chip
+- **Data Model**: Subtasks are first-class tasks with `parentTaskId?: number | null`.
+- **Progress Tracking**: Parent tasks compute reactive subtask progress (`x/y` subtasks done) via `getSubtaskProgress` and `useSubtaskProgress`.
+- **UI Integration**:
+  - Main task rows render `SubtaskProgressChip` ("2/5" badge) alongside life area color indicators.
+  - Subtasks are hidden from main task lists to prevent clutter, but appear in Today/Upcoming horizons if they specify their own `dueAt`.
+  - `TaskEditorModal` features an interactive subtask checklist with completion toggles, reordering, and deletions.
+  - Incomplete subtasks warning modal prevents accidental early completion of parent tasks.
+
+### 4. Natural Language Quick-Add Parser (`src/lib/quickAdd.ts`)
+- **Engine**: Powered by `chrono-node` with custom pre- and post-processing refiners.
+- **Extraction Rules**:
+  - `#tag` tokens are extracted into the tags array.
+  - `@Area` tokens are matched case-insensitively against active Life Areas and resolved to `lifeAreaId`.
+  - Natural date and time expressions (e.g. "tomorrow 3pm", "next monday 10:30am", "in 3 days") are converted to `dueAt` and stripped from the task title.
+  - **False Positive Guard**: Plain numbers (e.g., "meeting with 3 people", "buy 2 apples", "chapter 5") are guarded against stray date conversions.
+- **Verification**: 13 unit tests running via `vitest` covering relative offsets, case insensitivity, tag parsing, and false-positive guards.
+
+### 5. Starter Templates Engine (`src/types/template.ts`, `src/db/repos/templatesRepo.ts`)
+- **Templates CRUD**:
+  - Seeded defaults for tasks (e.g. "Weekly Review Checklist", "Bug Triage") and notes (e.g. "Meeting Notes", "1-on-1 Prep").
+  - Tracks usage count with `incrementUsageCount`.
+- **Template Picker Sheet (`src/features/templates/TemplatePickerSheet.tsx`)**:
+  - Bottom sheet modal displaying templates by kind (`task` or `note`).
+  - Integrated into Capture FAB ("From Template" button) and Tasks view.
+- **Templates Screen (`src/features/templates/TemplatesScreen.tsx`)**:
+  - Route: `/settings/templates` (accessible from Settings and Capture flow).
+
+### 6. Smart Inbox Upgrade (Flag: `'smartInbox'`)
+- **Inbox Analytics Header (`src/features/inbox/InboxAnalyticsHeader.tsx`)**:
+  - Collapsible, non-blocking summary strip at the top of the Inbox:
+    `"12 captured · 9 filed this week · avg 4h to file"`
+  - Dynamically computed from notes rows: captures in the last 7 days, filed notes in the last 7 days, and median turnaround time-to-file.
+- **Triage & File-As Bottom Sheet (`src/features/inbox/FileAsSheet.tsx`)**:
+  - Activated when filing or converting an inbox item.
+  - Offers editable title with live NLP detection preview chips.
+  - Life Area assignment via `LifeAreaPicker`.
+  - Expandable Subtasks disclosure for adding task checklist items.
+  - Starter template application.
+  - Clear 1-tap actions:
+    1. **File as Note**: removes inbox flag, applies title, area, and tags.
+    2. **Convert to Task**: creates a task with subtasks, due date, area, and tags, then clears the inbox note.
+    3. **Delete**: moves note to trash with undo toast.
+- **Inline Quick Capture**:
+  - Header search/capture input in Inbox with live NLP feedback chip.
+
+---
+
+## 7. Future Extension Points
+
+1. **Phase 2A & 2B: Journal & Knowledge Graph**
    - Notes `kind='journal'`, mood tracking, distraction-free editor, wikilink parsing, and backlinks panel with graph visualization.
-3. **Phase 3 & 4: Calendar Pro & Routines / Today**
+2. **Phase 3 & 4: Calendar Pro & Routines / Today**
    - Multi-day time-grid engine, routine materialization, and unified Today dashboard.
-4. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
+3. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
    - Pressure-sensitive vector canvas, timer presets, 12-month habit heatmaps, and local insights hub.
+
 
 

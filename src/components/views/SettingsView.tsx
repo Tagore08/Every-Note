@@ -8,6 +8,8 @@ import { eventsRepo } from '../../db/eventsRepo';
 import { peopleRepo } from '../../db/peopleRepo';
 import { habitsRepo } from '../../db/habitsRepo';
 import { focusRepo } from '../../db/focusRepo';
+import { areasRepo } from '../../db/repos/areasRepo';
+import { templatesRepo } from '../../db/repos/templatesRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -22,6 +24,8 @@ import type { CalendarEvent } from '../../types/event';
 import type { Person } from '../../types/person';
 import type { Habit, HabitLog } from '../../types/habit';
 import type { FocusSession } from '../../types/focus';
+import type { LifeArea } from '../../types/area';
+import type { Template } from '../../types/template';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -43,6 +47,8 @@ interface BackupEnvelope {
   habits?: Habit[];
   habitLogs?: HabitLog[];
   focusSessions?: FocusSession[];
+  lifeAreas?: LifeArea[];
+  templates?: Template[];
   settings?: {
     theme?: string;
   };
@@ -153,6 +159,8 @@ export function SettingsView() {
       const allHabitLogs = await habitsRepo.getAllHabitLogsForExport();
       const allFocusSessions = await focusRepo.getAllSessionsForExport();
       const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
+      const allLifeAreas = await areasRepo.getAllAreasForExport();
+      const allTemplates = await templatesRepo.getAllTemplatesForExport();
 
       // Convert Blobs to base64 strings
       const exportedAttachments: ExportAttachment[] = [];
@@ -203,7 +211,7 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 7, // Bumped to Version 7 for Stage 10 Focus Sessions
+        version: 9,
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
@@ -214,6 +222,8 @@ export function SettingsView() {
         habitLogs: allHabitLogs,
         focusSessions: allFocusSessions,
         attachments: exportedAttachments,
+        lifeAreas: allLifeAreas,
+        templates: allTemplates,
         settings: {
           theme: mode,
         },
@@ -274,6 +284,8 @@ export function SettingsView() {
       let habitsArray: Habit[] = [];
       let habitLogsArray: HabitLog[] = [];
       let focusSessionsArray: FocusSession[] = [];
+      let lifeAreasArray: LifeArea[] = [];
+      let templatesArray: Template[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
 
@@ -302,6 +314,12 @@ export function SettingsView() {
         if ('focusSessions' in parsed && Array.isArray((parsed as BackupEnvelope).focusSessions)) {
           focusSessionsArray = (parsed as BackupEnvelope).focusSessions ?? [];
         }
+        if ('lifeAreas' in parsed && Array.isArray((parsed as BackupEnvelope).lifeAreas)) {
+          lifeAreasArray = (parsed as BackupEnvelope).lifeAreas ?? [];
+        }
+        if ('templates' in parsed && Array.isArray((parsed as BackupEnvelope).templates)) {
+          templatesArray = (parsed as BackupEnvelope).templates ?? [];
+        }
       } else if (Array.isArray(parsed)) {
         notesArray = parsed;
       } else {
@@ -321,6 +339,8 @@ export function SettingsView() {
         habits: habitsArray,
         habitLogs: habitLogsArray,
         focusSessions: focusSessionsArray,
+        lifeAreas: lifeAreasArray,
+        templates: templatesArray,
       });
       setImportStrategy('merge');
     } catch (err) {
@@ -439,11 +459,29 @@ export function SettingsView() {
         );
       }
 
+      // 8. Import Life Areas
+      let importedAreasCount = 0;
+      if (importCandidate.lifeAreas && importCandidate.lifeAreas.length > 0) {
+        importedAreasCount = await areasRepo.importAreas(
+          importCandidate.lifeAreas,
+          importStrategy
+        );
+      }
+
+      // 9. Import Templates
+      let importedTemplatesCount = 0;
+      if (importCandidate.templates && importCandidate.templates.length > 0) {
+        importedTemplatesCount = await templatesRepo.importTemplates(
+          importCandidate.templates,
+          importStrategy
+        );
+      }
+
       setImportCandidate(null);
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedAreasCount} areas, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -532,6 +570,42 @@ export function SettingsView() {
             Manage Labs →
           </span>
         </Link>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Link
+            to="/areas"
+            className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
+          >
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+              </svg>
+              <div>
+                <div className="text-sm font-medium text-ink">Life Areas</div>
+                <div className="text-[11px] text-ink-muted">Health, Work, Personal & more</div>
+              </div>
+            </div>
+            <span className="text-accent text-xs font-semibold">Manage →</span>
+          </Link>
+
+          <Link
+            to="/settings/templates"
+            className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
+          >
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              <div>
+                <div className="text-sm font-medium text-ink">Starter Templates</div>
+                <div className="text-[11px] text-ink-muted">Task & Note skeletons</div>
+              </div>
+            </div>
+            <span className="text-accent text-xs font-semibold">Manage →</span>
+          </Link>
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <Link

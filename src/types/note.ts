@@ -10,6 +10,7 @@ export interface Note {
   scheduledAt?: Date | null;
   reminderAt?: Date | null;
   personId?: number | null;
+  lifeAreaId?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

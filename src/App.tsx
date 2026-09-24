@@ -1,8 +1,10 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SnackbarProvider } from './context/SnackbarContext';
 import { AppShell } from './app/AppShell';
 import { PageSkeleton } from './design/ui/Skeleton';
+import { areasRepo } from './db/repos/areasRepo';
+import { templatesRepo } from './db/repos/templatesRepo';
 
 // Code-split all feature views using React.lazy per EXPANSION_PLAN §6 & §7
 const TodayView = lazy(() =>
@@ -48,6 +50,12 @@ const SearchView = lazy(() =>
 const TagsView = lazy(() =>
   import('./components/views/TagsView').then((m) => ({ default: m.TagsView }))
 );
+const AreasScreen = lazy(() =>
+  import('./features/areas/AreasScreen').then((m) => ({ default: m.AreasScreen }))
+);
+const TemplatesScreen = lazy(() =>
+  import('./features/templates/TemplatesScreen').then((m) => ({ default: m.TemplatesScreen }))
+);
 const ArchiveView = lazy(() =>
   import('./components/views/ArchiveView').then((m) => ({ default: m.ArchiveView }))
 );
@@ -72,6 +80,12 @@ const SeedDebugScreen = lazy(() =>
 );
 
 export function App() {
+  useEffect(() => {
+    // Seed defaults for Life Areas and Templates idempotently on first load
+    areasRepo.seedDefaults().catch((err) => console.error('Failed to seed areas:', err));
+    templatesRepo.seedDefaults().catch((err) => console.error('Failed to seed templates:', err));
+  }, []);
+
   return (
     <SnackbarProvider>
       <Suspense fallback={<PageSkeleton />}>
@@ -97,10 +111,12 @@ export function App() {
             <Route path="people/:id" element={<PersonProfileView />} />
             <Route path="search" element={<SearchView />} />
             <Route path="tags" element={<TagsView />} />
+            <Route path="areas" element={<AreasScreen />} />
             <Route path="archive" element={<ArchiveView />} />
             <Route path="trash" element={<TrashView />} />
             <Route path="settings" element={<SettingsView />} />
             <Route path="settings/labs" element={<LabsScreen />} />
+            <Route path="settings/templates" element={<TemplatesScreen />} />
 
             {/* Debug & developer tools */}
             <Route path="debug/migrate" element={<MigrateDebugScreen />} />
