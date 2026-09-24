@@ -1,5 +1,5 @@
 /**
- * Utility functions for text formatting, relative timestamps, and snippet extraction.
+ * Utility functions for text formatting, relative timestamps, snippet extraction, and file sizes.
  */
 
 export function formatRelativeTime(dateInput: Date | string | number | null | undefined): string {
@@ -87,4 +87,15 @@ export function getSearchSnippet(content: string, query: string, snippetLength =
   if (end < content.length) snippet = snippet + '...';
 
   return snippet;
+}
+
+/**
+ * Formats a file size in bytes to a human-readable string (B, KB, MB, GB).
+ */
+export function formatFileSize(bytes: number): string {
+  if (!bytes || bytes <= 0 || isNaN(bytes)) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const formatted = (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1);
+  return `${formatted} ${units[i] || 'GB'}`;
 }

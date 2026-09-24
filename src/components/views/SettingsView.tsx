@@ -1,18 +1,54 @@
-import { useState, useRef, type ChangeEvent } from 'react';
+import { useState, useRef, useEffect, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme, type ThemeMode } from '../../hooks/useTheme';
 import { notesRepo, useArchivedNotes, useTrashNotes } from '../../db/notesRepo';
+import { attachmentsRepo } from '../../db/attachmentsRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
+import { formatFileSize } from '../../utils/format';
 import type { Note } from '../../types/note';
+import type { Attachment } from '../../types/attachment';
+
+interface ExportAttachment extends Omit<Attachment, 'data'> {
+  dataBase64?: string;
+}
 
 interface BackupEnvelope {
   version: number;
   app: string;
   exportedAt: string;
   notes: Note[];
+  attachments?: ExportAttachment[];
   settings?: {
     theme?: string;
   };
+}
+
+// Convert Blob to data URL base64 string
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Convert data URL base64 string back to Blob
+function base64ToBlob(base64Data: string, mimeType: string): Blob {
+  try {
+    const parts = base64Data.split(',');
+    const raw = parts.length > 1 ? parts[1] : parts[0];
+    const byteString = atob(raw);
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    return new Blob([ab], { type: mimeType });
+  } catch (err) {
+    console.warn('Failed to parse base64 blob:', err);
+    return new Blob([], { type: mimeType });
+  }
 }
 
 export function SettingsView() {
@@ -23,24 +59,85 @@ export function SettingsView() {
   const archivedNotes = useArchivedNotes();
   const trashNotes = useTrashNotes();
 
+  // Storage info state
+  const [storageInfo, setStorageInfo] = useState<{
+    usedBytes: number;
+    quotaBytes: number;
+    isPersisted: boolean;
+  } | null>(null);
+
   // Import flow state
   const [importCandidate, setImportCandidate] = useState<BackupEnvelope | null>(null);
   const [importStrategy, setImportStrategy] = useState<'merge' | 'replace'>('merge');
   const [importError, setImportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Danger zone modal state
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
 
-  // 1. Export Flow
+  // Load storage estimation
+  const loadStorageEstimate = async () => {
+    try {
+      const est = await attachmentsRepo.getStorageEstimate();
+      setStorageInfo(est);
+    } catch (err) {
+      console.warn('Failed to load storage estimation:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadStorageEstimate();
+  }, []);
+
+  const handleRequestPersistence = async () => {
+    const granted = await attachmentsRepo.requestPersistentStorage();
+    if (granted) {
+      showSnackbar({ message: 'Persistent storage granted by browser.' });
+    } else {
+      showSnackbar({ message: 'Persistent storage not granted (standard storage mode).' });
+    }
+    await loadStorageEstimate();
+  };
+
+  // 1. Export Flow (Including base64 encoded attachments)
   const handleExport = async () => {
     try {
+      setIsExporting(true);
       const allNotes = await notesRepo.getAllNotesForExport();
+      const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
+
+      // Convert Blobs to base64 strings
+      const exportedAttachments: ExportAttachment[] = [];
+      for (const att of allAttachments) {
+        let dataBase64: string | undefined = undefined;
+        if (att.data) {
+          try {
+            dataBase64 = await blobToBase64(att.data);
+          } catch (err) {
+            console.warn(`Failed to encode attachment ${att.id}:`, err);
+          }
+        }
+        exportedAttachments.push({
+          id: att.id,
+          noteId: att.noteId,
+          ownerType: att.ownerType,
+          kind: att.kind,
+          name: att.name,
+          mimeType: att.mimeType,
+          size: att.size,
+          createdAt: att.createdAt,
+          url: att.url,
+          dataBase64,
+        });
+      }
+
       const payload: BackupEnvelope = {
-        version: 1,
+        version: 2, // Bumped to Version 2 for Stage 3 attachments
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
+        attachments: exportedAttachments,
         settings: {
           theme: mode,
         },
@@ -59,10 +156,15 @@ export function SettingsView() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      showSnackbar({ message: `Exported ${allNotes.length} notes successfully.` });
+      const formattedFileSize = formatFileSize(blob.size);
+      showSnackbar({
+        message: `Exported ${allNotes.length} notes & ${allAttachments.length} attachments (${formattedFileSize}).`,
+      });
     } catch (err) {
       console.error('Failed to export data:', err);
       showSnackbar({ message: 'Failed to export backup.' });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -87,8 +189,8 @@ export function SettingsView() {
         return;
       }
 
-      // Handle standard envelope or direct notes array gracefully
       let notesArray: unknown[] = [];
+      let attachmentsArray: ExportAttachment[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
 
@@ -96,6 +198,9 @@ export function SettingsView() {
         notesArray = (parsed as BackupEnvelope).notes;
         exportedAt = (parsed as BackupEnvelope).exportedAt || exportedAt;
         version = (parsed as BackupEnvelope).version || version;
+        if ('attachments' in parsed && Array.isArray((parsed as BackupEnvelope).attachments)) {
+          attachmentsArray = (parsed as BackupEnvelope).attachments ?? [];
+        }
       } else if (Array.isArray(parsed)) {
         notesArray = parsed;
       } else {
@@ -108,40 +213,77 @@ export function SettingsView() {
         app: 'notes-app',
         exportedAt,
         notes: notesArray as Note[],
+        attachments: attachmentsArray,
       });
       setImportStrategy('merge');
     } catch (err) {
       console.error('Import parse failed:', err);
       setImportError('Failed to read file. Please ensure it is an uncorrupted JSON backup.');
     } finally {
-      // Reset input so re-selecting the same file fires onChange
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
   };
 
-  // 3. Confirm Import
+  // 3. Confirm Import (Restores Notes and Attachments)
   const handleConfirmImport = async () => {
     if (!importCandidate) return;
 
     try {
+      // Snapshot existing attachments before mutating (for undo)
+      const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
+
+      // 1. Import Notes
       const result = await notesRepo.importNotes(importCandidate.notes, importStrategy);
-      const importedCount = result.importedCount;
+      const importedNotesCount = result.importedCount;
       const prevNotes = result.previousSnapshot;
 
+      // 2. Import Attachments (if any in candidate)
+      let importedAttachmentsCount = 0;
+      if (importCandidate.attachments && importCandidate.attachments.length > 0) {
+        const restoredAttachments: Attachment[] = [];
+        for (const raw of importCandidate.attachments) {
+          let dataBlob: Blob | undefined = undefined;
+          if (raw.dataBase64) {
+            dataBlob = base64ToBlob(raw.dataBase64, raw.mimeType || 'application/octet-stream');
+          }
+          restoredAttachments.push({
+            id: typeof raw.id === 'number' ? raw.id : undefined,
+            noteId: raw.noteId,
+            ownerType: raw.ownerType || 'note',
+            kind: raw.kind,
+            name: raw.name || 'Untitled Attachment',
+            mimeType: raw.mimeType || 'application/octet-stream',
+            size: typeof raw.size === 'number' ? raw.size : 0,
+            createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
+            url: raw.url,
+            data: dataBlob,
+          });
+        }
+        importedAttachmentsCount = await attachmentsRepo.importAttachments(
+          restoredAttachments,
+          importStrategy
+        );
+      }
+
       setImportCandidate(null);
+      await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedCount} notes (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
           }
+          if (importStrategy === 'replace' && prevAttachments) {
+            await attachmentsRepo.importAttachments(prevAttachments, 'replace');
+          }
+          await loadStorageEstimate();
         }
       );
     } catch (err) {
-      console.error('Failed to import notes:', err);
+      console.error('Failed to import data:', err);
       setImportError('An error occurred during import. No data was corrupted.');
     }
   };
@@ -154,9 +296,10 @@ export function SettingsView() {
       await notesRepo.deleteAllNotes();
       setShowDeleteAllModal(false);
       setDeleteConfirmationInput('');
-      showSnackbar({ message: 'All notes and data have been completely deleted.' });
+      await loadStorageEstimate();
+      showSnackbar({ message: 'All notes and attachments have been completely deleted.' });
     } catch (err) {
-      console.error('Failed to delete all notes:', err);
+      console.error('Failed to delete all data:', err);
     }
   };
 
@@ -168,11 +311,11 @@ export function SettingsView() {
           Settings
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Manage appearance, data backups, and storage preferences.
+          Manage appearance, data backups, storage quota, and preferences.
         </p>
       </div>
 
-      {/* Quick Navigation to Archive & Trash (especially convenient on mobile) */}
+      {/* Quick Navigation to Archive & Trash */}
       <div className="grid grid-cols-2 gap-3">
         <Link
           to="/archive"
@@ -222,7 +365,7 @@ export function SettingsView() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {(
             [
-              { key: 'light', label: 'Light', icon: 'sun', desc: 'Always light' },
+              { key: 'light', label: 'Light', desc: 'Always light' },
               { key: 'dark', label: 'Dark', desc: 'Always dark' },
               {
                 key: 'system',
@@ -237,7 +380,7 @@ export function SettingsView() {
                 key={item.key}
                 type="button"
                 onClick={() => setMode(item.key as ThemeMode)}
-                className={`p-4 rounded-xl border text-left transition-all ${
+                className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
                   isSelected
                     ? 'border-blue-600 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/40 shadow-xs'
                     : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
@@ -258,14 +401,83 @@ export function SettingsView() {
         </div>
       </section>
 
-      {/* 2. Data & Backups Section */}
+      {/* 2. Browser Storage & Quota Estimation */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+            Storage & Persistence
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            IndexedDB storage estimation for notes, images, and attachments on this device.
+          </p>
+        </div>
+
+        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
+          {storageInfo ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-400 font-medium">
+                  Used: {formatFileSize(storageInfo.usedBytes)} of {formatFileSize(storageInfo.quotaBytes)}
+                </span>
+                <span className="text-slate-500">
+                  {formatFileSize(Math.max(0, storageInfo.quotaBytes - storageInfo.usedBytes))} free
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                <div
+                  className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      storageInfo.quotaBytes > 0
+                        ? (storageInfo.usedBytes / storageInfo.quotaBytes) * 100
+                        : 0
+                    )}%`,
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-1 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">Storage Protection:</span>
+                  <span
+                    className={`font-semibold ${
+                      storageInfo.isPersisted
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-amber-600 dark:text-amber-400'
+                    }`}
+                  >
+                    {storageInfo.isPersisted ? 'Persistent (Eviction Protected)' : 'Standard (Best Effort)'}
+                  </span>
+                </div>
+
+                {!storageInfo.isPersisted && (
+                  <button
+                    type="button"
+                    onClick={handleRequestPersistence}
+                    className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  >
+                    Request Protection
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-slate-400 animate-pulse">Calculating storage estimation...</div>
+          )}
+        </div>
+      </section>
+
+      {/* 3. Data & Backups Section */}
       <section className="space-y-4">
         <div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-white">
             Data & Backup
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Your notes live purely in your browser's IndexedDB. Export backups regularly to keep your data safe.
+            Export complete backups including files, images, and links to keep your notes safe.
           </p>
         </div>
 
@@ -288,20 +500,21 @@ export function SettingsView() {
                 Export backup (JSON)
               </h4>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Download all your notes, tags, archive, and settings in a single portable JSON file.
+                Download all notes and embedded attachments in a single portable JSON file.
               </p>
             </div>
             <button
               type="button"
+              disabled={isExporting}
               onClick={handleExport}
-              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 transition-colors shadow-xs"
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white disabled:opacity-50 text-white dark:text-slate-900 transition-colors shadow-xs cursor-pointer"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              <span>Download Backup</span>
+              <span>{isExporting ? 'Encoding Backup...' : 'Download Backup'}</span>
             </button>
           </div>
 
@@ -312,7 +525,7 @@ export function SettingsView() {
                 Import data (JSON)
               </h4>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Restore or merge notes from a previously exported JSON backup file.
+                Restore or merge notes and attachments from a previously exported JSON backup file.
               </p>
             </div>
             <div>
@@ -326,7 +539,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition-colors"
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition-colors cursor-pointer"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -340,14 +553,14 @@ export function SettingsView() {
         </div>
       </section>
 
-      {/* 3. Danger Zone */}
+      {/* 4. Danger Zone */}
       <section className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
         <div>
           <h3 className="text-base font-semibold text-red-600 dark:text-red-400">
             Danger Zone
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Irreversible actions that completely reset your local storage.
+            Irreversible actions that completely reset your local storage and delete all attachments.
           </p>
         </div>
 
@@ -357,7 +570,7 @@ export function SettingsView() {
               Delete all data
             </h4>
             <p className="text-xs text-red-700 dark:text-red-400">
-              Permanently purge all notes, inbox captures, archive, and trash from this browser.
+              Permanently purge all notes, attachments, inbox captures, archive, and trash.
             </p>
           </div>
           <button
@@ -366,7 +579,7 @@ export function SettingsView() {
               setDeleteConfirmationInput('');
               setShowDeleteAllModal(true);
             }}
-            className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs self-start sm:self-auto shrink-0 transition-colors"
+            className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs self-start sm:self-auto shrink-0 transition-colors cursor-pointer"
           >
             Delete all data
           </button>
@@ -386,7 +599,8 @@ export function SettingsView() {
                 Import Backup
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Found {importCandidate.notes.length} notes in backup (exported on{' '}
+                Found {importCandidate.notes.length} notes and{' '}
+                {importCandidate.attachments?.length ?? 0} attachments (v{importCandidate.version}, exported on{' '}
                 {new Date(importCandidate.exportedAt).toLocaleDateString()}).
               </p>
             </div>
@@ -418,7 +632,7 @@ export function SettingsView() {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 pl-5">
-                  Combines backup with your current notes without losing recent edits.
+                  Combines backup with your current notes and attachments without losing recent edits.
                 </p>
               </div>
 
@@ -443,7 +657,7 @@ export function SettingsView() {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 pl-5">
-                  Clears all current notes and loads exactly what is in this backup file.
+                  Clears all current notes and attachments and loads this backup file.
                 </p>
               </div>
             </div>
@@ -453,16 +667,16 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setImportCandidate(null)}
-                className="px-3.5 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="px-3.5 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleConfirmImport}
-                className="px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+                className="px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors cursor-pointer"
               >
-                Import Notes
+                Import Data
               </button>
             </div>
           </div>
@@ -487,7 +701,8 @@ export function SettingsView() {
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              This action cannot be undone. To proceed, please type <span className="font-mono font-bold text-red-600 dark:text-red-400">DELETE ALL</span> below:
+              This action permanently purges all notes and attachments. To proceed, please type{' '}
+              <span className="font-mono font-bold text-red-600 dark:text-red-400">DELETE ALL</span> below:
             </p>
 
             <input
@@ -503,7 +718,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setShowDeleteAllModal(false)}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 Cancel
               </button>
@@ -511,7 +726,7 @@ export function SettingsView() {
                 type="button"
                 disabled={deleteConfirmationInput.trim() !== 'DELETE ALL'}
                 onClick={handleConfirmDeleteAll}
-                className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white shadow-xs transition-colors"
+                className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white shadow-xs transition-colors cursor-pointer"
               >
                 Erase Everything
               </button>

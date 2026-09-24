@@ -23,43 +23,61 @@ notes-app/
     ├── App.tsx              # Route hierarchy & global providers
     ├── index.css            # Tailwind CSS v4 setup & theme styles
     ├── types/
-    │   └── note.ts          # Core TypeScript data contracts (Note interface)
+    │   ├── note.ts          # Core TypeScript data contracts (Note interface)
+    │   └── attachment.ts    # Attachment interfaces (Attachment, AttachmentKind)
     ├── db/
-    │   ├── database.ts      # Dexie 4 database class, schema versions, and DB singleton
-    │   └── notesRepo.ts     # Data access layer & reactive hooks (single sync extension point)
+    │   ├── database.ts      # Dexie 4 database class, schema versions 1 & 2, and DB singleton
+    │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes
+    │   └── attachmentsRepo.ts# Data access layer & reactive hooks for attachments & storage
     ├── context/
     │   └── SnackbarContext.tsx # Global ~6s snackbar & undo notification system
     ├── hooks/
     │   └── useTheme.ts      # Light / Dark / System theme manager with live OS listener
     ├── utils/
-    │   └── format.ts        # Relative date formatting, display titles, and search snippet helpers
+    │   └── format.ts        # Relative dates, file size formatting, titles, snippet helpers
     └── components/
         ├── layout/
         │   └── Shell.tsx    # Responsive shell (Desktop sidebar, mobile bottom nav, capture FAB, auto-purge)
         ├── capture/
         │   └── CaptureModal.tsx # Instant capture dialog (autofocus, Enter to save, Esc to close)
+        ├── attachments/
+        │   ├── AttachmentGallery.tsx # Thumbnails grid, file chips, and link list
+        │   ├── AddLinkModal.tsx      # Modal dialog to attach URLs
+        │   └── ImageViewerModal.tsx  # Fullscreen image lightbox modal
         └── views/
             ├── InboxView.tsx        # Quick-capture triage view with "File as note" & soft delete
             ├── NotesView.tsx        # Active notes list (pinned-first, tag filter, long-press pin, card actions)
-            ├── NoteEditorView.tsx   # Full-screen editor (~500ms debounced autosave, pin/archive/trash, tag pills)
+            ├── NoteEditorView.tsx   # Full-screen editor (~500ms debounced autosave, attachments, tag pills)
             ├── SearchView.tsx       # Instant as-you-type local search with highlighted snippets
             ├── TagsView.tsx         # Tag cloud with usage frequencies and filtered note browser
             ├── ArchiveView.tsx      # Archive management and unarchive browser
             ├── TrashView.tsx        # Soft-deleted notes browser, restore, and permanent deletion dialogs
-            └── SettingsView.tsx     # Theme choice, JSON backup export/import (merge/replace), and danger zone
+            └── SettingsView.tsx     # Theme choice, storage quota estimate, JSON backup export/import (merge/replace), and danger zone
 ```
 
 ---
 
 ## 2. Database Design & Migration Policy
 
-### Current Schema (Version 1)
-
 The database runs on client-side **IndexedDB** managed by **Dexie 4**. All data lives completely local to the browser.
+Database Name: `NotesAppDatabase`
 
-- **Database Name**: `NotesAppDatabase`
-- **Table**: `notes`
+### Schema Version 1 (Stage 0 & 1 Baseline)
+```ts
+this.version(1).stores({
+  notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, createdAt, updatedAt'
+});
+```
 
+### Schema Version 2 (Stage 3 Attachments Extension)
+```ts
+this.version(2).stores({
+  notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, createdAt, updatedAt',
+  attachments: '++id, noteId, ownerType, kind, createdAt'
+});
+```
+
+#### Table: `notes`
 | Field | Type | Dexie Index Key | Description |
 |---|---|---|---|
 | `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
@@ -73,37 +91,39 @@ The database runs on client-side **IndexedDB** managed by **Dexie 4**. All data 
 | `createdAt` | `Date` | `createdAt` | Creation timestamp, chronological ordering index |
 | `updatedAt` | `Date` | `updatedAt` | Last modification timestamp, recency ordering index |
 
-### Versioning & Migrations Policy
+#### Table: `attachments` (Realized in Stage 3)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `noteId` | `number` | `noteId` | Parent note reference ID |
+| `ownerType` | `'note' \| 'task' \| 'event'` | `ownerType` | Generalized entity type (defaults to `'note'`; ready for tasks/events) |
+| `kind` | `'image' \| 'file' \| 'link'` | `kind` | Category of attachment |
+| `name` | `string` | — | Original filename or link display title |
+| `mimeType` | `string` | — | MIME type (e.g. `image/png`, `application/pdf`, `text/uri-list`) |
+| `size` | `number` | — | File size in bytes (0 for links) |
+| `createdAt` | `Date` | `createdAt` | Timestamp for chronological attachment ordering |
+| `data` | `Blob` (optional) | — | Stored inline as raw binary Blob in IndexedDB (never base64 in note) |
+| `url` | `string` (optional) | — | Stored URL for links |
 
-1. **Monotonic Version Numbers**: Every schema alteration increments the version number by 1 (`version(2)`, `version(3)`).
+### Versioning & Migrations Policy
+1. **Monotonic Version Numbers**: Every schema alteration increments the version number by 1 (`version(1)`, `version(2)`).
 2. **Schema Declaration vs Index Changes**:
-   - In Dexie, `.stores()` defines only indexed keys. Adding an unindexed field to an entity does *not* require a new database version.
+   - In Dexie, `.stores()` defines only indexed keys. Adding unindexed fields does *not* require a new version.
    - Adding or modifying an index requires a new `this.version(N).stores({...})` declaration.
-3. **Data Transformations (`.upgrade()`)**:
-   - When a schema version changes data representations (e.g. migrating string dates to timestamps or splitting fields), an `.upgrade(tx => ...)` transaction hook is declared.
-4. **Non-Destructive Evolution**:
+3. **Non-Destructive Evolution**:
    - Prior version declarations remain in code so users upgrading across multiple releases are migrated sequentially and safely without data loss.
 
 ---
 
 ## 3. Data Access & State Management Approach
 
-### Repository Pattern (`src/db/notesRepo.ts`)
-- **Isolation**: Screens and UI components **never** call Dexie directly. All read queries and write mutations pass through `notesRepo`.
-- **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into `notesRepo` without requiring changes to views.
+### Repository Pattern (`src/db/notesRepo.ts` & `src/db/attachmentsRepo.ts`)
+- **Isolation**: Screens and UI components **never** call Dexie directly. All read queries and write mutations pass through the repository layer.
+- **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into the repos without modifying views.
+- **Cascading Deletions**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments.
 
 ### Reactive Reads
-- Components consume data via reactive hooks (`useInboxNotes`, `useInboxCount`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useSearchNotes`, `useTagsWithCounts`) backed by Dexie's `useLiveQuery`.
-- When any transaction commits to IndexedDB, Dexie notifies observable queries and active components re-render automatically.
-
-### Reusable Undo Mechanism (`src/context/SnackbarContext.tsx`)
-- Centralized `useSnackbar()` hook and provider.
-- Any state-changing or destructive action (delete, archive, unarchive, pin/unpin, file-as-note, restore) dispatches an elevated snackbar with a 6-second lifespan and a single-click reverse operation.
-
-### Theme Engine (`src/hooks/useTheme.ts`)
-- Three distinct modes: `light`, `dark`, and `system`.
-- `system` mode actively subscribes to OS color scheme changes via `window.matchMedia('(prefers-color-scheme: dark)')` event listener.
-- Synchronized with `localStorage` and toggles `.dark` class on root `<html>`.
+- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`) backed by Dexie's `useLiveQuery`.
 
 ---
 
@@ -116,46 +136,48 @@ The database runs on client-side **IndexedDB** managed by **Dexie 4**. All data 
 4. **Instant Search & Tags**: In-memory substring search across titles, content, and tags with snippet highlighting.
 
 ### Stage 2: Trustworthy App & Polish
-1. **Pinning Interactions**:
-   - Mobile touch long-press gesture (~500ms with haptic vibration) to toggle pin.
-   - Desktop hover action and editor action bar toggle.
-   - Pinned notes display first with subtle accent borders and pin icons.
-2. **Archive Flow**:
-   - Archive notes directly from list or editor; archived notes are hidden from active lists.
-   - Dedicated Archive view with one-click unarchive.
-3. **Trash Management & Auto-Purge**:
-   - Trashed notes view with single-note permanent delete and "Empty Trash" bulk purge modals.
-   - Automatic background purge of notes older than 30 days executed on app launch.
-4. **Unified Undo**:
-   - 6-second snackbar with reverse-action invocation across all destructive flows.
-5. **Settings & Data Portability**:
-   - Export backup into expandable JSON envelope (`{ version, app, exportedAt, notes, settings }`).
-   - Import JSON with validation, preview dialog, and choice of "Merge" or "Replace everything" strategies.
-   - Danger zone with typed confirmation (`DELETE ALL`).
-6. **Polish Pass**:
-   - Uniform empty states with gentle iconography and copywriting across Inbox, Notes, Search, Archive, and Trash.
-   - Official header branding: "Notes App".
+1. **Pinning Interactions**: Mobile touch long-press gesture (~500ms with haptic vibration) + desktop hover.
+2. **Archive Flow**: Dedicated Archive view with one-click unarchive; archived notes hidden from active list.
+3. **Trash Management & Auto-Purge**: Trashed notes browser, permanent deletion confirmation, 30-day auto-purge on launch.
+4. **Unified Undo**: 6-second snackbar with reverse-action invocation across all destructive flows.
+5. **Settings & Data Portability**: JSON export/import (merge/replace), and danger zone with typed confirmation (`DELETE ALL`).
+6. **Polish Pass**: App name "Notes App" in header; empty states for all views.
+
+### Stage 3: Attachments (Fully Local)
+1. **Multi-File Attachments**: File picker in editor supporting multiple files of any type.
+2. **Images & Lightbox**: Image thumbnails (jpg/png/webp/gif/svg) in a grid, tap for full-screen viewer with download action.
+3. **Clipboard & Drag/Drop**: Paste images (`Ctrl+V`) directly into the editor; drag & drop files onto the desktop workspace.
+4. **Links**: Separate "Add Link" action storing URL + title; rendered as clickable cards without remote fetching.
+5. **Storage Safety & Guards**:
+   - Files > 50 MB are blocked.
+   - Files 15–50 MB trigger a quota warning dialog.
+   - Auto-requests `navigator.storage.persist()` on first attachment.
+   - Storage dashboard in Settings showing used bytes, quota, and persistence status.
+6. **HEIC Handling**: `.heic`/`.heif` files stored as raw Blobs and rendered as generic file cards without unsupported browser thumbnail previews or external conversion libraries.
+7. **Export & Import (Version 2)**:
+   - Full backup export embedding attachments as base64 in a Version 2 envelope (`{ version: 2, app, exportedAt, notes, attachments, settings }`).
+   - Import restores base64 strings back to native Blobs in IndexedDB.
 
 ---
 
 ## 5. Future Extension Points
 
-1. **Attachments**
-   - **Target**: Storing file attachments (images, PDFs, audio).
-   - **DB Extension**: Dedicated `attachments` table (`++id, noteId, name, mimeType, size, createdAt`).
-   - **Storage**: Blobs in IndexedDB or direct handles via OPFS.
-2. **Tasks**
+> **Realized Extension Point**: Attachments is an extension point now realized in Stage 3. It includes entity-type generalization for tasks/events later via an optional `ownerType` field (`'note' | 'task' | 'event'`, indexed, defaulting to `'note'`), allowing future entities to reuse the `attachments` table directly without schema rewrites.
+
+1. **Tasks**
    - **Target**: Action items, subtasks, checklists.
    - **DB Extension**: `tasks` table (`++id, noteId, title, completed, dueDate, priority, createdAt`).
-3. **Events**
+   - **Integration**: Can reuse `attachments` table with `ownerType: 'task'`.
+2. **Events**
    - **Target**: Calendar scheduling, date-time reminders, and agenda planning.
    - **DB Extension**: `events` table (`++id, noteId, title, startTime, endTime, allDay, recurrenceRule`).
-4. **Habits**
+   - **Integration**: Can reuse `attachments` table with `ownerType: 'event'`.
+3. **Habits**
    - **Target**: Daily recurring tracker and streak counter.
    - **DB Extension**: `habits` table (`++id, title, frequency, targetCount`) and `habit_logs` table (`++id, habitId, date, count`).
-5. **People**
+4. **People**
    - **Target**: Contacts, CRM mentions, and attendee links.
    - **DB Extension**: `people` table (`++id, name, email, avatar, *tags, createdAt`).
-6. **Sync**
+5. **Sync**
    - **Target**: Cross-device synchronization and backups without a centralized custodial backend.
-   - **Design**: Integrated through `notesRepo.ts` with change-vector logging or CRDTs.
+   - **Design**: Integrated through repository layers with change-vector logging or CRDTs.

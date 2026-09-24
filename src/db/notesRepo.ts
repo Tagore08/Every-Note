@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './database';
+import { attachmentsRepo } from './attachmentsRepo';
 import type { Note } from '../types/note';
 
 /**
@@ -130,14 +131,15 @@ export const notesRepo = {
   },
 
   /**
-   * Hard-delete a note permanently from IndexedDB.
+   * Hard-delete a note permanently from IndexedDB (also purges its attachments).
    */
   async deletePermanently(id: number): Promise<void> {
     await db.notes.delete(id);
+    await attachmentsRepo.deleteAttachmentsByNoteId(id);
   },
 
   /**
-   * Empty trash: permanently delete all soft-deleted notes.
+   * Empty trash: permanently delete all soft-deleted notes and their attachments.
    */
   async emptyTrash(): Promise<number> {
     const trashedNotes = await db.notes
@@ -147,6 +149,9 @@ export const notesRepo = {
     const ids = trashedNotes.map((n) => n.id!).filter((id) => typeof id === 'number');
     if (ids.length > 0) {
       await db.notes.bulkDelete(ids);
+      for (const id of ids) {
+        await attachmentsRepo.deleteAttachmentsByNoteId(id);
+      }
     }
     return ids.length;
   },
@@ -163,6 +168,9 @@ export const notesRepo = {
     const ids = oldNotes.map((n) => n.id!).filter((id) => typeof id === 'number');
     if (ids.length > 0) {
       await db.notes.bulkDelete(ids);
+      for (const id of ids) {
+        await attachmentsRepo.deleteAttachmentsByNoteId(id);
+      }
     }
     return ids.length;
   },
@@ -361,10 +369,11 @@ export const notesRepo = {
   },
 
   /**
-   * Danger zone: wipes all notes data permanently.
+   * Danger zone: wipes all notes and attachments permanently.
    */
   async deleteAllNotes(): Promise<void> {
     await db.notes.clear();
+    await attachmentsRepo.deleteAllAttachments();
   },
 };
 

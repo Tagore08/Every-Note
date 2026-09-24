@@ -1,16 +1,20 @@
-import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, type KeyboardEvent, type DragEvent, type ClipboardEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { notesRepo, useNote } from '../../db/notesRepo';
+import { attachmentsRepo, useAttachments } from '../../db/attachmentsRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
-import { formatRelativeTime } from '../../utils/format';
+import { formatRelativeTime, formatFileSize } from '../../utils/format';
+import { AttachmentGallery } from '../attachments/AttachmentGallery';
+import { AddLinkModal } from '../attachments/AddLinkModal';
 
 export function NoteEditorView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { showUndo } = useSnackbar();
+  const { showSnackbar, showUndo } = useSnackbar();
   const numericId = id && id !== 'new' ? parseInt(id, 10) : null;
 
   const note = useNote(numericId);
+  const attachments = useAttachments(numericId);
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -19,6 +23,13 @@ export function NoteEditorView() {
   const [isArchived, setIsArchived] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
+
+  // Attachment modal & drag states
+  const [isAddLinkOpen, setIsAddLinkOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [largeFileQueue, setLargeFileQueue] = useState<File[]>([]);
+  const currentLargeFile = largeFileQueue[0] || null;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Used to prevent re-initializing local state while typing
   const initialLoadDone = useRef(false);
@@ -163,6 +174,126 @@ export function NoteEditorView() {
     }
   };
 
+  // Process files with size guards
+  const processSingleFile = async (file: File) => {
+    if (!numericId) return;
+
+    // Hard block above 50 MB
+    if (file.size > 50 * 1024 * 1024) {
+      showSnackbar({
+        message: `"${file.name}" exceeds the 50 MB limit and cannot be stored.`,
+      });
+      return;
+    }
+
+    // Warning prompt between 15 MB and 50 MB
+    if (file.size > 15 * 1024 * 1024) {
+      setLargeFileQueue((prev) => [...prev, file]);
+      return;
+    }
+
+    try {
+      await attachmentsRepo.addFileAttachment(numericId, file);
+      showSnackbar({ message: `Attached "${file.name}"` });
+    } catch (err) {
+      console.error('Failed to attach file:', err);
+      showSnackbar({ message: `Failed to attach "${file.name}"` });
+    }
+  };
+
+  const handleFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    for (const f of files) {
+      await processSingleFile(f);
+    }
+  };
+
+  // Clipboard Paste listener (e.g. pasted screenshots/images)
+  const handlePaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const filesToAttach: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          const ext = item.type.split('/')[1] || 'png';
+          const namedFile = new File(
+            [file],
+            `Pasted Image ${new Date().toLocaleTimeString().replace(/:/g, '-')}.${ext}`,
+            { type: file.type }
+          );
+          filesToAttach.push(namedFile);
+        }
+      }
+    }
+
+    if (filesToAttach.length > 0) {
+      e.preventDefault();
+      handleFiles(filesToAttach);
+    }
+  };
+
+  // Desktop Drag & Drop
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFiles(e.dataTransfer.files);
+    }
+  };
+
+  // Delete attachment with undo
+  const handleDeleteAttachment = async (attachmentId: number) => {
+    const att = attachments?.find((a) => a.id === attachmentId);
+    if (!att || !numericId) return;
+
+    try {
+      await attachmentsRepo.deleteAttachment(attachmentId);
+      showUndo(`Removed "${att.name}"`, async () => {
+        if (att.kind === 'link' && att.url) {
+          await attachmentsRepo.addLinkAttachment(numericId, att.url, att.name);
+        } else if (att.data) {
+          await attachmentsRepo.addFileAttachment(
+            numericId,
+            new File([att.data], att.name, { type: att.mimeType })
+          );
+        }
+      });
+    } catch (err) {
+      console.error('Failed to remove attachment:', err);
+    }
+  };
+
+  const handleConfirmLargeFile = async () => {
+    if (!currentLargeFile || !numericId) return;
+    const file = currentLargeFile;
+    setLargeFileQueue((prev) => prev.slice(1));
+    try {
+      await attachmentsRepo.addFileAttachment(numericId, file);
+      showSnackbar({ message: `Attached "${file.name}"` });
+    } catch (err) {
+      console.error('Failed to attach large file:', err);
+      showSnackbar({ message: `Failed to attach "${file.name}"` });
+    }
+  };
+
+  const handleCancelLargeFile = () => {
+    setLargeFileQueue((prev) => prev.slice(1));
+  };
+
   if (id === 'new' || note === undefined) {
     return (
       <div className="max-w-4xl mx-auto py-12 flex justify-center">
@@ -187,7 +318,29 @@ export function NoteEditorView() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col min-h-[calc(100vh-8rem)]">
+    <div
+      onPaste={handlePaste}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`relative max-w-4xl mx-auto flex flex-col min-h-[calc(100vh-8rem)] transition-colors ${
+        isDragging ? 'ring-2 ring-blue-500 ring-offset-4 rounded-xl bg-blue-50/20 dark:bg-blue-950/20' : ''
+      }`}
+    >
+      {/* Drag & drop visual banner */}
+      {isDragging && (
+        <div className="absolute inset-0 z-40 bg-blue-50/80 dark:bg-slate-900/80 backdrop-blur-xs border-2 border-dashed border-blue-500 rounded-xl flex items-center justify-center pointer-events-none">
+          <div className="flex flex-col items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold">
+            <svg className="w-8 h-8 animate-bounce" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <span>Drop files here to attach to this note</span>
+          </div>
+        </div>
+      )}
+
       {/* Top action bar */}
       <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 gap-2">
         <div className="flex items-center gap-3">
@@ -225,13 +378,52 @@ export function NoteEditorView() {
           </div>
         </div>
 
-        {/* Note tools */}
+        {/* Note tools & attachments */}
         <div className="flex items-center gap-1.5">
+          {/* Attach file action */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={(e) => {
+              if (e.target.files) handleFiles(e.target.files);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            }}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Attach files or images"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+            <span className="hidden sm:inline">Attach</span>
+          </button>
+
+          {/* Add link action */}
+          <button
+            type="button"
+            onClick={() => setIsAddLinkOpen(true)}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Add link"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            <span className="hidden sm:inline">Link</span>
+          </button>
+
+          <span className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
+
           {/* Pin action */}
           <button
             type="button"
             onClick={handleTogglePin}
-            className={`p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            className={`p-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
               isPinned
                 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300'
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -249,7 +441,7 @@ export function NoteEditorView() {
           <button
             type="button"
             onClick={handleToggleArchive}
-            className={`p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            className={`p-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
               isArchived
                 ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300'
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -268,7 +460,7 @@ export function NoteEditorView() {
           <button
             type="button"
             onClick={handleTrash}
-            className="p-2 rounded-lg text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
             title="Delete note"
             aria-label="Delete note"
           >
@@ -331,10 +523,77 @@ export function NoteEditorView() {
         <textarea
           value={content}
           onChange={(e) => handleContentChange(e.target.value)}
-          placeholder="Start writing plain text..."
-          className="flex-1 w-full bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-700 text-base leading-relaxed resize-none focus:outline-none min-h-[350px]"
+          placeholder="Start writing plain text... (paste images with Ctrl+V, drag & drop files, or use Attach)"
+          className="flex-1 w-full bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-700 text-base leading-relaxed resize-none focus:outline-none min-h-[300px]"
+        />
+
+        {/* Attachments Section */}
+        <AttachmentGallery
+          attachments={attachments ?? []}
+          onDeleteAttachment={handleDeleteAttachment}
         />
       </div>
+
+      {/* Add Link Dialog */}
+      <AddLinkModal
+        isOpen={isAddLinkOpen}
+        onClose={() => setIsAddLinkOpen(false)}
+        onAddLink={async (url, linkTitle) => {
+          if (!numericId) return;
+          try {
+            await attachmentsRepo.addLinkAttachment(numericId, url, linkTitle);
+            showSnackbar({ message: 'Link attached' });
+          } catch (err) {
+            console.error('Failed to attach link:', err);
+          }
+        }}
+      />
+
+      {/* Large File Warning Dialog (15 MB - 50 MB) */}
+      {currentLargeFile && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                Large file warning
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
+                "{currentLargeFile.name}"
+              </span>
+              This file is <strong>{formatFileSize(currentLargeFile.size)}</strong>. Storing large files in IndexedDB consumes significant browser quota. Attach anyway?
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={handleCancelLargeFile}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLargeFile}
+                className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-xs cursor-pointer"
+              >
+                Attach Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

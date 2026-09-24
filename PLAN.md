@@ -44,7 +44,7 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 
 ---
 
-### [x] Stage 2: Trustworthy App & Polish (Current)
+### [x] Stage 2: Trustworthy App & Polish
 - **1. Pinning Interactions**:
   - Mobile touch long-press gesture (~500ms with haptic vibration) to toggle pin.
   - Desktop hover action and editor action bar toggle.
@@ -72,14 +72,35 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 
 ---
 
-### [ ] Stage 3: Markdown & Extensions (Upcoming)
+### [x] Stage 3: Attachments (Fully Local - Current)
+- **1. Database Schema Extension (Version 2)**:
+  - New `attachments` table: `id`, `noteId`, `ownerType` ('note' | 'task' | 'event'), `kind` ('image' | 'file' | 'link'), `createdAt`.
+  - Raw binary Blobs stored in IndexedDB (never base64 in note records).
+- **2. Editor Attachments Pipeline**:
+  - Multiple file picker via "+ Attach" in editor.
+  - Image thumbnails grid with full-screen lightbox viewer and download.
+  - Generic file cards with formatted sizes for documents, archives, and `.heic`/`.heif` files.
+  - Clipboard image paste (`Ctrl+V`) and desktop file drag-and-drop.
+  - "+ Add Link" action storing URL + title without remote fetching.
+- **3. Storage Safety & Guards**:
+  - Hard block on files > 50 MB; confirmation prompt on files 15–50 MB.
+  - Automatic `navigator.storage.persist()` request on first attachment.
+  - Storage estimation dashboard in Settings with usage and quota progress bar.
+- **4. Lifecycle & Deletion Cascading**:
+  - Trashing a note preserves attachments; permanent deletion ("delete forever", "empty trash", "delete all data") purges all attachments.
+- **5. JSON Backup & Restore (Version 2)**:
+  - Exports attachments as base64 inside Version 2 envelope with export size reporting.
+  - Import restores base64 back into native Blobs with merge and replace support.
+
+---
+
+### [ ] Stage 4: Markdown & Tasks (Upcoming)
 - Markdown preview rendering & live toggle.
-- Checklist / task blocks inside notes.
-- File and image attachments stored in IndexedDB / OPFS.
+- Checklist / task blocks inside notes (reusing attachments with `ownerType: 'task'`).
 - People mentions (`@name`).
 
 ---
 
-### [ ] Stage 4: Sync & Offline Resilience
-- Change log integration in `src/db/notesRepo.ts`.
+### [ ] Stage 5: Sync & Offline Resilience
+- Change log integration in repository layers.
 - Peer-to-peer / user-owned cloud synchronization (WebRTC / WebDAV).
