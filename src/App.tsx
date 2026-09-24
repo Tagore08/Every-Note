@@ -1,5 +1,10 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Shell } from './components/layout/Shell';
+import { InboxView } from './components/views/InboxView';
+import { NotesView } from './components/views/NotesView';
+import { NoteEditorView } from './components/views/NoteEditorView';
+import { SearchView } from './components/views/SearchView';
+import { TagsView } from './components/views/TagsView';
 import { StageZeroPlaceholder } from './components/views/StageZeroPlaceholder';
 
 export function App() {
@@ -7,42 +12,11 @@ export function App() {
     <Routes>
       <Route element={<Shell />}>
         <Route index element={<Navigate to="/inbox" replace />} />
-        <Route
-          path="inbox"
-          element={
-            <StageZeroPlaceholder
-              title="Inbox"
-              description="Capture quick thoughts and incoming items before organizing them."
-            />
-          }
-        />
-        <Route
-          path="notes"
-          element={
-            <StageZeroPlaceholder
-              title="Notes"
-              description="Browse, filter, and organize all your personal notes."
-            />
-          }
-        />
-        <Route
-          path="search"
-          element={
-            <StageZeroPlaceholder
-              title="Search"
-              description="Fast IndexedDB search across titles, contents, and tags."
-            />
-          }
-        />
-        <Route
-          path="tags"
-          element={
-            <StageZeroPlaceholder
-              title="Tags"
-              description="Explore notes organized by multiEntry indexed tags."
-            />
-          }
-        />
+        <Route path="inbox" element={<InboxView />} />
+        <Route path="notes" element={<NotesView />} />
+        <Route path="notes/:id" element={<NoteEditorView />} />
+        <Route path="search" element={<SearchView />} />
+        <Route path="tags" element={<TagsView />} />
         <Route
           path="settings"
           element={

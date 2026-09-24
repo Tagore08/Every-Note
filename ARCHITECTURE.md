@@ -15,7 +15,7 @@ notes-app/
 ├── tsconfig.node.json       # TypeScript configuration for Vite/tooling
 ├── package.json             # Pinned dependencies and build scripts
 ├── ARCHITECTURE.md          # Architecture, DB design, and extension roadmap
-├── PLAN.md                  # Long-term vision and phase tracking
+├── PLAN.md                  # Implementation roadmap and stage tracking
 ├── public/                  # Static assets served at root
 │   └── favicon.svg          # Application icon
 └── src/
@@ -25,14 +25,24 @@ notes-app/
     ├── types/
     │   └── note.ts          # Core TypeScript data contracts (Note interface)
     ├── db/
-    │   └── database.ts      # Dexie 4 database class, schema versions, and DB singleton
+    │   ├── database.ts      # Dexie 4 database class, schema versions, and DB singleton
+    │   └── notesRepo.ts     # Data access layer & reactive hooks (single sync extension point)
     ├── hooks/
     │   └── useTheme.ts      # Class-based light/dark theme manager with localStorage
+    ├── utils/
+    │   └── format.ts        # Relative date formatting, display titles, and search snippet helpers
     └── components/
         ├── layout/
-        │   └── Shell.tsx    # Responsive shell (Desktop sidebar & Mobile bottom navigation)
+        │   └── Shell.tsx    # Responsive shell (Desktop sidebar, mobile bottom nav, global capture FAB)
+        ├── capture/
+        │   └── CaptureModal.tsx # Instant capture dialog (autofocus, Enter to save, Esc to close)
         └── views/
-            └── StageZeroPlaceholder.tsx # Placeholder view for routes confirming Stage 0 status
+            ├── InboxView.tsx           # Quick-capture triage view with "File as note" & soft delete
+            ├── NotesView.tsx           # Active notes list (pinned-first, tag filter, card actions)
+            ├── NoteEditorView.tsx      # Full-screen editor (~500ms debounced autosave, tag pills)
+            ├── SearchView.tsx          # Instant as-you-type local search with highlighted snippets
+            ├── TagsView.tsx            # Tag cloud with usage frequencies and filtered note browser
+            └── StageZeroPlaceholder.tsx# Settings view
 ```
 
 ---
@@ -72,27 +82,59 @@ The database runs on client-side **IndexedDB** managed by **Dexie 4**. All data 
 
 ---
 
-## 3. State Management Approach
+## 3. Data Access & State Management Approach
 
-- **Single Source of Truth**: IndexedDB is the authoritative store for all domain data.
-- **Reactive Reads**: Components consume data via `useLiveQuery` from `dexie-react-hooks`. When an IndexedDB transaction commits, Dexie notifies active observable queries and components re-render automatically.
-- **Direct Async Mutations**: Writes occur by invoking Dexie operations directly (`db.notes.add`, `db.notes.update`, `db.notes.delete`) inside standard async functions.
-- **Transient UI State**: Pure UI states (dark mode, sidebar collapse, active filters, form draft inputs) are maintained via standard React state and hooks (`useState`, custom hooks), with theme selection persisted to `localStorage`. No external global state libraries are required.
+### Repository Pattern (`src/db/notesRepo.ts`)
+- **Isolation**: Screens and UI components **never** call Dexie directly. All read queries and write mutations pass through `notesRepo`.
+- **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into `notesRepo` without requiring changes to views.
+
+### Reactive Reads
+- Components consume data via reactive hooks (`useInboxNotes`, `useInboxCount`, `useActiveNotes`, `useNote`, `useSearchNotes`, `useTagsWithCounts`) backed by Dexie's `useLiveQuery`.
+- When any transaction commits to IndexedDB, Dexie notifies observable queries and active components re-render automatically.
+
+### Transient UI State
+- Pure UI states (dark mode, modal visibility, active tag filters, editor draft buffers) are maintained via standard React state and hooks.
+- Editor drafts autosave with a ~500ms debounce to prevent excessive IndexedDB writes.
 
 ---
 
-## 4. Future Extension Points
+## 4. Stage 1: The Tiny Core
 
-The architecture is prepared for the following extensions in subsequent stages:
+Stage 1 delivers the four core flows:
+
+1. **Global Instant Capture**:
+   - Visible from every screen: Desktop "+ Capture" button and mobile floating action button (FAB).
+   - Global keyboard shortcuts: `Ctrl+K`, `Cmd+K`, or `N` (ignored when focused in inputs/textareas).
+   - Autofocus single textarea, `Enter` to save, `Shift+Enter` for newlines, `Esc` to dismiss.
+   - Creates a note with `inbox: true`, empty title, and sets timestamps with zero friction.
+   - Sub-3-second workflow from app open to saved capture.
+
+2. **Inbox View**:
+   - Lists unprocessed notes (`inbox: true, trashedAt: null`), newest first.
+   - Real-time badge count on desktop sidebar and mobile navigation bar.
+   - Quick actions: "File as note" (toggles `inbox: false` and opens editor) and "Delete" (soft-delete via `trashedAt`).
+
+3. **Notes View & Full-Screen Editor**:
+   - Lists all filed notes (`inbox: false, archived: false, trashedAt: null`), pinned notes first then sorted by `updatedAt` desc.
+   - Full-screen editor supporting plain text, empty title tolerance, ~500ms debounced autosave, and "Saved" status indicator.
+   - Interactive tag manager: type and press `Enter` or `,` to add, click `x` to remove.
+
+4. **Instant Search & Tags**:
+   - Local, as-you-type substring search across title, content, and tags using Dexie in-memory filters.
+   - Result cards display match snippets with query highlighting.
+   - Tags browser listing all unique tags with note counts and one-click filtering.
+
+---
+
+## 5. Future Extension Points
 
 1. **Attachments**
    - **Target**: Storing file attachments (images, PDFs, audio).
    - **DB Extension**: Dedicated `attachments` table (`++id, noteId, name, mimeType, size, createdAt`).
-   - **Storage**: Blobs in IndexedDB or direct handles via the Origin Private File System (OPFS) for large payloads.
+   - **Storage**: Blobs in IndexedDB or direct handles via OPFS.
 2. **Tasks**
    - **Target**: Action items, subtasks, checklists.
    - **DB Extension**: `tasks` table (`++id, noteId, title, completed, dueDate, priority, createdAt`).
-   - **Integration**: Embeddable task blocks inside notes or aggregate task lists filtered across notes.
 3. **Events**
    - **Target**: Calendar scheduling, date-time reminders, and agenda planning.
    - **DB Extension**: `events` table (`++id, noteId, title, startTime, endTime, allDay, recurrenceRule`).
@@ -102,8 +144,6 @@ The architecture is prepared for the following extensions in subsequent stages:
 5. **People**
    - **Target**: Contacts, CRM mentions, and attendee links.
    - **DB Extension**: `people` table (`++id, name, email, avatar, *tags, createdAt`).
-   - **Integration**: `@mention` linking within note text and relationship mapping.
 6. **Sync**
    - **Target**: Cross-device synchronization and backups without a centralized custodial backend.
-   - **Design**: Operation log / change-vector table (`sync_log`: `++id, entity, entityId, operation, timestamp, deviceId`) or CRDT integration (e.g., Yjs/Automerge provider).
-   - **Transport**: WebRTC peer-to-peer or encrypted user-owned cloud endpoints (WebDAV, local file system export/import).
+   - **Design**: Integrated through `notesRepo.ts` with change-vector logging or CRDTs.
