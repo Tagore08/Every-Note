@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SnackbarProvider } from './context/SnackbarContext';
 import { Shell } from './components/layout/Shell';
+import { UpcomingView } from './components/views/UpcomingView';
 import { InboxView } from './components/views/InboxView';
 import { NotesView } from './components/views/NotesView';
 import { TasksView } from './components/views/TasksView';
@@ -17,7 +18,8 @@ export function App() {
     <SnackbarProvider>
       <Routes>
         <Route element={<Shell />}>
-          <Route index element={<Navigate to="/inbox" replace />} />
+          <Route index element={<Navigate to="/upcoming" replace />} />
+          <Route path="upcoming" element={<UpcomingView />} />
           <Route path="inbox" element={<InboxView />} />
           <Route path="notes" element={<NotesView />} />
           <Route path="notes/:id" element={<NoteEditorView />} />
@@ -29,9 +31,10 @@ export function App() {
           <Route path="archive" element={<ArchiveView />} />
           <Route path="trash" element={<TrashView />} />
           <Route path="settings" element={<SettingsView />} />
-          <Route path="*" element={<Navigate to="/inbox" replace />} />
+          <Route path="*" element={<Navigate to="/upcoming" replace />} />
         </Route>
       </Routes>
     </SnackbarProvider>
   );
 }
+

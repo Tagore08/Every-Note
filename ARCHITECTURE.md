@@ -177,13 +177,13 @@ this.version(4).stores({
 
 ## 3. Data Access & State Management Approach
 
-### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts`, `src/db/tasksRepo.ts` & `src/db/eventsRepo.ts`)
+### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts`, `src/db/tasksRepo.ts`, `src/db/eventsRepo.ts` & `src/db/upcomingRepo.ts`)
 - **Isolation**: Screens and UI components **never** call Dexie directly. All read queries and write mutations pass through the repository layer.
 - **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into the repos without modifying views.
 - **Cascading Deletions**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Tasks and events linked via informational references are never destroyed when notes are removed.
 
 ### Reactive Reads
-- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`, `useOccurrencesForRange`, `useTasksDueForRange`, `useScheduledNotesForRange`, `useEvent`) backed by Dexie's `useLiveQuery`.
+- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`, `useOccurrencesForRange`, `useTasksDueForRange`, `useScheduledNotesForRange`, `useEvent`, `useUpcomingData`) backed by Dexie's `useLiveQuery`.
 
 ---
 
@@ -286,6 +286,24 @@ this.version(4).stores({
    - Full merge/replace support with undo snapshot rollback.
    - Danger zone wipes events and includes event counts.
 
+### Stage 7: Upcoming View
+1. **Pure Read-Only Aggregation**:
+   - Zero new database tables or schema bumps (operates reactively on existing Version 4 Dexie tables).
+   - Aggregates events (by `startAt`, with dynamic recurrence calculations), active todo tasks (by `dueAt`, `status === 'todo'`), and scheduled notes (by `scheduledAt`).
+   - Query efficiency: uses index-friendly filtering and clamps recurrence computations to a 90-day horizon to maintain sub-16ms query speeds even with thousands of records.
+2. **Four Date Horizon Sections**:
+   - **Today**: overdue tasks pinned at top with prominent alert styling, followed by today's events, tasks, and notes chronologically.
+   - **Tomorrow**: items scheduled for the next calendar day.
+   - **Next 7 Days**: items scheduled for days 2 through 7 from today, annotated with date headers (e.g. "Wed, Sep 26").
+   - **Later**: items scheduled beyond 7 days.
+3. **Application Home Screen (`/upcoming`)**:
+   - Elevated to the primary starting route of the application (`/` redirects to `/upcoming`).
+   - Positioned as the first item in the desktop sidebar and mobile navigation bars.
+   - Greeting header with time-of-day greeting ("Good morning", "Good afternoon", "Good evening"), full date format, and aggregated counts subtitle ("3 events · 2 due · 1 overdue").
+4. **Seamless Direct Editing & Task Completion**:
+   - Tapping any row opens the item in its native modal or view (`EventEditorModal`, `TaskEditorModal`, or full-screen note editor).
+   - Tasks feature a 1-tap circular completion button that marks the task done with a 6-second undo snackbar (strictly read-only otherwise; notes and events cannot be accidentally altered from this view).
+
 ---
 
 ## 5. Future Extension Points
@@ -294,6 +312,7 @@ this.version(4).stores({
 > - **Attachments** (Stage 3): Generalized entity-type attachments (`ownerType: 'note' | 'task' | 'event'`).
 > - **Tasks** (Stage 5): Standalone tasks with due dates, priority, tags, Eisenhower flags (`importance` & `urgency`), and note backlinks.
 > - **Events & Calendar** (Stage 6): Fixed time blocks, recurrence series with exceptions, calendar month & agenda views, note scheduling, and local reminders.
+> - **Upcoming View** (Stage 7): Pure read-only home screen aggregation across events, tasks, and scheduled notes.
 
 1. **Eisenhower Matrix View**
    - **Target**: 4-quadrant interactive visualization utilizing the existing `importance` and `urgency` task fields.

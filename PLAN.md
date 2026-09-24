@@ -179,9 +179,27 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
   - Full merge/replace support with undo snapshot rollback.
   - Danger zone wipes events and includes event counts.
 
+### [x] Stage 7: Upcoming View
+- **1. Pure Read-Only Aggregation**:
+  - No new database tables or schema bumps (operates reactively on existing Version 4 Dexie tables).
+  - Centralized aggregation repository `src/db/upcomingRepo.ts` with `useUpcomingData()` live query hook.
+  - Queries active todo tasks (`status === 'todo'`, `trashedAt == null`), scheduled notes (`scheduledAt != null`, `trashedAt == null`), and event occurrences (computed via `computeOccurrencesForRange`).
+- **2. Four Progressive Date Horizons**:
+  - **Today**: Overdue tasks pinned at top with distinct alert styling, followed by today's events, tasks, and notes chronologically.
+  - **Tomorrow**: Items scheduled for tomorrow.
+  - **Next 7 Days**: Items scheduled across days 2 to 7, labeled with date chips.
+  - **Later**: Horizon beyond 7 days (recurring events clamped to 90 days for instant query performance).
+- **3. Home Screen Elevation (`/upcoming`)**:
+  - Elevated to the primary default screen (first nav tab, `/` and `*` redirect to `/upcoming`).
+  - Warm time-of-day greeting header ("Good morning", "Good afternoon", "Good evening"), full date, and aggregate status ("3 events · 2 due · 1 overdue").
+- **4. Row Semantics & Direct Item Editing**:
+  - Contextual time label ("All day", "Due 2:00 PM", "Scheduled", "Overdue"), title, type icon and color badge.
+  - Tapping an item opens its native modal or view (`EventEditorModal`, `TaskEditorModal`, or full note editor).
+  - 1-tap task completion circular checkbox with 6-second undo snackbar (strictly read-only otherwise).
+
 ---
 
-### [ ] Stage 7: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
+### [ ] Stage 8: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
 - Eisenhower Matrix 4-quadrant interactive visualization view (`urgent` x `important`).
 - Markdown preview rendering & live toggle in note editor.
 - Checklist / task blocks inside notes.

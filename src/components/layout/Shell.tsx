@@ -16,6 +16,24 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   {
+    name: 'Upcoming',
+    path: '/upcoming',
+    icon: (active) => (
+      <svg
+        className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    ),
+  },
+  {
     name: 'Inbox',
     path: '/inbox',
     icon: (active) => (
@@ -33,6 +51,7 @@ const mainNavItems: NavItem[] = [
       </svg>
     ),
   },
+
   {
     name: 'Notes',
     path: '/notes',
@@ -190,11 +209,11 @@ const storageNavItems: NavItem[] = [
 ];
 
 const mobileBottomNavItems: NavItem[] = [
-  mainNavItems[0], // Inbox
-  mainNavItems[1], // Notes
-  mainNavItems[2], // Tasks
-  mainNavItems[3], // Calendar
-  storageNavItems[2], // Settings
+  mainNavItems[0], // Upcoming
+  mainNavItems[1], // Inbox
+  mainNavItems[2], // Notes
+  mainNavItems[3], // Tasks
+  mainNavItems[4], // Calendar
 ];
 
 export function Shell() {
@@ -303,7 +322,7 @@ export function Shell() {
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 h-screen p-4 justify-between">
         <div className="space-y-5">
           {/* Logo / App Name */}
-          <Link to="/inbox" className="flex items-center gap-3 px-3 py-2 cursor-pointer">
+          <Link to="/upcoming" className="flex items-center gap-3 px-3 py-2 cursor-pointer">
             <div className="w-8 h-8 rounded-lg bg-blue-600 dark:bg-blue-500 flex items-center justify-center text-white shadow-sm">
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -438,7 +457,7 @@ export function Shell() {
 
       {/* Mobile Top Header (visible on <md) */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
-        <Link to="/inbox" className="flex items-center gap-2">
+        <Link to="/upcoming" className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-md bg-blue-600 dark:bg-blue-500 flex items-center justify-center text-white">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -471,6 +490,18 @@ export function Shell() {
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+            </svg>
+          </Link>
+
+          <Link
+            to="/settings"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Settings"
+            aria-label="Settings"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </Link>
 
