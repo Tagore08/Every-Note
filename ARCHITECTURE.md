@@ -554,7 +554,119 @@ this.version(7).stores({
 
 ---
 
-## 5. Future Extension Points
+## 5. v2.0 Premium Expansion (Phase 0: Foundation)
+
+### 1. Safety Contract & Dexie Schema Version 8
+- **Append-Only Schema**: Schema changes are strictly append-only. Version 8 re-declares all previous table schemas with complete index lists and introduces `appMeta: 'key'` for schema tracking and backup verification.
+- **Complete Version 8 Index Declaration**:
+  ```ts
+  this.version(8).stores({
+    notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+    attachments: '++id, noteId, ownerType, kind, createdAt',
+    tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+    events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+    people: '++id, name, trashedAt, createdAt, updatedAt',
+    habits: '++id, name, archived, createdAt, updatedAt',
+    habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+    focusSessions: '++id, startedAt, taskId, createdAt',
+    appMeta: 'key',
+  });
+  ```
+- **Pre-Upgrade Backup Gate (`src/db/backupGate.ts`)**:
+  - Compares existing browser IndexedDB schema version / `appMeta.schemaVersion` with target version (`db.verno = 8`).
+  - If a schema upgrade is required on an existing database, a blocking dialog (`BackupGateModal.tsx`) halts execution.
+  - Automatically compiles a full JSON backup envelope (including all notes, tasks, events, people, habits, focus sessions, and base64 attachments).
+  - Triggers a browser file download and saves an eviction-safe copy into the Origin Private File System (`OPFS: navigator.storage.getDirectory()`).
+  - Dexie migrations run only after backup completion is guaranteed.
+- **Migration Dry-Run Page (`/debug/migrate`)**:
+  - Isolated dev-only verification tool.
+  - Clones live IndexedDB data into `notesapp_migration_test`.
+  - Runs pending schema migrations, validates table integrity, and reports before/after row counts for all tables.
+- **Performance Benchmark Seed Page (`/debug/seed`)**:
+  - Generates 500 test notes with varied tags, dates, and pinned states to stress-test virtualized scrolling and search.
+
+### 2. Design System Tokens & Shared UI Kit
+- **Design Tokens (`src/design/tokens.css`)**:
+  - Tailwind v4 `@theme` configuration with first-class `.dark` overrides per EXPANSION_PLAN §5.2.
+  - Fixed 8-color Life Area palette (`--area-1` through `--area-8`).
+  - Tone-depth hierarchy: `bg-bg` -> `bg-surface` -> `bg-surface-2`; hairline `border-border`.
+  - Single calm accent color: `--color-accent` (oklch indigo).
+  - Cards: 16px radius (`rounded-card`) with `--shadow-card`.
+  - Floating elements (FAB, sheets, snackbars): `--shadow-float`.
+  - Touch target discipline: all interactive elements feature tap targets ≥ 44px.
+- **Shared UI Kit (`src/design/ui/`)**:
+  - `Sheet`: Spring-animated bottom drawer with grab handle, Escape trap, backdrop blur, and reduced-motion fallback.
+  - `Segmented`: Accessible tab control with pill indicators and touch targets ≥ 44px.
+  - `StatCard`: Surface card with title, metric, delta indicators, and subtext.
+  - `EmptyState`: Minimal illustration-less onboarding state with single call-to-action button.
+  - `Skeleton` & `PageSkeleton`: Shimmering placeholder components for lazy route Suspense fallbacks.
+  - `Chip`: Rounded-pill tag/badge with optional dot and dismiss button.
+  - `ColorDots`: 8-color life area palette picker with active ring indicator.
+  - `RingProgress`: SVG circular progress indicator with accent stroke.
+  - `FAB`: Floating action button with spring scaling and 500ms long-press detection.
+  - `SectionHeader`: Semibold section header with count badge and action link.
+  - `SnackbarContext`: Retained Stage 2 undo notification service, restyled with design tokens.
+
+### 3. Navigation v2 & Information Architecture
+- **Single Navigation Config (`src/app/nav.ts`)**:
+  - Centralized manifest defining routes, icons, groups, badges, and feature flag gates.
+- **AppShell (`src/app/AppShell.tsx`)**:
+  - **Desktop**: Grouped collapsible sidebar (`TODAY`, `CAPTURE`, `ORGANIZE`, `PLAN`, `GROW`, `SYSTEM`).
+  - **Mobile**: 5-slot bottom navigation (`Today`, `Search`, `Capture FAB`, `Calendar`, `Library`).
+  - **Mobile Library Sheet**: Smooth bottom drawer organizing all secondary features with ≥44px touch targets.
+  - **Route Redirection**: `/upcoming` and `/` redirect to `/today` with 301-equivalent navigation. "Today" currently renders the date horizon view under the new name until Phase 4.
+
+### 4. Capture FAB & Sheet (`src/app/CaptureFab.tsx`)
+- Sacrosanct sub-3-second inbox capture preserved via autofocused textarea with Enter-to-save.
+- FAB long-press (~500ms with haptic vibration) bypasses the sheet directly into instant inbox capture.
+- Progressive disclosure: buttons for in-development modules (Journal, Drawing, Templates) remain hidden until their respective feature flags are enabled.
+
+### 5. Feature Flags (`src/app/flags.ts`)
+- Master list of 9 flags: `canvas`, `journal`, `graph`, `routines`, `calendarPro`, `insights`, `focusPro`, `habitAnalytics`, `smartInbox`.
+- Persisted in localStorage (`notes_app_feature_flags_v2`), defaulting to OFF in Phase 0.
+- Settings → Labs screen (`/settings/labs`) provides toggle controls and single-line explanations.
+- Navigation items and routes filter dynamically through `useFeatureFlags()` and `useFlag()`.
+
+### 6. Performance Budget & Code-Splitting Baseline
+- All 20 application routes converted to `React.lazy` + `Suspense` with `PageSkeleton` fallbacks.
+- `@tanstack/react-virtual` added to `NotesView`, `InboxView`, and `SearchView` for virtualized rendering.
+- **Performance Budget**: Main entry bundle must stay under ~250 kB gzipped.
+  - **Actual Main Bundle**: `487.43 kB` raw (`150.15 kB` gzipped) — **Well within budget!**
+- **Lazy Feature Chunks (Vite Production Build)**:
+  | Chunk | Raw Size | Gzipped Size | Description |
+  |---|---|---|---|
+  | `dist/assets/index.js` | 487.43 kB | 150.15 kB | Core shell, React runtime, Dexie, navigation |
+  | `dist/assets/index.css` | 99.69 kB | 15.01 kB | Tailwind v4 compiled tokens & theme styles |
+  | `dist/assets/database.js` | 98.90 kB | 31.80 kB | Dexie database schema and repositories |
+  | `dist/assets/NoteEditorView.js` | 31.46 kB | 7.27 kB | Full note editor & attachment drawer |
+  | `dist/assets/SettingsView.js` | 26.20 kB | 6.67 kB | Settings, backups, storage quota |
+  | `dist/assets/HabitsView.js` | 20.20 kB | 4.89 kB | Habits tracker & 30-day dot grid |
+  | `dist/assets/PersonProfileView.js` | 19.80 kB | 4.78 kB | Contact profile & linked entity lists |
+  | `dist/assets/EventEditorModal.js` | 15.19 kB | 3.69 kB | Calendar event editor modal |
+  | `dist/assets/CalendarView.js` | 13.54 kB | 3.56 kB | Month grid & calendar agenda |
+  | `dist/assets/FocusTimerView.js` | 13.17 kB | 3.65 kB | Focus Pomodoro timer & session logs |
+  | `dist/assets/EisenhowerMatrixView.js` | 11.71 kB | 3.49 kB | 2x2 priority matrix view |
+  | `dist/assets/UpcomingView.js` | 11.41 kB | 3.35 kB | Today / Upcoming horizon view |
+  | `dist/assets/PeopleView.js` | 11.18 kB | 2.95 kB | People directory grid |
+  | `dist/assets/NotesView.js` | 8.99 kB | 2.66 kB | Virtualized active notes list |
+  | `dist/assets/TasksView.js` | 8.41 kB | 2.76 kB | Todo/Done tasks list |
+  | `dist/assets/TrashView.js` | 7.50 kB | 1.97 kB | Trash browser & auto-purge |
+  | `dist/assets/MigrateDebugScreen.js` | 7.33 kB | 2.47 kB | Migration dry-run debug tool |
+  | `dist/assets/InboxView.js` | 6.29 kB | 2.05 kB | Virtualized inbox triage view |
+  | `dist/assets/ArchiveView.js` | 4.88 kB | 1.58 kB | Archived notes browser |
+  | `dist/assets/SearchView.js` | 4.83 kB | 1.79 kB | Virtualized instant search view |
+  | `dist/assets/TagsView.js` | 4.69 kB | 1.57 kB | Tag cloud and tag browser |
+  | `dist/assets/SeedDebugScreen.js` | 4.14 kB | 1.77 kB | 500-note benchmark generator |
+  | `dist/assets/LabsScreen.js` | 3.10 kB | 1.22 kB | Feature flags management screen |
+
+### 7. Motion & Accessibility
+- Animations powered by `motion` (`motion/react`).
+- Used strictly with purpose: bottom sheet spring transitions and nav feedback.
+- Global reduced-motion support via `useReducedMotion()`. When active, animations are disabled or rendered with zero-delay opacity transitions.
+
+---
+
+## 6. Future Extension Points
 
 > **Realized Extension Points**:
 > - **Attachments** (Stage 3): Generalized entity-type attachments (`ownerType: 'note' | 'task' | 'event'`).
@@ -567,8 +679,15 @@ this.version(7).stores({
 > - **Eisenhower Matrix** (Stage 10): Reactive 2x2 matrix view over existing tasks with desktop drag-and-drop and mobile long-press quadrant moving.
 > - **Android App Wrapper** (Stage 11): Native Android wrapper with Capacitor 8, API Level 36 target, native splash screen, status bar theme sync, and offline WebView IndexedDB.
 > - **Play Store Prep** (Stage 12): Automated release pipeline (`scripts/build-release.sh`), Data Safety declarations, store listing copy, GitHub Pages privacy policy, and 2-minute smoke test checklist.
+> - **v2.0 Phase 0 Foundation**: Design system tokens, Navigation v2 (5-slot mobile bottom nav + grouped desktop sidebar), Feature Flags (Settings → Labs), Pre-upgrade Backup Gate (JSON + OPFS), Migration Dry-Run (`/debug/migrate`), Virtualized Lists (`@tanstack/react-virtual`), and Route Code-Splitting baseline.
 
-1. **Sync**
-   - **Target**: Cross-device synchronization and backups without a centralized custodial backend.
-   - **Design**: Integrated through repository layers with change-vector logging or CRDTs.
+1. **Phase 1: Life Areas & Smart Inbox**
+   - Life Areas taxonomy, task subtasks, quick-add NLP date parser (`chrono-node`), templates engine, and inbox analytics header.
+2. **Phase 2A & 2B: Journal & Knowledge Graph**
+   - Notes `kind='journal'`, mood tracking, distraction-free editor, wikilink parsing, and backlinks panel with graph visualization.
+3. **Phase 3 & 4: Calendar Pro & Routines / Today**
+   - Multi-day time-grid engine, routine materialization, and unified Today dashboard.
+4. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
+   - Pressure-sensitive vector canvas, timer presets, 12-month habit heatmaps, and local insights hub.
+
 

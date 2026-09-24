@@ -6,6 +6,7 @@ import type { CalendarEvent } from '../types/event';
 import type { Person } from '../types/person';
 import type { Habit, HabitLog } from '../types/habit';
 import type { FocusSession } from '../types/focus';
+import type { AppMeta } from '../types/meta';
 
 export class AppDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
@@ -16,10 +17,10 @@ export class AppDatabase extends Dexie {
   habits!: EntityTable<Habit, 'id'>;
   habitLogs!: EntityTable<HabitLog, 'id'>;
   focusSessions!: EntityTable<FocusSession, 'id'>;
+  appMeta!: EntityTable<AppMeta, 'key'>;
 
-
-  constructor() {
-    super('NotesAppDatabase');
+  constructor(dbName = 'NotesAppDatabase') {
+    super(dbName);
 
     // Schema Version 1 (Baseline foundation: Notes)
     this.version(1).stores({
@@ -97,8 +98,28 @@ export class AppDatabase extends Dexie {
       habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
       focusSessions: '++id, startedAt, taskId, createdAt',
     });
+
+    // Schema Version 8 (v2 Phase 0: Foundation - appMeta store for backup gate & last-seen schema)
+    // All tables re-declared with complete index list per safety contract
+    this.version(8).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
+      appMeta: 'key',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 8,
+        updatedAt: Date.now(),
+      });
+    });
   }
 }
-
 
 export const db = new AppDatabase();

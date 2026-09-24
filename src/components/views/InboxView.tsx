@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInboxNotes, notesRepo } from '../../db/notesRepo';
 import { tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
@@ -15,6 +17,7 @@ export function InboxView(props: InboxViewProps) {
   const { showUndo } = useSnackbar();
   const outlet = useOutletContext<{ openCapture?: () => void } | null>();
   const onOpenCapture = props.onOpenCapture ?? outlet?.openCapture;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const handleFileAsNote = async (id?: number) => {
     if (typeof id !== 'number') return;
@@ -55,10 +58,19 @@ export function InboxView(props: InboxViewProps) {
     }
   };
 
+  const noteList = notes ?? [];
+
+  const rowVirtualizer = useVirtualizer({
+    count: noteList.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => 120,
+    overscan: 5,
+  });
+
   if (notes === undefined) {
     return (
       <div className="max-w-3xl mx-auto py-12 flex justify-center">
-        <div className="text-sm text-slate-400 animate-pulse">Loading inbox...</div>
+        <div className="text-sm text-ink-muted animate-pulse">Loading inbox...</div>
       </div>
     );
   }
@@ -66,14 +78,14 @@ export function InboxView(props: InboxViewProps) {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex items-center justify-between pb-3 border-b border-border">
         <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <h2 className="text-2xl font-semibold tracking-tight text-ink">
             Inbox
           </h2>
-          {notes.length > 0 && (
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
-              {notes.length}
+          {noteList.length > 0 && (
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-soft text-accent border border-accent/20">
+              {noteList.length}
             </span>
           )}
         </div>
@@ -81,7 +93,7 @@ export function InboxView(props: InboxViewProps) {
           <button
             type="button"
             onClick={onOpenCapture}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-pill text-xs font-semibold bg-accent text-accent-ink shadow-card hover:opacity-90 transition-opacity cursor-pointer min-h-[44px]"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -93,89 +105,119 @@ export function InboxView(props: InboxViewProps) {
       </div>
 
       {/* Empty State */}
-      {notes.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center space-y-4 bg-white/50 dark:bg-slate-900/30">
-          <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center">
+      {noteList.length === 0 ? (
+        <div className="rounded-card border border-border p-12 text-center space-y-4 bg-surface shadow-card">
+          <div className="w-12 h-12 rounded-full bg-accent-soft text-accent mx-auto flex items-center justify-center">
             <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
           <div>
-            <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
-              Inbox Zero
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-              Your inbox is clear. Quick thoughts, clippings, and items to triage will appear here.
+            <h3 className="text-base font-semibold text-ink">Inbox Zero</h3>
+            <p className="text-sm text-ink-muted mt-1 max-w-sm mx-auto">
+              You've cleared everything! Capture thoughts anytime with the + button or press{' '}
+              <kbd className="px-1.5 py-0.5 rounded bg-surface-2 border border-border text-ink font-mono text-[11px]">
+                N
+              </kbd>
+              .
             </p>
           </div>
           {onOpenCapture && (
             <button
               type="button"
               onClick={onOpenCapture}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 transition-colors shadow-xs"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-pill text-sm font-semibold bg-accent text-accent-ink hover:opacity-90 transition-opacity shadow-card min-h-[44px] cursor-pointer"
             >
-              <span>Capture a thought</span>
-              <kbd className="text-[10px] px-1 py-0.5 rounded bg-slate-700 dark:bg-slate-200 text-slate-200 dark:text-slate-800 font-mono">
-                N
-              </kbd>
+              <span>Quick Capture</span>
+              <span aria-hidden="true">→</span>
             </button>
           )}
         </div>
       ) : (
-        /* Notes List */
-        <div className="space-y-3">
-          {notes.map((note) => (
-            <div
-              key={note.id}
-              className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between gap-4"
-            >
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-                  <span className="font-medium text-slate-600 dark:text-slate-300">
-                    {getDisplayTitle(note)}
-                  </span>
-                  <span>{formatRelativeTime(note.createdAt)}</span>
-                </div>
-                <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
-                  {note.content}
-                </p>
-              </div>
+        /* Virtualized Inbox List */
+        <div
+          ref={scrollContainerRef}
+          className="h-[calc(100vh-14rem)] overflow-y-auto pr-1"
+        >
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const note = noteList[virtualRow.index];
+              return (
+                <div
+                  key={note.id ?? virtualRow.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                  className="pb-3"
+                >
+                  <div className="p-4 sm:p-5 rounded-card bg-surface border border-border shadow-card hover:border-accent/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
+                        <h3 className="text-base font-semibold text-ink truncate">
+                          {getDisplayTitle(note)}
+                        </h3>
+                      </div>
+                      <p className="text-sm text-ink-muted line-clamp-2 leading-relaxed">
+                        {note.content || <span className="italic opacity-60">No additional text</span>}
+                      </p>
+                      <div className="text-[11px] text-ink-muted pt-1">
+                        Captured {formatRelativeTime(note.createdAt)}
+                      </div>
+                    </div>
 
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                <button
-                  type="button"
-                  onClick={() => handleDelete(note.id)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40 transition-colors"
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleConvertToTask(note)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:text-emerald-300 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer"
-                  title="Convert to task and file note"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 11l3 3L22 4" />
-                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                  </svg>
-                  <span>To task</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFileAsNote(note.id)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/70 dark:text-blue-300 dark:hover:bg-blue-900/60 transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                  </svg>
-                  <span>File as note</span>
-                </button>
-              </div>
-            </div>
-          ))}
+                    {/* Action buttons (>=44px touch targets) */}
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => handleConvertToTask(note)}
+                        className="px-3 py-1.5 rounded-pill bg-surface-2 hover:bg-surface border border-border text-ink text-xs font-semibold transition-colors cursor-pointer min-h-[44px] flex items-center gap-1.5"
+                        title="Convert to Task"
+                      >
+                        <svg className="w-3.5 h-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M9 11l3 3L22 4" />
+                          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                        </svg>
+                        <span>Task</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleFileAsNote(note.id)}
+                        className="px-3.5 py-1.5 rounded-pill bg-accent text-accent-ink text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer min-h-[44px] flex items-center gap-1.5 shadow-xs"
+                      >
+                        <span>File Note</span>
+                        <span aria-hidden="true">→</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(note.id)}
+                        className="p-2 rounded-lg text-ink-muted hover:text-danger hover:bg-surface-2 transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        title="Delete note"
+                        aria-label="Delete note"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

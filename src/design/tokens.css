@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-serif: "Newsreader", Georgia, serif;      /* journal only */
+
+  --color-bg:        oklch(0.985 0.002 260);
+  --color-surface:   oklch(1 0 0);
+  --color-surface-2: oklch(0.965 0.004 260);
+  --color-border:    oklch(0.915 0.006 260);
+  --color-ink:       oklch(0.24 0.02 262);
+  --color-ink-muted: oklch(0.55 0.02 262);
+  --color-accent:      oklch(0.55 0.17 265);      /* calm indigo */
+  --color-accent-ink:  oklch(0.98 0.01 265);
+  --color-accent-soft: oklch(0.55 0.17 265 / 12%);
+  --color-success: oklch(0.62 0.13 155);
+  --color-warning: oklch(0.72 0.14 75);
+  --color-danger:  oklch(0.58 0.19 25);
+
+  /* Life-area palette (fixed 8, colorblind-considered, reused by tags/graph) */
+  --area-1: oklch(0.62 0.16 25);   /* Health   — coral    */
+  --area-2: oklch(0.58 0.13 250);  /* Work     — indigo   */
+  --area-3: oklch(0.66 0.14 145);  /* Personal — green    */
+  --area-4: oklch(0.64 0.13 60);   /* Finance  — amber    */
+  --area-5: oklch(0.60 0.14 310);  /* Learning — violet   */
+  --area-6: oklch(0.63 0.10 200);  /* Home     — teal     */
+  --area-7: oklch(0.61 0.17 0);    /* Relate.  — rose     */
+  --area-8: oklch(0.60 0.03 262);  /* Other    — slate    */
+
+  --radius-card: 1rem;  --radius-sheet: 1.5rem;  --radius-pill: 999px;
+  --shadow-card:  0 1px 2px rgb(15 23 42 / 0.05), 0 4px 16px rgb(15 23 42 / 0.05);
+  --shadow-float: 0 10px 32px rgb(15 23 42 / 0.14), 0 2px 6px rgb(15 23 42 / 0.08);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-fast: 150ms;  --dur-normal: 250ms;  --dur-slow: 400ms;
+  --row-h: 3.25rem;   /* density toggle: compact = 2.75rem */
+}
+
+.dark {
+  --color-bg:        oklch(0.17 0.012 262);
+  --color-surface:   oklch(0.21 0.014 262);
+  --color-surface-2: oklch(0.25 0.015 262);
+  --color-border:    oklch(0.32 0.015 262);
+  --color-ink:       oklch(0.93 0.01 262);
+  --color-ink-muted: oklch(0.66 0.015 262);
+  --color-accent:      oklch(0.68 0.15 265);
+  --color-accent-soft: oklch(0.68 0.15 265 / 16%);
+  --shadow-card:  0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.25);
+  --shadow-float: 0 10px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
+}

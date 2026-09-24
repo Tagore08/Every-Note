@@ -104,26 +104,26 @@ export function TasksView() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header & Segmented Control */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-border">
         <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <h2 className="text-2xl font-semibold tracking-tight text-ink">
             Tasks
           </h2>
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-surface-2 text-ink border border-border">
             {todoTasks?.length ?? 0}
           </span>
         </div>
 
         {/* Segment Tabs & Matrix View Switcher */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+          <div className="inline-flex p-1 rounded-pill bg-surface-2 border border-border">
             <button
               type="button"
               onClick={() => setSegment('todo')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-pill text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
                 segment === 'todo'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? 'bg-surface text-ink shadow-card font-semibold'
+                  : 'text-ink-muted hover:text-ink'
               }`}
             >
               Todo ({todoTasks?.length ?? 0})
@@ -131,10 +131,10 @@ export function TasksView() {
             <button
               type="button"
               onClick={() => setSegment('done')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-pill text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
                 segment === 'done'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? 'bg-surface text-ink shadow-card font-semibold'
+                  : 'text-ink-muted hover:text-ink'
               }`}
             >
               Done ({doneTasks?.length ?? 0})
@@ -143,7 +143,7 @@ export function TasksView() {
 
           <Link
             to="/matrix"
-            className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            className="p-2.5 rounded-pill text-ink-muted hover:text-ink bg-surface-2 hover:bg-surface border border-border transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
             title="Eisenhower Matrix view"
             aria-label="Eisenhower Matrix view"
           >
@@ -166,10 +166,10 @@ export function TasksView() {
             onChange={(e) => setQuickTitle(e.target.value)}
             onKeyDown={handleQuickAdd}
             placeholder="+ Add a task... (press Enter to save)"
-            className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            className="w-full px-4 py-3 rounded-card border border-border bg-surface text-ink placeholder-ink-muted text-sm shadow-card focus:outline-none focus:border-accent"
           />
           {quickTitle.trim() && (
-            <kbd className="absolute right-3 top-3 text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-mono">
+            <kbd className="absolute right-3 top-3 text-[10px] px-2 py-1 rounded bg-surface-2 border border-border text-ink-muted font-mono">
               ↵ Enter
             </kbd>
           )}

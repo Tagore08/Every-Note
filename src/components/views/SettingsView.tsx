@@ -509,40 +509,64 @@ export function SettingsView() {
         </p>
       </div>
 
-      {/* Quick Navigation to Archive & Trash */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Quick Navigation to Labs, Archive & Trash */}
+      <div className="space-y-3">
         <Link
-          to="/archive"
-          className="flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition-colors"
+          to="/settings/labs"
+          className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
         >
-          <div className="flex items-center gap-2.5">
-            <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="3" width="20" height="5" rx="1" />
-              <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
-              <path d="M10 12h4" />
-            </svg>
-            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Archive</span>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-accent-soft text-accent flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2" />
+                <path d="M8.5 2h7" />
+                <path d="M7 16h10" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-ink">Experimental Labs</div>
+              <div className="text-xs text-ink-muted">Toggle expansion feature flags and developer options</div>
+            </div>
           </div>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">
-            {archivedNotes?.length ?? 0}
+          <span className="text-accent text-xs font-semibold px-3 py-1 rounded-pill bg-accent-soft">
+            Manage Labs →
           </span>
         </Link>
 
-        <Link
-          to="/trash"
-          className="flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition-colors"
-        >
-          <div className="flex items-center gap-2.5">
-            <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
-            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Trash</span>
-          </div>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">
-            {trashNotes?.length ?? 0}
-          </span>
-        </Link>
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            to="/archive"
+            className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
+          >
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="3" width="20" height="5" rx="1" />
+                <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+                <path d="M10 12h4" />
+              </svg>
+              <span className="text-sm font-medium text-ink">Archive</span>
+            </div>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-surface-2 text-ink border border-border font-semibold">
+              {archivedNotes?.length ?? 0}
+            </span>
+          </Link>
+
+          <Link
+            to="/trash"
+            className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
+          >
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span className="text-sm font-medium text-ink">Trash</span>
+            </div>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-surface-2 text-ink border border-border font-semibold">
+              {trashNotes?.length ?? 0}
+            </span>
+          </Link>
+        </div>
       </div>
 
       {/* 1. Appearance Section */}
