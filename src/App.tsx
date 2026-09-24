@@ -56,6 +56,9 @@ const AreasScreen = lazy(() =>
 const TemplatesScreen = lazy(() =>
   import('./features/templates/TemplatesScreen').then((m) => ({ default: m.TemplatesScreen }))
 );
+const JournalScreen = lazy(() =>
+  import('./features/journal/JournalScreen').then((m) => ({ default: m.JournalScreen }))
+);
 const ArchiveView = lazy(() =>
   import('./components/views/ArchiveView').then((m) => ({ default: m.ArchiveView }))
 );
@@ -100,6 +103,8 @@ export function App() {
 
             {/* Primary features */}
             <Route path="inbox" element={<InboxView />} />
+            <Route path="journal" element={<JournalScreen />} />
+            <Route path="journal/:date" element={<JournalScreen />} />
             <Route path="notes" element={<NotesView />} />
             <Route path="notes/:id" element={<NoteEditorView />} />
             <Route path="tasks" element={<TasksView />} />

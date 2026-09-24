@@ -146,6 +146,36 @@ export class AppDatabase extends Dexie {
         updatedAt: Date.now(),
       });
     });
+
+    // Schema Version 10 (v2 Phase 2A: Journal entries with kind, journalDate, mood)
+    // All tables re-declared with complete index lists per safety contract
+    this.version(10).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
+      appMeta: 'key',
+      lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+      templates: '++id, kind, name, usageCount, createdAt',
+    }).upgrade(async (tx) => {
+      // Set kind='note' where undefined per §4
+      await tx.table('notes').toCollection().modify((note: any) => {
+        if (!note.kind) {
+          note.kind = 'note';
+        }
+      });
+
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 10,
+        updatedAt: Date.now(),
+      });
+    });
   }
 }
 

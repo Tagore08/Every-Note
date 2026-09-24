@@ -126,7 +126,7 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   const currentFlags = getStoredFlags();
 
   return {
-    version: 9,
+    version: 10,
     app: 'notes-app',
     exportedAt: new Date().toISOString(),
     notes: allNotes,

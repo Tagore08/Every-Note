@@ -211,7 +211,7 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 9,
+        version: 10,
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,

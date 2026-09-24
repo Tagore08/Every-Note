@@ -1,3 +1,6 @@
+export type NoteKind = 'note' | 'journal';
+export type JournalMood = 1 | 2 | 3 | 4 | 5;
+
 export interface Note {
   id?: number;
   title: string;
@@ -11,6 +14,9 @@ export interface Note {
   reminderAt?: Date | null;
   personId?: number | null;
   lifeAreaId?: number | null;
+  kind?: NoteKind;
+  journalDate?: string | null; // 'YYYY-MM-DD' in local timezone
+  mood?: JournalMood | null;
   createdAt: Date;
   updatedAt: Date;
 }

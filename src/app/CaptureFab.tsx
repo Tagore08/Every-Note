@@ -8,6 +8,7 @@ import { FAB } from '../design/ui/FAB';
 import { TaskEditorModal } from '../components/tasks/TaskEditorModal';
 import { TemplatePickerSheet } from '../features/templates/TemplatePickerSheet';
 import { useSnackbar } from '../context/SnackbarContext';
+import { localDateStr } from '../lib/date';
 import type { Template } from '../types/template';
 
 interface CaptureFabProps {
@@ -149,6 +150,32 @@ export function CaptureFab({
 
       showSnackbar({ message: `Created note from "${template.name}"` });
       navigate(`/notes/${note.id}`);
+    } else if (template.kind === 'journal') {
+      const todayStr = localDateStr();
+      const existing = await notesRepo.getJournalEntry(todayStr);
+      let initialContent = '';
+      if (template.body.prompts && template.body.prompts.length > 0) {
+        initialContent = template.body.prompts.map((p) => `**${p}**\n\n`).join('\n');
+      }
+
+      if (existing) {
+        if (!existing.content) {
+          await notesRepo.updateNote(existing.id!, { content: initialContent });
+        }
+      } else {
+        await notesRepo.createNote({
+          kind: 'journal',
+          journalDate: todayStr,
+          title: `Journal — ${todayStr}`,
+          content: initialContent,
+          inbox: false,
+          pinned: false,
+          archived: false,
+        });
+      }
+
+      showSnackbar({ message: `Opened journal with "${template.name}"` });
+      navigate(`/journal/${todayStr}`);
     }
   };
 

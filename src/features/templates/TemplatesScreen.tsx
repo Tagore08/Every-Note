@@ -25,6 +25,8 @@ export function TemplatesScreen() {
   const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [subtasks, setSubtasks] = useState<string[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
+  const [prompts, setPrompts] = useState<string[]>([]);
+  const [promptInput, setPromptInput] = useState('');
 
   const openCreateModal = () => {
     setEditingTemplate(null);
@@ -37,6 +39,8 @@ export function TemplatesScreen() {
     setLifeAreaId(null);
     setSubtasks([]);
     setSubtaskInput('');
+    setPrompts([]);
+    setPromptInput('');
     setIsModalOpen(true);
   };
 
@@ -51,6 +55,8 @@ export function TemplatesScreen() {
     setLifeAreaId(t.body.lifeAreaId ?? null);
     setSubtasks(t.body.subtasks ? [...t.body.subtasks] : []);
     setSubtaskInput('');
+    setPrompts(t.body.prompts ? [...t.body.prompts] : []);
+    setPromptInput('');
     setIsModalOpen(true);
   };
 
@@ -63,6 +69,17 @@ export function TemplatesScreen() {
 
   const handleRemoveSubtask = (index: number) => {
     setSubtasks(subtasks.filter((_, idx) => idx !== index));
+  };
+
+  const handleAddPrompt = () => {
+    const clean = promptInput.trim();
+    if (!clean) return;
+    setPrompts([...prompts, clean]);
+    setPromptInput('');
+  };
+
+  const handleRemovePrompt = (index: number) => {
+    setPrompts(prompts.filter((_, idx) => idx !== index));
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -79,6 +96,8 @@ export function TemplatesScreen() {
       body.priority = priority !== 'none' ? priority : undefined;
       body.dueOffsetDays = dueOffsetDays > 0 ? dueOffsetDays : undefined;
       body.subtasks = subtasks.length > 0 ? subtasks : undefined;
+    } else if (kind === 'journal') {
+      body.prompts = prompts.length > 0 ? prompts : undefined;
     } else {
       body.content = content || undefined;
     }
@@ -116,7 +135,7 @@ export function TemplatesScreen() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-ink">Templates</h1>
           <p className="text-sm text-ink-muted mt-1">
-            Reusable blueprints for tasks and notes to speed up your capture workflow.
+            Reusable blueprints for tasks, notes, and journal entries.
           </p>
         </div>
         <button
@@ -133,15 +152,16 @@ export function TemplatesScreen() {
         value={selectedKind}
         onChange={(val) => setSelectedKind(val as TemplateKind)}
         options={[
-          { value: 'task', label: 'Task Templates' },
-          { value: 'note', label: 'Note Templates' },
+          { value: 'task', label: 'Tasks' },
+          { value: 'note', label: 'Notes' },
+          { value: 'journal', label: 'Journal' },
         ]}
       />
 
       {/* Templates List */}
       <div className="space-y-3">
         <SectionHeader
-          title={`${selectedKind === 'task' ? 'Task' : 'Note'} Blueprints`}
+          title={`${selectedKind === 'task' ? 'Task' : selectedKind === 'journal' ? 'Journal' : 'Note'} Blueprints`}
           count={templates.length}
         />
 
@@ -185,6 +205,24 @@ export function TemplatesScreen() {
                         )}
                         {t.body.dueOffsetDays && (
                           <p className="text-xs text-ink-muted">Due in +{t.body.dueOffsetDays} days</p>
+                        )}
+                      </div>
+                    ) : t.kind === 'journal' ? (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-ink">
+                          {t.body.prompts?.length ?? 0} reflection prompts
+                        </p>
+                        {t.body.prompts && t.body.prompts.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {t.body.prompts.slice(0, 3).map((p, idx) => (
+                              <span
+                                key={idx}
+                                className="text-[10px] px-2 py-0.5 rounded-full bg-surface-2 text-ink-muted truncate max-w-[200px]"
+                              >
+                                "{p}"
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
                     ) : (
@@ -249,7 +287,7 @@ export function TemplatesScreen() {
                   Type
                 </label>
                 <div className="flex gap-2">
-                  {(['task', 'note'] as const).map((k) => (
+                  {(['task', 'note', 'journal'] as const).map((k) => (
                     <button
                       key={k}
                       type="button"
@@ -260,7 +298,7 @@ export function TemplatesScreen() {
                           : 'border-border bg-surface-2 text-ink-muted hover:text-ink'
                       }`}
                     >
-                      {k === 'task' ? 'Task Template' : 'Note Template'}
+                      {k === 'task' ? 'Task' : k === 'journal' ? 'Journal' : 'Note'}
                     </button>
                   ))}
                 </div>
@@ -407,6 +445,61 @@ export function TemplatesScreen() {
                     placeholder="## Agenda&#10;- &#10;&#10;## Notes&#10;&#10;## Action Items&#10;- [ ] "
                     className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface-2 text-ink text-xs font-mono focus:outline-none focus:ring-2 focus:ring-accent leading-relaxed"
                   />
+                </div>
+              )}
+
+              {/* Journal-specific fields */}
+              {kind === 'journal' && (
+                <div className="space-y-2 pt-2 border-t border-border">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                    Reflection Prompts ({prompts.length})
+                  </label>
+                  <p className="text-xs text-ink-muted">
+                    Prompts appear as tappable chips in the Journal editor to structure entries.
+                  </p>
+
+                  {prompts.length > 0 && (
+                    <div className="space-y-1 max-h-36 overflow-y-auto">
+                      {prompts.map((p, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-2 rounded-lg bg-surface-2 border border-border text-xs text-ink"
+                        >
+                          <span className="truncate">"{p}"</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePrompt(idx)}
+                            className="text-ink-muted hover:text-danger p-0.5"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={promptInput}
+                      onChange={(e) => setPromptInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddPrompt();
+                        }
+                      }}
+                      placeholder="+ Add reflection prompt (Enter)..."
+                      className="flex-1 px-3 py-2 rounded-xl border border-border bg-surface-2 text-ink text-xs focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddPrompt}
+                      className="px-3 py-2 rounded-xl bg-surface-2 hover:bg-surface border border-border text-xs font-semibold text-ink cursor-pointer"
+                    >
+                      Add
+                    </button>
+                  </div>
                 </div>
               )}
 

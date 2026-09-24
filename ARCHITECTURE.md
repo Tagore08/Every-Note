@@ -48,10 +48,10 @@ notes-app/
     │   ├── habit.ts         # Habit & HabitLog data contracts (streaks, frequency)
     │   └── focus.ts         # Focus session data contract (FocusSession interface)
     ├── db/
-    │   ├── database.ts      # Dexie 4 database class, schema versions 1-9 (append-only)
-    │   ├── backupGate.ts    # Pre-upgrade OPFS and JSON file backup safety gate (TARGET_VERSION=9)
-    │   ├── exportService.ts # JSON envelope serialization & import engine (Envelope v9)
-    │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes
+    │   ├── database.ts      # Dexie 4 database class, schema versions 1-10 (append-only)
+    │   ├── backupGate.ts    # Pre-upgrade OPFS and JSON file backup safety gate (TARGET_VERSION=10)
+    │   ├── exportService.ts # JSON envelope serialization & import engine (Envelope v10)
+    │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes and journal entries
     │   ├── tasksRepo.ts     # Data access layer & subtask tree manipulation hooks
     │   ├── eventsRepo.ts    # Data access layer & recurrence occurrence engine
     │   ├── upcomingRepo.ts  # Cross-entity date horizon aggregation engine
@@ -62,10 +62,15 @@ notes-app/
     │       ├── areasRepo.ts # Life Areas CRUD, sortOrder, and idempotent default seeding
     │       └── templatesRepo.ts # Starter templates CRUD, usage counts, and default seeding
     ├── lib/
+    │   ├── date.ts          # Timezone-safe local calendar date formatting & manipulation
+    │   ├── date.test.ts     # Vitest tests for local date string & midnight boundaries
+    │   ├── journal.ts       # Pure streak calculation and "On This Day" filtering algorithms
+    │   ├── journal.test.ts  # Vitest tests for journal streak & past-year matching
     │   ├── quickAdd.ts      # Natural language parser using chrono-node (#tag, @Area, dates)
     │   └── quickAdd.test.ts # 13 Vitest unit tests for quick-add NLP logic
     ├── features/
     │   ├── areas/           # LifeAreaPicker & AreasScreen management
+    │   ├── journal/         # JournalScreen, MoodRow, PromptChips, OnThisDayCard, JournalPromptSection
     │   ├── templates/       # TemplatePickerSheet & TemplatesScreen management
     │   ├── inbox/           # InboxAnalyticsHeader & FileAsSheet triage
     │   ├── settings/        # LabsScreen feature flags management
@@ -203,6 +208,10 @@ this.version(7).stores({
 | `scheduledAt` | `Date \| null` (optional) | `scheduledAt` | Calendar scheduled date index |
 | `reminderAt` | `Date \| null` (optional) | `reminderAt` | Notification reminder timestamp index |
 | `personId` | `number \| null` (optional) | `personId` | Optional linked person ID index |
+| `lifeAreaId` | `number \| null` (optional) | `lifeAreaId` | Optional Life Area ID index (added in Phase 1) |
+| `kind` | `'note' \| 'journal'` | `kind` | Entity kind discriminant ('note' or 'journal', added in Phase 2A) |
+| `journalDate` | `string \| null` | `journalDate` | Local date string ('YYYY-MM-DD') for daily journal entries (added in Phase 2A) |
+| `mood` | `1 \| 2 \| 3 \| 4 \| 5 \| null` | — | Journal mood reflection (1: rough to 5: great, added in Phase 2A) |
 | `createdAt` | `Date` | `createdAt` | Creation timestamp, chronological ordering index |
 | `updatedAt` | `Date` | `updatedAt` | Last modification timestamp, recency ordering index |
 
@@ -806,14 +815,106 @@ this.version(7).stores({
 
 ---
 
-## 7. Future Extension Points
+## 7. v2.0 Phase 2A: Journal (Feature Flag: 'journal')
 
-1. **Phase 2A & 2B: Journal & Knowledge Graph**
-   - Notes `kind='journal'`, mood tracking, distraction-free editor, wikilink parsing, and backlinks panel with graph visualization.
-2. **Phase 3 & 4: Calendar Pro & Routines / Today**
-   - Multi-day time-grid engine, routine materialization, and unified Today dashboard.
-3. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
+### 1. Safety Contract & Dexie Schema Version 10
+- **Append-Only Schema Evolution**:
+  - Schema changes adhere strictly to §0 Safety Contract.
+  - Version 10 re-declares all 11 table schemas with **complete index sets**.
+  - Updated table `notes`: gained `kind` ('note' | 'journal', default 'note', indexed) and `journalDate` ('YYYY-MM-DD', indexed).
+  - Upgrade function iterates existing notes and initializes `kind = 'note'` where undefined.
+- **Complete Version 10 Index Declaration**:
+  ```ts
+  this.version(10).stores({
+    notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+    attachments: '++id, noteId, ownerType, kind, createdAt',
+    tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+    events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+    people: '++id, name, trashedAt, createdAt, updatedAt',
+    habits: '++id, name, archived, createdAt, updatedAt',
+    habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+    focusSessions: '++id, startedAt, taskId, createdAt',
+    appMeta: 'key',
+    lifeAreas: '++id, name, archived, sortOrder, createdAt',
+    templates: '++id, kind, name, usageCount, createdAt',
+  }).upgrade((tx) => {
+    return tx.table('notes').toCollection().modify((note) => {
+      if (!note.kind) {
+        note.kind = 'note';
+      }
+    });
+  });
+  ```
+- **Pre-Upgrade Backup Gate (`src/db/backupGate.ts`)**:
+  - `TARGET_VERSION = 10` ensures pre-upgrade auto-backup to JSON download and OPFS before schema mutation executes.
+- **Backup & Restore v10 Envelope (`src/db/exportService.ts` & `src/components/views/SettingsView.tsx`)**:
+  - Envelope bumped to Version 10, sanitizing and importing `kind`, `journalDate`, and `mood` on notes.
+
+### 2. Timezone Safety Contract (`src/lib/date.ts`)
+- **Local Date Handling**:
+  - `localDateStr(d?: Date)` extracts `getFullYear()`, `getMonth() + 1`, and `getDate()` from the user's local timezone.
+  - Prevents the UTC midnight shift bug where writing an entry at 23:30 local time creates an entry with tomorrow's date.
+  - Tested against simulated UTC offsets and late-night edge cases in `src/lib/date.test.ts`.
+
+### 3. Journal Screen (`src/features/journal/JournalScreen.tsx`)
+- **Navigation & Routing**:
+  - Route `/journal` defaults to today's local date (`/journal/YYYY-MM-DD`).
+  - Supports `/journal/:date` for historical and future date exploration.
+  - Header displays big date + weekday, navigation arrows (`‹` and `›`), calendar date picker jump, and "Today" button.
+- **Mood Tracking (`src/features/journal/MoodRow.tsx`)**:
+  - 5 mood faces: 😫 (1: rough), 🙁 (2: down), 😐 (3: okay), 🙂 (4: good), 😄 (5: great).
+  - Tappable with active focus ring and click-to-clear/toggle behavior.
+- **Distraction-Free Editor**:
+  - Full-bleed writing canvas constrained to readable `max-w-[68ch]`.
+  - Font switch button toggles between modern Sans and bookish Serif typography.
+  - Autosave indicator (debounced 500ms, "Saving…" → "Saved").
+  - Calm empty state placeholder: *"Nothing written yet — that's fine."*
+  - Optional Life Area tagging via `LifeAreaPicker` and tag pills.
+
+### 4. Journal Prompts & Templates Integration
+- **Templates Extension (`src/db/repos/templatesRepo.ts`, `src/features/templates/TemplatesScreen.tsx`)**:
+  - Added `'journal'` kind to templates with reflection prompt array support in `TemplateBody`.
+  - Default "Daily Reflection" template seeded idempotently:
+    1. "What went well today?"
+    2. "What drained my energy?"
+    3. "Tomorrow I will focus on…"
+  - Interactive prompt builder in `TemplatesScreen` to add and remove custom prompts.
+- **Prompt Chips (`src/features/journal/PromptChips.tsx`)**:
+  - Tappable prompt chips rendered beneath the mood row.
+  - Tapping a chip cleanly appends the prompt in bold markdown (`**Prompt text**`) into the editor.
+
+### 5. Historical Flashback & Streak Continuity (`src/lib/journal.ts`)
+- **Streak Engine (`computeJournalStreak`)**:
+  - Pure calculation verifying daily journal consistency.
+  - Tolerant: If today is not yet written, the streak remains intact based on yesterday's entry, avoiding morning discouragement.
+  - Skips empty entries (must have text content or mood logged).
+- **"On This Day" Flashback (`OnThisDayCard.tsx`, `filterOnThisDay`)**:
+  - Surfaces entries from prior calendar years (`year < currentYear`) sharing the same `MM-DD`.
+  - Renders relative year badge (e.g. "1 year ago", "2 years ago"), mood, snippet preview, and direct link.
+
+### 6. Shell & Ecosystem Integration
+- **Global Search (`src/components/views/SearchView.tsx`)**:
+  - Journal entries are excluded from standard Notes list views (`getActiveNotes` and `getArchivedNotes`), preserving note clarity.
+  - Journal entries appear in global search with a prominent `"Journal"` pill badge and navigate to `/journal/${note.journalDate}`.
+- **Capture FAB (`src/app/CaptureFab.tsx`)**:
+  - "Journal Entry" action opens today's journal screen directly.
+- **Today Dashboard Section (`src/features/journal/JournalPromptSection.tsx`)**:
+  - Rendered at the bottom of the Today stream in `UpcomingView.tsx` (gated by `useFlag('journal')`).
+  - Shows current streak 🔥, today's completion status, logged mood, and a direct CTA to write or review today's reflection.
+
+---
+
+## 8. Future Extension Points
+
+1. **Phase 2B: Knowledge Graph & Bi-directional Links**
+   - Notes `[[wikilinks]]` parsing, inline autocompletion, forward links index, backlinks panel, and interactive force-directed graph canvas.
+2. **Phase 3: Calendar Pro**
+   - Multi-day time-grid agenda engine, drag-and-drop event resizing, time block conflicts, and external calendar (.ics) sync.
+3. **Phase 4: Routines & Enhanced Today**
+   - Morning/evening routines execution checklist, streak protection, and unified Today dashboard combining habits, tasks, routines, and journal.
+4. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
    - Pressure-sensitive vector canvas, timer presets, 12-month habit heatmaps, and local insights hub.
+
 
 
 

@@ -6,6 +6,8 @@ import { useHabitsTodaySummary } from '../../db/habitsRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { EventEditorModal } from '../calendar/EventEditorModal';
 import { TaskEditorModal } from '../tasks/TaskEditorModal';
+import { JournalPromptSection } from '../../features/journal/JournalPromptSection';
+import { useFlag } from '../../app/flags';
 import type { EventOccurrence } from '../../types/event';
 import type { Task } from '../../types/task';
 
@@ -14,6 +16,7 @@ export function UpcomingView() {
   const { showUndo } = useSnackbar();
   const data = useUpcomingData();
   const habitsSummary = useHabitsTodaySummary();
+  const isJournalEnabled = useFlag('journal');
 
   // Modals for editing items tapped from the view
   const [selectedOccurrence, setSelectedOccurrence] = useState<EventOccurrence | null>(null);
@@ -205,6 +208,11 @@ export function UpcomingView() {
           <p className="text-xs text-ink-muted max-w-sm mx-auto">
             You have no upcoming events, due tasks, or scheduled notes. Tap "+" or press N to capture anything.
           </p>
+          {isJournalEnabled && (
+            <div className="pt-4 max-w-lg mx-auto text-left">
+              <JournalPromptSection />
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-8">
@@ -303,6 +311,18 @@ export function UpcomingView() {
               <div className="space-y-2">
                 {later.map((item) => renderItemRow(item, true))}
               </div>
+            </section>
+          )}
+
+          {/* Journal Reflection Prompt Section */}
+          {isJournalEnabled && (
+            <section className="space-y-2 pt-2 border-t border-border">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                  Daily Journal
+                </h2>
+              </div>
+              <JournalPromptSection />
             </section>
           )}
         </div>

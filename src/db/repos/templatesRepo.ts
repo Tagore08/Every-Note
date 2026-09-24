@@ -46,6 +46,18 @@ export const DEFAULT_TEMPLATES: Omit<Template, 'id' | 'createdAt' | 'usageCount'
       content: `## Objectives\n\n## Key Stakeholders\n\n## Milestones & Timeline\n\n## Next Steps\n- [ ] `,
     },
   },
+  {
+    kind: 'journal',
+    name: 'Daily Reflection',
+    body: {
+      title: 'Daily Reflection',
+      prompts: [
+        'What went well today?',
+        'What drained my energy?',
+        'Tomorrow I will focus on…',
+      ],
+    },
+  },
 ];
 
 export const templatesRepo = {
@@ -54,8 +66,8 @@ export const templatesRepo = {
    */
   async seedDefaults(): Promise<void> {
     const count = await db.templates.count();
+    const now = Date.now();
     if (count === 0) {
-      const now = Date.now();
       await db.templates.bulkAdd(
         DEFAULT_TEMPLATES.map((tmpl) => ({
           ...tmpl,
@@ -63,6 +75,25 @@ export const templatesRepo = {
           createdAt: now,
         }))
       );
+    } else {
+      // Ensure journal template exists even if tasks/notes templates were previously seeded
+      const journalCount = await db.templates.filter((t) => t.kind === 'journal').count();
+      if (journalCount === 0) {
+        await db.templates.add({
+          kind: 'journal',
+          name: 'Daily Reflection',
+          body: {
+            title: 'Daily Reflection',
+            prompts: [
+              'What went well today?',
+              'What drained my energy?',
+              'Tomorrow I will focus on…',
+            ],
+          },
+          usageCount: 0,
+          createdAt: now,
+        });
+      }
     }
   },
 

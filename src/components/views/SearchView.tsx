@@ -142,13 +142,26 @@ export function SearchView() {
                     className="pb-3"
                   >
                     <div
-                      onClick={() => navigate(`/notes/${note.id}`)}
+                      onClick={() => {
+                        if (note.kind === 'journal' && note.journalDate) {
+                          navigate(`/journal/${note.journalDate}`);
+                        } else {
+                          navigate(`/notes/${note.id}`);
+                        }
+                      }}
                       className="p-4 sm:p-5 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-all cursor-pointer space-y-2 text-left"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <h4 className="font-semibold text-base text-ink line-clamp-1">
-                          <HighlightedText text={getDisplayTitle(note)} query={query} />
-                        </h4>
+                        <div className="flex items-center gap-2 line-clamp-1">
+                          {note.kind === 'journal' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-accent-soft text-accent border border-accent/20 shrink-0">
+                              Journal
+                            </span>
+                          )}
+                          <h4 className="font-semibold text-base text-ink truncate">
+                            <HighlightedText text={getDisplayTitle(note)} query={query} />
+                          </h4>
+                        </div>
                         <span className="text-[11px] text-ink-muted shrink-0">
                           {formatRelativeTime(note.updatedAt)}
                         </span>
