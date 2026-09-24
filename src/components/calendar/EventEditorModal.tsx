@@ -14,6 +14,8 @@ interface EventEditorModalProps {
   occurrence?: EventOccurrence | null;
   // If creating new, defaultDate is provided
   defaultDate?: Date;
+  defaultStartTime?: string;
+  defaultEndTime?: string;
 }
 
 type ReminderPreset = 'none' | '0' | '5' | '15' | '30' | '60' | '1440';
@@ -23,6 +25,8 @@ export function EventEditorModal({
   onClose,
   occurrence,
   defaultDate,
+  defaultStartTime,
+  defaultEndTime,
 }: EventEditorModalProps) {
   const { showSnackbar, showUndo } = useSnackbar();
 
@@ -103,8 +107,8 @@ export function EventEditorModal({
       const now = new Date();
       const nextHour = (now.getHours() + 1) % 24;
       const endHour = (nextHour + 1) % 24;
-      setStartTimeStr(`${String(nextHour).padStart(2, '0')}:00`);
-      setEndTimeStr(`${String(endHour).padStart(2, '0')}:00`);
+      setStartTimeStr(defaultStartTime || `${String(nextHour).padStart(2, '0')}:00`);
+      setEndTimeStr(defaultEndTime || `${String(endHour).padStart(2, '0')}:00`);
       setRecurrence('none');
       setReminderPreset('none');
       setTags([]);
@@ -115,7 +119,7 @@ export function EventEditorModal({
 
     setTagInput('');
     setShowDeleteConfirm(false);
-  }, [isOpen, occurrence, defaultDate]);
+  }, [isOpen, occurrence, defaultDate, defaultStartTime, defaultEndTime]);
 
   if (!isOpen) return null;
 

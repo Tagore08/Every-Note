@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useFlag } from '../../app/flags';
+import { CalendarScreen } from '../../features/calendar/CalendarScreen';
 import { useOccurrencesForRange } from '../../db/eventsRepo';
 import { useTasksDueForRange, tasksRepo } from '../../db/tasksRepo';
 import { useScheduledNotesForRange } from '../../db/notesRepo';
@@ -19,6 +21,16 @@ import {
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export function CalendarView() {
+  const isCalendarPro = useFlag('calendarPro');
+
+  if (isCalendarPro) {
+    return <CalendarScreen />;
+  }
+
+  return <LegacyCalendarView />;
+}
+
+function LegacyCalendarView() {
   const navigate = useNavigate();
   const { showUndo } = useSnackbar();
 

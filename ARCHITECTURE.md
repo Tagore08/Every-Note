@@ -1024,14 +1024,58 @@ this.version(7).stores({
 
 ---
 
-## 9. Future Extension Points
+---
 
-1. **Phase 3: Calendar Pro**
-   - Multi-day time-grid agenda engine, drag-and-drop event resizing, time block conflicts, and external calendar (.ics) sync.
-2. **Phase 4: Routines & Enhanced Today**
+## 9. Phase 3 Architecture: Calendar Pro
+
+Calendar Pro replaces the single-month calendar view with a multi-view time-grid and timeline system, gated behind the `calendarPro` feature flag. When disabled, the legacy Stage 12 month/agenda view remains active.
+
+### 1. Unified Time-Grid Engine (`src/features/calendar/grid/TimeGrid.tsx`)
+- **Single Component Architecture**: `DayView` (1 day), `ThreeDayView` (3 days), and `WeekView` (7 days) are all parameterized instances of the same `TimeGrid` component (`days: Date[]`), eliminating code duplication across multi-day views.
+- **Grid Layout**: 24 hour rows at 60px/hour (`1440px` total vertical body), half-hour hairlines with dashed dividers, left rail hour labels (`00:00` to `23:00`).
+- **All-Day Pinned Band (`AllDayBand.tsx`)**: Fixed above the scrolling time grid, displaying multi-day/all-day events and due-all-day tasks with checkboxes.
+- **Real-Time Now Line (`NowLine.tsx`)**: 2px horizontal accent line with an accent dot indicator (`w-3 h-3`) active only on columns matching today, auto-updating every 30 seconds via interval.
+- **Auto-Scroll Behavior**: On initial mount, smoothly scrolls to the current time (offset by 1 hour), or to `07:00` if current time is early morning or if today is not in view.
+
+### 2. Event Clustering & Overlap Math (`layoutEvents.ts`)
+- **Greedy Column Assignment**: Overlapping events are grouped into clusters and sorted by start time and duration. Non-overlapping columns are assigned iteratively.
+- **Geometry Split**: Column width is dynamically calculated as `100% / totalColumns`, with horizontal offset `columnIndex * columnWidth`.
+- **44px Tap Target Guarantee**: Minimum chip height is clamped to `44px` per design system house rules, even for short 15-minute events, ensuring accessibility.
+- **Day Clamping**: Multi-day events crossing midnight are cleanly clamped to local day bounds (`00:00` - `24:00`).
+
+### 3. Desktop Drag Interactions (`EventChip.tsx`)
+- **Drag-to-Move**: Dragging an event chip body recalculates `startAt` and `endAt` with 15-minute snap intervals (15px steps).
+- **Edge Resize**: Dragging top handle resizes `startAt`; dragging bottom handle resizes `endAt`.
+- **Ghost Preview**: Click-and-drag across empty grid slots creates a dashed ghost selection rectangle and prefills a new event with the selected time range.
+- **Mobile Guard**: Touch pointer events are preserved for scrolling; dragging is restricted to desktop mouse pointers.
+
+### 4. Month View Upgrade (`MonthView.tsx`)
+- Replaces generic colored indicators with Life Area palette dots matching each event's category.
+- Tapping any calendar day immediately transitions to `DayView` for that specific date.
+
+### 5. Unified Timeline View (`TimelineView.tsx`)
+- Merges 4 distinct data streams:
+  1. Events (`eventsRepo`) with time and repeat indicators
+  2. Due Tasks (`tasksRepo`) with priority badges and interactive toggle checkboxes
+  3. Scheduled Notes (`notesRepo`) with snippet previews and tap-to-open navigation
+  4. Active Routines (`routinesRepo` stub interface for Phase 4)
+- **Zero Cross-Table Writes**: Completing a task calls `tasksRepo.toggleTaskStatus`; editing an event calls `eventsRepo`; tapping a note navigates to `/notes/:id`.
+- **Auto-Scrolling Now Divider**: A glowing pulse divider sits between past items and upcoming items for today and auto-scrolls into view on open.
+- Default horizon: Today to +14 days, with expandable 14-day increments.
+
+### 6. Persistence & Safety Contract
+- Active view (`day` | `3day` | `week` | `month` | `timeline`) is stored in `localStorage` under `notes_calendar_view` and remembered across sessions.
+- No Dexie schema modification was required; existing Dexie version 11 indexes remain valid and intact.
+
+---
+
+## 10. Future Extension Points
+
+1. **Phase 4: Routines & Enhanced Today**
    - Morning/evening routines execution checklist, streak protection, and unified Today dashboard combining habits, tasks, routines, and journal.
-3. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
+2. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
    - Pressure-sensitive vector canvas, timer presets, 12-month habit heatmaps, and local insights hub.
+
 
 
 
