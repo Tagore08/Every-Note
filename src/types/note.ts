@@ -9,6 +9,7 @@ export interface Note {
   inbox: boolean;
   scheduledAt?: Date | null;
   reminderAt?: Date | null;
+  personId?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -42,6 +42,9 @@ export const notesRepo = {
       archived: draft.archived ?? false,
       trashedAt: null,
       inbox: draft.inbox ?? false,
+      scheduledAt: draft.scheduledAt ?? null,
+      reminderAt: draft.reminderAt ?? null,
+      personId: draft.personId ?? null,
       createdAt: now,
       updatedAt: now,
     };

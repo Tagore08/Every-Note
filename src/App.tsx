@@ -6,6 +6,8 @@ import { InboxView } from './components/views/InboxView';
 import { NotesView } from './components/views/NotesView';
 import { TasksView } from './components/views/TasksView';
 import { CalendarView } from './components/views/CalendarView';
+import { PeopleView } from './components/views/PeopleView';
+import { PersonProfileView } from './components/views/PersonProfileView';
 import { NoteEditorView } from './components/views/NoteEditorView';
 import { SearchView } from './components/views/SearchView';
 import { TagsView } from './components/views/TagsView';
@@ -25,6 +27,8 @@ export function App() {
           <Route path="notes/:id" element={<NoteEditorView />} />
           <Route path="tasks" element={<TasksView />} />
           <Route path="calendar" element={<CalendarView />} />
+          <Route path="people" element={<PeopleView />} />
+          <Route path="people/:id" element={<PersonProfileView />} />
           <Route path="search" element={<SearchView />} />
 
           <Route path="tags" element={<TagsView />} />

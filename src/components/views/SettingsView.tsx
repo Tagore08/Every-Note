@@ -5,6 +5,7 @@ import { notesRepo, useArchivedNotes, useTrashNotes } from '../../db/notesRepo';
 import { attachmentsRepo } from '../../db/attachmentsRepo';
 import { tasksRepo } from '../../db/tasksRepo';
 import { eventsRepo } from '../../db/eventsRepo';
+import { peopleRepo } from '../../db/peopleRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -16,9 +17,14 @@ import type { Note } from '../../types/note';
 import type { Attachment } from '../../types/attachment';
 import type { Task } from '../../types/task';
 import type { CalendarEvent } from '../../types/event';
+import type { Person } from '../../types/person';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
+}
+
+interface ExportPerson extends Omit<Person, 'photoBlob'> {
+  photoBase64?: string;
 }
 
 interface BackupEnvelope {
@@ -28,6 +34,7 @@ interface BackupEnvelope {
   notes: Note[];
   tasks?: Task[];
   events?: CalendarEvent[];
+  people?: ExportPerson[];
   attachments?: ExportAttachment[];
   settings?: {
     theme?: string;
@@ -134,6 +141,7 @@ export function SettingsView() {
       const allNotes = await notesRepo.getAllNotesForExport();
       const allTasks = await tasksRepo.getAllTasksForExport();
       const allEvents = await eventsRepo.getAllEventsForExport();
+      const allPeople = await peopleRepo.getAllPeopleForExport();
       const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // Convert Blobs to base64 strings
@@ -161,13 +169,37 @@ export function SettingsView() {
         });
       }
 
+      // Convert People photoBlobs to base64 strings
+      const exportedPeople: ExportPerson[] = [];
+      for (const p of allPeople) {
+        let photoBase64: string | undefined = undefined;
+        if (p.photoBlob) {
+          try {
+            photoBase64 = await blobToBase64(p.photoBlob);
+          } catch (err) {
+            console.warn(`Failed to encode photo for person ${p.id}:`, err);
+          }
+        }
+        exportedPeople.push({
+          id: p.id,
+          name: p.name,
+          contactInfo: p.contactInfo,
+          notes: p.notes,
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt,
+          trashedAt: p.trashedAt,
+          photoBase64,
+        });
+      }
+
       const payload: BackupEnvelope = {
-        version: 4, // Bumped to Version 4 for Stage 6 calendar & events
+        version: 5, // Bumped to Version 5 for Stage 8 People
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
         tasks: allTasks,
         events: allEvents,
+        people: exportedPeople,
         attachments: exportedAttachments,
         settings: {
           theme: mode,
@@ -189,7 +221,7 @@ export function SettingsView() {
 
       const formattedFileSize = formatFileSize(blob.size);
       showSnackbar({
-        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allEvents.length} events & ${allAttachments.length} attachments (${formattedFileSize}).`,
+        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allEvents.length} events, ${allPeople.length} people & ${allAttachments.length} attachments (${formattedFileSize}).`,
       });
     } catch (err) {
       console.error('Failed to export data:', err);
@@ -224,6 +256,7 @@ export function SettingsView() {
       let notesArray: unknown[] = [];
       let tasksArray: Task[] = [];
       let eventsArray: CalendarEvent[] = [];
+      let peopleArray: ExportPerson[] = [];
       let attachmentsArray: ExportAttachment[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
@@ -237,6 +270,9 @@ export function SettingsView() {
         }
         if ('events' in parsed && Array.isArray((parsed as BackupEnvelope).events)) {
           eventsArray = (parsed as BackupEnvelope).events ?? [];
+        }
+        if ('people' in parsed && Array.isArray((parsed as BackupEnvelope).people)) {
+          peopleArray = (parsed as BackupEnvelope).people ?? [];
         }
         if ('attachments' in parsed && Array.isArray((parsed as BackupEnvelope).attachments)) {
           attachmentsArray = (parsed as BackupEnvelope).attachments ?? [];
@@ -255,6 +291,7 @@ export function SettingsView() {
         notes: notesArray as Note[],
         tasks: tasksArray,
         events: eventsArray,
+        people: peopleArray,
         attachments: attachmentsArray,
       });
       setImportStrategy('merge');
@@ -268,14 +305,15 @@ export function SettingsView() {
     }
   };
 
-  // 3. Confirm Import (Restores Notes, Tasks, Events, and Attachments)
+  // 3. Confirm Import (Restores Notes, Tasks, Events, People, and Attachments)
   const handleConfirmImport = async () => {
     if (!importCandidate) return;
 
     try {
-      // Snapshot existing tasks, events, and attachments before mutating (for undo)
+      // Snapshot existing tasks, events, people, and attachments before mutating (for undo)
       const prevTasks = await tasksRepo.getAllTasksForExport();
       const prevEvents = await eventsRepo.getAllEventsForExport();
+      const prevPeople = await peopleRepo.getAllPeopleForExport();
       const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // 1. Import Notes
@@ -299,7 +337,30 @@ export function SettingsView() {
         importedEventsCount = importCandidate.events.length;
       }
 
-      // 4. Import Attachments (if any in candidate)
+      // 4. Import People
+      let importedPeopleCount = 0;
+      if (importCandidate.people && importCandidate.people.length > 0) {
+        const restoredPeople: Person[] = [];
+        for (const raw of importCandidate.people) {
+          let photoBlob: Blob | null = null;
+          if (raw.photoBase64) {
+            photoBlob = base64ToBlob(raw.photoBase64, 'image/jpeg');
+          }
+          restoredPeople.push({
+            id: typeof raw.id === 'number' ? raw.id : undefined,
+            name: raw.name || 'Untitled Person',
+            contactInfo: raw.contactInfo,
+            notes: raw.notes,
+            photoBlob,
+            createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
+            updatedAt: raw.updatedAt ? new Date(raw.updatedAt) : new Date(),
+            trashedAt: raw.trashedAt ? new Date(raw.trashedAt) : null,
+          });
+        }
+        importedPeopleCount = await peopleRepo.importPeople(restoredPeople, importStrategy);
+      }
+
+      // 5. Import Attachments (if any in candidate)
       let importedAttachmentsCount = 0;
       if (importCandidate.attachments && importCandidate.attachments.length > 0) {
         const restoredAttachments: Attachment[] = [];
@@ -331,7 +392,7 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events, ${importedPeopleCount} people & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -342,6 +403,9 @@ export function SettingsView() {
           if (importStrategy === 'replace' && prevEvents) {
             await eventsRepo.deleteAllEvents();
             await eventsRepo.importEvents(prevEvents);
+          }
+          if (importStrategy === 'replace' && prevPeople) {
+            await peopleRepo.importPeople(prevPeople, 'replace');
           }
           if (importStrategy === 'replace' && prevAttachments) {
             await attachmentsRepo.importAttachments(prevAttachments, 'replace');
@@ -363,10 +427,11 @@ export function SettingsView() {
       await notesRepo.deleteAllNotes();
       await tasksRepo.deleteAllTasks();
       await eventsRepo.deleteAllEvents();
+      await peopleRepo.deleteAllPeople();
       setShowDeleteAllModal(false);
       setDeleteConfirmationInput('');
       await loadStorageEstimate();
-      showSnackbar({ message: 'All notes, tasks, events, and attachments have been completely deleted.' });
+      showSnackbar({ message: 'All notes, tasks, events, people, and attachments have been completely deleted.' });
     } catch (err) {
       console.error('Failed to delete all data:', err);
     }

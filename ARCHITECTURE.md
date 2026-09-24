@@ -24,17 +24,24 @@ notes-app/
     ├── index.css            # Tailwind CSS v4 setup & theme styles
     ├── types/
     │   ├── note.ts          # Core TypeScript data contracts (Note interface)
-    │   └── attachment.ts    # Attachment interfaces (Attachment, AttachmentKind)
+    │   ├── attachment.ts    # Attachment interfaces (Attachment, AttachmentKind)
+    │   ├── task.ts          # Task data contracts (Task, TaskStatus, TaskPriority)
+    │   ├── event.ts         # Calendar event and recurrence occurrence contracts
+    │   └── person.ts        # Person contracts (Person interface, contact info, notes)
     ├── db/
-    │   ├── database.ts      # Dexie 4 database class, schema versions 1 & 2, and DB singleton
+    │   ├── database.ts      # Dexie 4 database class, schema versions 1-5, and DB singleton
     │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes
-    │   └── attachmentsRepo.ts# Data access layer & reactive hooks for attachments & storage
+    │   ├── attachmentsRepo.ts# Data access layer & reactive hooks for attachments & storage
+    │   ├── tasksRepo.ts     # Data access layer & reactive hooks for tasks
+    │   ├── eventsRepo.ts    # Data access layer & recurrence occurrence engine
+    │   ├── upcomingRepo.ts  # Cross-entity date horizon aggregation engine
+    │   └── peopleRepo.ts    # Data access layer & reactive hooks for people
     ├── context/
     │   └── SnackbarContext.tsx # Global ~6s snackbar & undo notification system
     ├── hooks/
     │   └── useTheme.ts      # Light / Dark / System theme manager with live OS listener
     ├── utils/
-    │   └── format.ts        # Relative dates, file size formatting, titles, snippet helpers
+    │   └── format.ts        # Relative dates, file size formatting, titles, initials, avatar colors
     └── components/
         ├── layout/
         │   └── Shell.tsx    # Responsive shell (Desktop sidebar, mobile bottom nav, capture FAB, auto-purge)
@@ -44,15 +51,24 @@ notes-app/
         │   ├── AttachmentGallery.tsx # Thumbnails grid, file chips, and link list
         │   ├── AddLinkModal.tsx      # Modal dialog to attach URLs
         │   └── ImageViewerModal.tsx  # Fullscreen image lightbox modal
+        ├── people/
+        │   ├── PersonAvatar.tsx      # Photo and initial circle avatar component
+        │   ├── PersonBadge.tsx       # Reusable inline person chip with clear action
+        │   └── PersonPickerModal.tsx # Modal to pick or create person inline
         └── views/
+            ├── UpcomingView.tsx     # Home screen date horizon aggregation
             ├── InboxView.tsx        # Quick-capture triage view with "File as note" & soft delete
             ├── NotesView.tsx        # Active notes list (pinned-first, tag filter, long-press pin, card actions)
-            ├── NoteEditorView.tsx   # Full-screen editor (~500ms debounced autosave, attachments, tag pills)
+            ├── NoteEditorView.tsx   # Full-screen editor (~500ms debounced autosave, attachments, tag pills, person picker)
+            ├── TasksView.tsx        # Todo & Done segmentation, quick-add, completion gestures
+            ├── CalendarView.tsx     # Month grid, day agenda, recurring series math, reminders
+            ├── PeopleView.tsx       # Avatar/initial circles, instant name filter, new person dialog
+            ├── PersonProfileView.tsx# Editable profile, local photo Blob, auto-lists of events/tasks/notes, delete forever
             ├── SearchView.tsx       # Instant as-you-type local search with highlighted snippets
             ├── TagsView.tsx         # Tag cloud with usage frequencies and filtered note browser
             ├── ArchiveView.tsx      # Archive management and unarchive browser
             ├── TrashView.tsx        # Soft-deleted notes browser, restore, and permanent deletion dialogs
-            └── SettingsView.tsx     # Theme choice, storage quota estimate, JSON backup export/import (merge/replace), and danger zone
+            └── SettingsView.tsx     # Theme choice, storage quota estimate, JSON backup export/import (v5), and danger zone
 ```
 
 ---
@@ -96,6 +112,17 @@ this.version(4).stores({
 });
 ```
 
+### Schema Version 5 (Stage 8 People Extension)
+```ts
+this.version(5).stores({
+  notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+  attachments: '++id, noteId, ownerType, kind, createdAt',
+  tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+  events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+  people: '++id, name, trashedAt, createdAt, updatedAt',
+});
+```
+
 #### Table: `notes`
 | Field | Type | Dexie Index Key | Description |
 |---|---|---|---|
@@ -109,6 +136,7 @@ this.version(4).stores({
 | `inbox` | `boolean` | `inbox` | Quick-capture triage flag |
 | `scheduledAt` | `Date \| null` (optional) | `scheduledAt` | Calendar scheduled date index |
 | `reminderAt` | `Date \| null` (optional) | `reminderAt` | Notification reminder timestamp index |
+| `personId` | `number \| null` (optional) | `personId` | Optional linked person ID index |
 | `createdAt` | `Date` | `createdAt` | Creation timestamp, chronological ordering index |
 | `updatedAt` | `Date` | `updatedAt` | Last modification timestamp, recency ordering index |
 
@@ -143,6 +171,7 @@ this.version(4).stores({
 | `tags` | `string[]` | `*tags` (multiEntry) | Multi-entry index for tag lookup |
 | `trashedAt` | `Date \| null` (optional) | `trashedAt` | Soft-delete timestamp index |
 | `sourceNoteId` | `number` (optional) | `sourceNoteId` | Informational backlink to source note ID |
+| `personId` | `number \| null` (optional) | `personId` | Optional linked person ID index |
 
 #### Table: `events` (Realized in Stage 6)
 | Field | Type | Dexie Index Key | Description |
@@ -155,13 +184,25 @@ this.version(4).stores({
 | `allDay` | `boolean` | — | All-day event flag |
 | `recurrence` | `'none' \| 'daily' \| 'weekly' \| 'monthly'` | `recurrence` | Recurrence series pattern index |
 | `reminderAt` | `Date \| null` (optional) | `reminderAt` | Notification reminder timestamp index |
-| `personId` | `number \| null` (optional) | — | Optional contact or attendee reference |
+| `personId` | `number \| null` (optional) | `personId` | Optional contact or attendee reference index |
 | `relatedTaskId` | `number \| null` (optional) | `relatedTaskId` | Optional related task ID index |
 | `tags` | `string[]` | `*tags` (multiEntry) | Multi-entry index for tag lookups |
 | `createdAt` | `Date` | `createdAt` | Creation timestamp index |
 | `updatedAt` | `Date` | — | Last modification timestamp |
 | `trashedAt` | `Date \| null` (optional) | `trashedAt` | Soft-delete timestamp index |
 | `exceptions` | `EventException[]` (optional) | — | Single-occurrence overrides or cancellations |
+
+#### Table: `people` (Realized in Stage 8)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `name` | `string` | `name` | Person name, indexed for fast filtering & sorting |
+| `photoBlob` | `Blob` (optional) | — | Stored inline as raw binary Blob in IndexedDB |
+| `contactInfo` | `string` (optional) | — | Freeform text lines (e.g., email, phone, handle) |
+| `notes` | `string` (optional) | — | Freeform biographical or relationship notes |
+| `createdAt` | `Date` | `createdAt` | Creation timestamp index |
+| `updatedAt` | `Date` | `updatedAt` | Last modification timestamp index |
+| `trashedAt` | `Date \| null` (optional) | `trashedAt` | Soft-delete timestamp index |
 
 > **CRITICAL Data-Model Rule**: An event's `startAt`/`endAt` represents a fixed scheduled time block. It is completely separate from a task's `dueAt`. These date fields are never merged or conflated.
 
@@ -177,13 +218,13 @@ this.version(4).stores({
 
 ## 3. Data Access & State Management Approach
 
-### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts`, `src/db/tasksRepo.ts`, `src/db/eventsRepo.ts` & `src/db/upcomingRepo.ts`)
+### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts`, `src/db/tasksRepo.ts`, `src/db/eventsRepo.ts`, `src/db/upcomingRepo.ts` & `src/db/peopleRepo.ts`)
 - **Isolation**: Screens and UI components **never** call Dexie directly. All read queries and write mutations pass through the repository layer.
 - **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into the repos without modifying views.
-- **Cascading Deletions**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Tasks and events linked via informational references are never destroyed when notes are removed.
+- **Cascading Deletions & Reference Cleanup**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Permanent person deletion cleans up references in linked events, tasks, and notes by setting `personId: null` in a single Dexie transaction. Tasks and events linked via informational references are never destroyed when notes are removed.
 
 ### Reactive Reads
-- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`, `useOccurrencesForRange`, `useTasksDueForRange`, `useScheduledNotesForRange`, `useEvent`, `useUpcomingData`) backed by Dexie's `useLiveQuery`.
+- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`, `useOccurrencesForRange`, `useTasksDueForRange`, `useScheduledNotesForRange`, `useEvent`, `useUpcomingData`, `usePeople`, `usePerson`, `usePersonEvents`, `usePersonTasks`, `usePersonNotes`) backed by Dexie's `useLiveQuery`.
 
 ---
 
@@ -304,6 +345,35 @@ this.version(4).stores({
    - Tapping any row opens the item in its native modal or view (`EventEditorModal`, `TaskEditorModal`, or full-screen note editor).
    - Tasks feature a 1-tap circular completion button that marks the task done with a 6-second undo snackbar (strictly read-only otherwise; notes and events cannot be accidentally altered from this view).
 
+### Stage 8: People (Minimal)
+1. **Dedicated People Data Model (Schema Version 5)**:
+   - Dedicated `people` table: `id`, `name`, `photoBlob` (Blob in IndexedDB), `contactInfo` (string lines), `notes` (freeform string), `createdAt`, `updatedAt`, `trashedAt`.
+   - Linked `personId` (optional/nullable) indexed across `events`, `tasks`, and `notes`.
+   - Dedicated data access repository `src/db/peopleRepo.ts` with reactive hooks (`usePeople`, `usePerson`, `usePersonEvents`, `usePersonTasks`, `usePersonNotes`).
+2. **People Screen (`/people`)**:
+   - Live name search filter at top.
+   - Clean card grid displaying local photo or deterministic color initial circle, contact lines, and count badges for linked events, tasks, and notes.
+   - "+ Add Person" action opening inline creation modal with optional local photo picker.
+3. **Person Profile Screen (`/people/:id`)**:
+   - Large photo avatar with local file upload, replacement, and removal.
+   - Autosaving editable name, freeform contact info lines, and freeform notes.
+   - Reactive auto-lists:
+     - **Events**: scheduled events linked to person; tap opens `EventEditorModal`.
+     - **Tasks**: tasks linked to person with 1-tap circular completion checkbox; tap opens `TaskEditorModal`.
+     - **Notes**: notes linked to person with tag pills and relative modification time; tap opens `NoteEditorView`.
+   - Soft-delete ("Move to trash") with undo snackbar and "Delete forever" with confirmation dialog that safely unlinks `personId` on all associated records.
+4. **Universal "With Person" Picker (`PersonPickerModal`)**:
+   - Integrated into `EventEditorModal`, `TaskEditorModal`, and `NoteEditorView`.
+   - Search existing people or create a new person inline (name only required) without leaving the editor.
+   - Displays avatar and name chip with quick-remove clear button.
+5. **Local Photos**:
+   - Photos stored directly as raw Blobs in IndexedDB (matching the Stage 3 attachment pattern).
+   - Displayed via object URLs (`URL.createObjectURL`) with memory-safe revocation on component unmount.
+6. **Data Portability & Danger Zone (Envelope Version 5)**:
+   - JSON export and import envelopes upgraded to Version 5 including `people` with base64 encoded `photoBlob`s.
+   - Import restores base64 strings back into native Blobs with merge and replace support.
+   - Settings danger zone reports people counts and wipes people data upon typed confirmation.
+
 ---
 
 ## 5. Future Extension Points
@@ -313,16 +383,14 @@ this.version(4).stores({
 > - **Tasks** (Stage 5): Standalone tasks with due dates, priority, tags, Eisenhower flags (`importance` & `urgency`), and note backlinks.
 > - **Events & Calendar** (Stage 6): Fixed time blocks, recurrence series with exceptions, calendar month & agenda views, note scheduling, and local reminders.
 > - **Upcoming View** (Stage 7): Pure read-only home screen aggregation across events, tasks, and scheduled notes.
+> - **People** (Stage 8): Lightweight local people directory, local photo Blobs, cross-entity links to events, tasks, and notes, profile auto-lists, and inline person creation.
 
 1. **Eisenhower Matrix View**
    - **Target**: 4-quadrant interactive visualization utilizing the existing `importance` and `urgency` task fields.
 2. **Habits**
    - **Target**: Daily recurring tracker and streak counter.
    - **DB Extension**: `habits` table (`++id, title, frequency, targetCount`) and `habit_logs` table (`++id, habitId, date, count`).
-3. **People**
-   - **Target**: Contacts, CRM mentions, attendee links, and birthday reminders (connected to `events.personId`).
-   - **DB Extension**: `people` table (`++id, name, email, avatar, *tags, createdAt`).
-4. **Sync**
+3. **Sync**
    - **Target**: Cross-device synchronization and backups without a centralized custodial backend.
    - **Design**: Integrated through repository layers with change-vector logging or CRDTs.
 

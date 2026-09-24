@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import type { Task, TaskPriority, TaskStatus } from '../../types/task';
 import { tasksRepo } from '../../db/tasksRepo';
 import { isOverdue, formatDueDate } from '../../utils/format';
+import { PersonBadge } from '../people/PersonBadge';
+import { PersonPickerModal } from '../people/PersonPickerModal';
 
 interface TaskEditorModalProps {
   task: Task | null;
@@ -35,6 +37,8 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
   const [urgency, setUrgency] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [personId, setPersonId] = useState<number | null>(null);
+  const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -49,6 +53,7 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
       setImportance(Boolean(task.importance));
       setUrgency(Boolean(task.urgency));
       setTags(task.tags ? [...task.tags] : []);
+      setPersonId(task.personId ?? null);
       setTagInput('');
     }
   }, [task, isOpen]);
@@ -93,6 +98,7 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
       importance,
       urgency,
       tags,
+      personId,
     });
     onClose();
   };
@@ -407,7 +413,37 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
             </div>
           </div>
 
-          {/* 6. Linked Note Backlink (Feature 2) */}
+          {/* 6. With Person */}
+          <div className="space-y-1.5 pt-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              With Person
+            </label>
+            <div className="flex items-center gap-2">
+              {personId ? (
+                <PersonBadge
+                  personId={personId}
+                  onClick={() => setIsPersonPickerOpen(true)}
+                  onClear={() => setPersonId(null)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsPersonPickerOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-blue-600 transition-colors cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <line x1="19" y1="8" x2="19" y2="14" />
+                    <line x1="22" y1="11" x2="16" y2="11" />
+                  </svg>
+                  <span>+ With person</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 7. Linked Note Backlink (Feature 2) */}
           {typeof task.sourceNoteId === 'number' && (
             <div className="pt-2">
               <Link
@@ -443,6 +479,14 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
           </button>
         </div>
       </div>
+
+      {/* Person Picker Modal */}
+      <PersonPickerModal
+        isOpen={isPersonPickerOpen}
+        onClose={() => setIsPersonPickerOpen(false)}
+        selectedPersonId={personId}
+        onSelectPerson={(id) => setPersonId(id)}
+      />
     </div>
   );
 }

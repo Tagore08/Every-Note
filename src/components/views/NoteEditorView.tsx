@@ -7,6 +7,8 @@ import { useSnackbar } from '../../context/SnackbarContext';
 import { formatRelativeTime, formatFileSize, formatDateKey, parseDateKey } from '../../utils/format';
 import { AttachmentGallery } from '../attachments/AttachmentGallery';
 import { AddLinkModal } from '../attachments/AddLinkModal';
+import { PersonBadge } from '../people/PersonBadge';
+import { PersonPickerModal } from '../people/PersonPickerModal';
 
 export function NoteEditorView() {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +27,8 @@ export function NoteEditorView() {
   const [scheduledAtStr, setScheduledAtStr] = useState('');
   const [reminderTimeStr, setReminderTimeStr] = useState('');
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const [personId, setPersonId] = useState<number | null>(null);
+  const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
 
@@ -72,6 +76,7 @@ export function NoteEditorView() {
           `${String(r.getHours()).padStart(2, '0')}:${String(r.getMinutes()).padStart(2, '0')}`
         );
       }
+      setPersonId(note.personId ?? null);
       initialLoadDone.current = true;
     }
   }, [note]);
@@ -85,7 +90,8 @@ export function NoteEditorView() {
       pinnedState: boolean,
       archivedState: boolean,
       schedStr?: string,
-      remTimeStr?: string
+      remTimeStr?: string,
+      pId?: number | null
     ) => {
       if (!numericId) return;
       setSaveStatus('saving');
@@ -98,6 +104,7 @@ export function NoteEditorView() {
         try {
           const finalSched = schedStr !== undefined ? schedStr : scheduledAtStr;
           const finalRem = remTimeStr !== undefined ? remTimeStr : reminderTimeStr;
+          const finalPersonId = pId !== undefined ? pId : personId;
 
           let schedDate: Date | null = null;
           let remDate: Date | null = null;
@@ -119,6 +126,7 @@ export function NoteEditorView() {
             archived: archivedState,
             scheduledAt: schedDate,
             reminderAt: remDate,
+            personId: finalPersonId,
           });
           setSaveStatus('saved');
         } catch (err) {
@@ -127,7 +135,7 @@ export function NoteEditorView() {
         }
       }, 500);
     },
-    [numericId, scheduledAtStr, reminderTimeStr]
+    [numericId, scheduledAtStr, reminderTimeStr, personId]
   );
 
 
@@ -195,6 +203,7 @@ export function NoteEditorView() {
         description: content.trim(),
         tags: [...tags],
         sourceNoteId: numericId,
+        personId: personId ?? undefined,
       });
       showUndo('Created task from note', async () => {
         if (task.id) await tasksRepo.deletePermanently(task.id);
@@ -525,6 +534,26 @@ export function NoteEditorView() {
             <span className="hidden sm:inline">Schedule</span>
           </button>
 
+          {/* Link person action */}
+          <button
+            type="button"
+            onClick={() => setIsPersonPickerOpen(true)}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              personId
+                ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300'
+                : 'text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+            title={personId ? 'With person' : 'Link person'}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span className="hidden sm:inline">Person</span>
+          </button>
+
           <span className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
 
           {/* Pin action */}
@@ -650,6 +679,16 @@ export function NoteEditorView() {
 
         {/* Tag Pill Manager */}
         <div className="flex flex-wrap items-center gap-1.5 pb-2">
+          {personId && (
+            <PersonBadge
+              personId={personId}
+              onClick={() => setIsPersonPickerOpen(true)}
+              onClear={() => {
+                setPersonId(null);
+                triggerAutoSave(title, content, tags, isPinned, isArchived, undefined, undefined, null);
+              }}
+            />
+          )}
           {tags.map((tag) => (
             <span
               key={tag}
@@ -759,6 +798,17 @@ export function NoteEditorView() {
           </div>
         </div>
       )}
+
+      {/* Person Picker Modal */}
+      <PersonPickerModal
+        isOpen={isPersonPickerOpen}
+        onClose={() => setIsPersonPickerOpen(false)}
+        selectedPersonId={personId}
+        onSelectPerson={(id) => {
+          setPersonId(id);
+          triggerAutoSave(title, content, tags, isPinned, isArchived, undefined, undefined, id);
+        }}
+      />
     </div>
   );
 }

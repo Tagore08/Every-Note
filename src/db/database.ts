@@ -3,12 +3,14 @@ import type { Note } from '../types/note';
 import type { Attachment } from '../types/attachment';
 import type { Task } from '../types/task';
 import type { CalendarEvent } from '../types/event';
+import type { Person } from '../types/person';
 
 export class AppDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
   attachments!: EntityTable<Attachment, 'id'>;
   tasks!: EntityTable<Task, 'id'>;
   events!: EntityTable<CalendarEvent, 'id'>;
+  people!: EntityTable<Person, 'id'>;
 
 
   constructor() {
@@ -47,6 +49,20 @@ export class AppDatabase extends Dexie {
       attachments: '++id, noteId, ownerType, kind, createdAt',
       tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId',
       events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, *tags, trashedAt, createdAt',
+    });
+
+    // Schema Version 5 (Stage 8: People, minimal)
+    // Fields indexed:
+    // - notes: added personId
+    // - tasks: added personId
+    // - events: added personId
+    // - people: ++id, name, trashedAt, createdAt, updatedAt
+    this.version(5).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
     });
   }
 }

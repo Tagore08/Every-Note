@@ -199,10 +199,44 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 
 ---
 
-### [ ] Stage 8: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
+### [x] Stage 8: People (Minimal)
+- **1. Database Schema Extension (Version 5)**:
+  - New `people` table in Dexie: `id`, `name`, `photoBlob` (Blob), `contactInfo` (string lines), `notes` (freeform string), `createdAt`, `updatedAt`, `trashedAt`.
+  - Non-destructive Dexie schema evolution: Versions 1, 2, 3, 4, and 5 preserved sequentially.
+  - Linked `personId` (optional/nullable) indexed across `events`, `tasks`, and `notes`.
+  - Dedicated repository `src/db/peopleRepo.ts` with reactive hooks (`usePeople`, `usePerson`, `usePersonEvents`, `usePersonTasks`, `usePersonNotes`).
+- **2. People Screen (`/people`)**:
+  - Live as-you-type name search at top.
+  - Responsive cards with local photo or deterministic avatar color circles (`getInitials`, `getAvatarColor`).
+  - Contact lines summary and linked counts for events, tasks, and notes.
+  - "+ Add Person" action opening inline creation modal with optional local photo picker.
+- **3. Person Profile Screen (`/people/:id`)**:
+  - Large avatar with local photo upload, replacement, and removal.
+  - Autosaving editable name, freeform contact info lines, and notes.
+  - Reactive auto-lists:
+    - **Events**: scheduled events linked to person; tap opens `EventEditorModal`.
+    - **Tasks**: tasks linked to person with 1-tap circular completion checkbox; tap opens `TaskEditorModal`.
+    - **Notes**: notes linked to person with tag pills and relative modification time; tap opens `NoteEditorView`.
+  - Soft-delete ("Move to trash") with undo snackbar.
+  - "Delete forever" with confirmation dialog that safely unlinks `personId` on all associated records in a single Dexie transaction.
+- **4. Universal "With Person" Picker (`PersonPickerModal`)**:
+  - Integrated into `EventEditorModal`, `TaskEditorModal` (disclosure), and `NoteEditorView` (toolbar + tag chip).
+  - Search existing people or create a new person inline (name only required) without leaving the editor.
+  - Displays avatar and name chip with quick-remove clear button.
+- **5. Local Photos**:
+  - Photos stored directly as raw Blobs in IndexedDB (same pattern as Stage 3 attachments).
+  - Memory-safe object URL management (`URL.createObjectURL` revoked cleanly on unmount).
+- **6. Data Portability & Danger Zone (Envelope Version 5)**:
+  - JSON backup export and import upgraded to Version 5 envelope including `people` with base64 encoded photos.
+  - Merge and replace import support with undo restoration.
+  - Settings danger zone reports people counts and wipes people data upon typed confirmation.
+
+---
+
+### [ ] Stage 9: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
 - Eisenhower Matrix 4-quadrant interactive visualization view (`urgent` x `important`).
 - Markdown preview rendering & live toggle in note editor.
 - Checklist / task blocks inside notes.
-- People mentions (`@name`).
 - Peer-to-peer / user-owned cloud synchronization (WebRTC / WebDAV).
+
 

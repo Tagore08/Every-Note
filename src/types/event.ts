@@ -39,6 +39,7 @@ export interface EventOccurrence {
   allDay: boolean;
   recurrence: EventRecurrence;
   reminderAt?: Date | null;
+  personId?: number | null;
   isException: boolean;
   tags: string[];
 }

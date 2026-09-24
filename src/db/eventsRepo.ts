@@ -54,6 +54,7 @@ export function computeOccurrencesForRange(
           allDay: ex?.allDay ?? event.allDay,
           recurrence: event.recurrence,
           reminderAt: event.reminderAt ? new Date(event.reminderAt) : null,
+          personId: event.personId,
           isException: !!ex,
           tags: event.tags || [],
         });
@@ -98,6 +99,7 @@ export function computeOccurrencesForRange(
             allDay: ex?.allDay ?? event.allDay,
             recurrence: event.recurrence,
             reminderAt: event.reminderAt ? new Date(event.reminderAt) : null,
+            personId: event.personId,
             isException: !!ex,
             tags: event.tags || [],
           });
@@ -151,6 +153,7 @@ export function computeOccurrencesForRange(
             allDay: ex?.allDay ?? event.allDay,
             recurrence: event.recurrence,
             reminderAt: event.reminderAt ? new Date(event.reminderAt) : null,
+            personId: event.personId,
             isException: !!ex,
             tags: event.tags || [],
           });
@@ -212,6 +215,7 @@ export function computeOccurrencesForRange(
               allDay: ex?.allDay ?? event.allDay,
               recurrence: event.recurrence,
               reminderAt: event.reminderAt ? new Date(event.reminderAt) : null,
+              personId: event.personId,
               isException: !!ex,
               tags: event.tags || [],
             });

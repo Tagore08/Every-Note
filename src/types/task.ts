@@ -16,4 +16,5 @@ export interface Task {
   tags: string[];
   trashedAt?: Date | null;
   sourceNoteId?: number | null; // Informational backlink to source note
+  personId?: number | null;
 }

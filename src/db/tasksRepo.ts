@@ -23,6 +23,7 @@ export const tasksRepo = {
       tags: Array.isArray(draft.tags) ? draft.tags : [],
       trashedAt: null,
       sourceNoteId: typeof draft.sourceNoteId === 'number' ? draft.sourceNoteId : null,
+      personId: typeof draft.personId === 'number' ? draft.personId : null,
     };
 
     const id = await db.tasks.add(newTask);
@@ -53,6 +54,7 @@ export const tasksRepo = {
       description,
       tags: note.tags ? [...note.tags] : [],
       sourceNoteId: note.id,
+      personId: note.personId,
     });
   },
 

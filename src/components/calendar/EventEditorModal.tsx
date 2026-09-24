@@ -3,6 +3,8 @@ import type { EventRecurrence, EventOccurrence } from '../../types/event';
 import { eventsRepo } from '../../db/eventsRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatDateKey, parseDateKey } from '../../utils/format';
+import { PersonBadge } from '../people/PersonBadge';
+import { PersonPickerModal } from '../people/PersonPickerModal';
 
 interface EventEditorModalProps {
   isOpen: boolean;
@@ -36,6 +38,8 @@ export function EventEditorModal({
   const [reminderPreset, setReminderPreset] = useState<ReminderPreset>('none');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [personId, setPersonId] = useState<number | null>(null);
+  const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
 
   // Mode for recurring updates: 'occurrence' | 'series'
   const [editScope, setEditScope] = useState<'occurrence' | 'series'>('occurrence');
@@ -69,6 +73,7 @@ export function EventEditorModal({
 
       setRecurrence(occurrence.originalEvent.recurrence);
       setTags([...occurrence.tags]);
+      setPersonId(occurrence.originalEvent.personId ?? null);
       setEditScope('occurrence');
 
       // Compute preset if reminderAt matches
@@ -100,6 +105,7 @@ export function EventEditorModal({
       setRecurrence('none');
       setReminderPreset('none');
       setTags([]);
+      setPersonId(null);
       setEditScope('series');
     }
 
@@ -194,6 +200,7 @@ export function EventEditorModal({
             recurrence,
             reminderAt,
             tags,
+            personId,
           });
           showSnackbar({ message: isRecurring ? 'Updated event series' : 'Updated event' });
         }
@@ -208,7 +215,7 @@ export function EventEditorModal({
           recurrence,
           reminderAt,
           tags,
-          personId: null,
+          personId,
           relatedTaskId: null,
         });
         showSnackbar({ message: 'Event scheduled' });
@@ -487,6 +494,36 @@ export function EventEditorModal({
               />
             </div>
           </div>
+
+          {/* With Person */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              With Person (optional)
+            </label>
+            <div className="flex items-center gap-2">
+              {personId ? (
+                <PersonBadge
+                  personId={personId}
+                  onClick={() => setIsPersonPickerOpen(true)}
+                  onClear={() => setPersonId(null)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsPersonPickerOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-blue-600 transition-colors cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <line x1="19" y1="8" x2="19" y2="14" />
+                    <line x1="22" y1="11" x2="16" y2="11" />
+                  </svg>
+                  <span>+ With person</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Delete Confirm Drawer / Options */}
@@ -565,6 +602,14 @@ export function EventEditorModal({
           </div>
         </div>
       </div>
+
+      {/* Person Picker Modal */}
+      <PersonPickerModal
+        isOpen={isPersonPickerOpen}
+        onClose={() => setIsPersonPickerOpen(false)}
+        selectedPersonId={personId}
+        onSelectPerson={(id) => setPersonId(id)}
+      />
     </div>
   );
 }
