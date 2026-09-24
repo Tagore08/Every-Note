@@ -152,9 +152,39 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 
 ---
 
-### [ ] Stage 6: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
+### [x] Stage 6: Events + Calendar
+- **1. Database Schema Extension (Version 4)**:
+  - New `events` table in Dexie: `id`, `title`, `description`, `startAt`, `endAt`, `allDay`, `recurrence` ('none'|'daily'|'weekly'|'monthly'), `reminderAt`, `personId`, `relatedTaskId`, `tags`, `createdAt`, `updatedAt`, `trashedAt`, `exceptions`.
+  - Non-destructive Dexie schema evolution: Versions 1, 2, 3, and 4 preserved sequentially.
+  - Strict data-model separation: `startAt`/`endAt` fixed time blocks are kept strictly separate from task `dueAt`.
+  - Added indexed `scheduledAt` and `reminderAt` fields to existing `notes` table.
+  - Dedicated data access repository `src/db/eventsRepo.ts` with recurrence occurrence generator and reactive live queries.
+- **2. Calendar Screen (`/calendar`)**:
+  - Month view: responsive 7-column calendar grid with month navigation, "Today" jumper, and activity dots for events (blue), due tasks (amber), and scheduled notes (purple).
+  - Day agenda: displays occurrences for selected day chronologically grouped with badges ("Event", "Task", "Note"). Tap-to-edit for events, tap-to-complete circular checkbox for tasks, tap-to-open for scheduled notes.
+  - "+ Add Event" quick action pre-filling selected day.
+- **3. Recurring Series & Dynamic Occurrence Math**:
+  - Recurring events are stored as a single master record. Occurrences are computed dynamically across requested date ranges (daily, weekly, monthly) clamped safely to month day counts.
+  - Exceptions array stores single-occurrence overrides (`title`, `startAt`, `endAt`, `allDay`, `description`) or cancellations (`cancelled: true`).
+  - Modal editor prompts user for scope ("This occurrence only" vs "All occurrences") when editing or deleting recurring event instances.
+- **4. Note Scheduling in Optional Disclosure**:
+  - Note editor exposes "Show me this note on <date>" and reminder time strictly inside a collapsible disclosure section, keeping the primary writing canvas clean and distraction-free.
+- **5. Browser Notification API Reminders**:
+  - Background check runs on app start and every 30 seconds scanning IndexedDB for upcoming/due reminders across events and scheduled notes.
+  - Graceful permission prompt in Settings explaining *why* alerts are needed.
+  - Tapping an alert focuses the window and navigates to the item.
+  - Documented limitation: client-side web notifications fire while app is running/open in the browser or OS.
+- **6. Data Portability & Danger Zone (Envelope Version 4)**:
+  - JSON export and import envelopes upgraded to Version 4 containing notes, attachments, tasks, events, and settings.
+  - Full merge/replace support with undo snapshot rollback.
+  - Danger zone wipes events and includes event counts.
+
+---
+
+### [ ] Stage 7: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
 - Eisenhower Matrix 4-quadrant interactive visualization view (`urgent` x `important`).
 - Markdown preview rendering & live toggle in note editor.
 - Checklist / task blocks inside notes.
 - People mentions (`@name`).
 - Peer-to-peer / user-owned cloud synchronization (WebRTC / WebDAV).
+

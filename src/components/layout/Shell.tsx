@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { NavLink, Outlet, useLocation, Link } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { useTheme } from '../../hooks/useTheme';
 import { useInboxCount, notesRepo } from '../../db/notesRepo';
 import { useTodoCount } from '../../db/tasksRepo';
+import { startReminderScheduler } from '../../services/reminderService';
 import { CaptureModal } from '../capture/CaptureModal';
 
 interface NavItem {
@@ -72,6 +73,26 @@ const mainNavItems: NavItem[] = [
     ),
   },
   {
+    name: 'Calendar',
+    path: '/calendar',
+    icon: (active) => (
+      <svg
+        className={`w-5 h-5 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+      </svg>
+    ),
+  },
+  {
     name: 'Search',
     path: '/search',
     icon: (active) => (
@@ -108,6 +129,7 @@ const mainNavItems: NavItem[] = [
     ),
   },
 ];
+
 
 const storageNavItems: NavItem[] = [
   {
@@ -171,17 +193,25 @@ const mobileBottomNavItems: NavItem[] = [
   mainNavItems[0], // Inbox
   mainNavItems[1], // Notes
   mainNavItems[2], // Tasks
-  mainNavItems[3], // Search
+  mainNavItems[3], // Calendar
   storageNavItems[2], // Settings
 ];
 
 export function Shell() {
+  const navigate = useNavigate();
   const { mode, toggleTheme } = useTheme();
   const { showSnackbar } = useSnackbar();
   const location = useLocation();
   const inboxCount = useInboxCount();
   const todoCount = useTodoCount();
   const [isCaptureOpen, setIsCaptureOpen] = useState(false);
+
+  // Initialize reminder scheduler loop on app mount
+  useEffect(() => {
+    const cleanup = startReminderScheduler(navigate);
+    return cleanup;
+  }, [navigate]);
+
 
   // PWA Service Worker Registration & Update Notification
   const {

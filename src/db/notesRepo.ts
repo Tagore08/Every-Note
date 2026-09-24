@@ -320,6 +320,8 @@ export const notesRepo = {
       const createdAt = raw.createdAt ? new Date(raw.createdAt) : new Date();
       const updatedAt = raw.updatedAt ? new Date(raw.updatedAt) : new Date();
       const trashedAt = raw.trashedAt ? new Date(raw.trashedAt) : null;
+      const scheduledAt = raw.scheduledAt ? new Date(raw.scheduledAt) : null;
+      const reminderAt = raw.reminderAt ? new Date(raw.reminderAt) : null;
 
       return {
         id: typeof raw.id === 'number' ? raw.id : undefined,
@@ -330,10 +332,13 @@ export const notesRepo = {
         archived: Boolean(raw.archived),
         trashedAt: isNaN(trashedAt?.getTime() ?? 0) ? null : trashedAt,
         inbox: Boolean(raw.inbox),
+        scheduledAt: scheduledAt && !isNaN(scheduledAt.getTime()) ? scheduledAt : null,
+        reminderAt: reminderAt && !isNaN(reminderAt.getTime()) ? reminderAt : null,
         createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
         updatedAt: isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
       };
     });
+
 
     if (strategy === 'replace') {
       await db.notes.clear();
@@ -366,6 +371,42 @@ export const notesRepo = {
     }
 
     return { importedCount, previousSnapshot };
+  },
+
+  /**
+   * Sets or clears scheduledAt and reminderAt for a note.
+   */
+  async setNoteSchedule(id: number, scheduledAt: Date | null, reminderAt?: Date | null): Promise<void> {
+    await db.notes.update(id, {
+      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      reminderAt: reminderAt ? new Date(reminderAt) : null,
+      updatedAt: new Date(),
+    });
+  },
+
+  /**
+   * Retrieves notes scheduled within a date range [start, end].
+   */
+  async getScheduledNotesForRange(start: Date, end: Date): Promise<Note[]> {
+    const startTime = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0).getTime();
+    const endTime = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999).getTime();
+
+    return db.notes
+      .filter((note) => {
+        if (note.trashedAt || !note.scheduledAt) return false;
+        const schedTime = new Date(note.scheduledAt).getTime();
+        return schedTime >= startTime && schedTime <= endTime;
+      })
+      .toArray();
+  },
+
+  /**
+   * Fetches all non-trashed notes with active reminders set.
+   */
+  async getActiveScheduledReminders(): Promise<Note[]> {
+    return db.notes
+      .filter((n) => !n.trashedAt && !!n.reminderAt)
+      .toArray();
   },
 
   /**
@@ -416,3 +457,13 @@ export function useSearchNotes(query: string): Note[] | undefined {
 export function useTagsWithCounts(): { tag: string; count: number }[] | undefined {
   return useLiveQuery(() => notesRepo.getAllTagsWithCounts());
 }
+
+export function useScheduledNotesForRange(start: Date, end: Date): Note[] | undefined {
+  const s = start.getTime();
+  const e = end.getTime();
+  return useLiveQuery(
+    () => notesRepo.getScheduledNotesForRange(new Date(s), new Date(e)),
+    [s, e]
+  );
+}
+

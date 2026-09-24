@@ -225,6 +225,22 @@ export const tasksRepo = {
   },
 
   /**
+   * Retrieves tasks due within a specific date range [start, end].
+   */
+  async getTasksDueForRange(start: Date, end: Date): Promise<Task[]> {
+    const startTime = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0).getTime();
+    const endTime = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999).getTime();
+
+    return await db.tasks
+      .filter((task) => {
+        if (task.trashedAt || !task.dueAt) return false;
+        const dueTime = new Date(task.dueAt).getTime();
+        return dueTime >= startTime && dueTime <= endTime;
+      })
+      .toArray();
+  },
+
+  /**
    * Danger zone wipe: clears all tasks.
    */
   async deleteAllTasks(): Promise<void> {
@@ -255,3 +271,13 @@ export function useTask(id: number | null | undefined): Task | null | undefined 
     return task ?? null;
   }, [id]);
 }
+
+export function useTasksDueForRange(start: Date, end: Date): Task[] | undefined {
+  const s = start.getTime();
+  const e = end.getTime();
+  return useLiveQuery(
+    () => tasksRepo.getTasksDueForRange(new Date(s), new Date(e)),
+    [s, e]
+  );
+}
+

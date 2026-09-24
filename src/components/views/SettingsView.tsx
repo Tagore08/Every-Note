@@ -4,11 +4,18 @@ import { useTheme, type ThemeMode } from '../../hooks/useTheme';
 import { notesRepo, useArchivedNotes, useTrashNotes } from '../../db/notesRepo';
 import { attachmentsRepo } from '../../db/attachmentsRepo';
 import { tasksRepo } from '../../db/tasksRepo';
+import { eventsRepo } from '../../db/eventsRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
+import {
+  getNotificationPermission,
+  requestNotificationPermission,
+} from '../../services/reminderService';
+
 import type { Note } from '../../types/note';
 import type { Attachment } from '../../types/attachment';
 import type { Task } from '../../types/task';
+import type { CalendarEvent } from '../../types/event';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -20,11 +27,13 @@ interface BackupEnvelope {
   exportedAt: string;
   notes: Note[];
   tasks?: Task[];
+  events?: CalendarEvent[];
   attachments?: ExportAttachment[];
   settings?: {
     theme?: string;
   };
 }
+
 
 // Convert Blob to data URL base64 string
 function blobToBase64(blob: Blob): Promise<string> {
@@ -69,6 +78,11 @@ export function SettingsView() {
     isPersisted: boolean;
   } | null>(null);
 
+  // Notification state
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(
+    getNotificationPermission()
+  );
+
   // Import flow state
   const [importCandidate, setImportCandidate] = useState<BackupEnvelope | null>(null);
   const [importStrategy, setImportStrategy] = useState<'merge' | 'replace'>('merge');
@@ -103,12 +117,23 @@ export function SettingsView() {
     await loadStorageEstimate();
   };
 
-  // 1. Export Flow (Including base64 encoded attachments)
+  const handleRequestNotif = async () => {
+    const res = await requestNotificationPermission();
+    setNotifPermission(res);
+    if (res === 'granted') {
+      showSnackbar({ message: 'Notifications enabled for reminders.' });
+    } else if (res === 'denied') {
+      showSnackbar({ message: 'Notifications were blocked in your browser settings.' });
+    }
+  };
+
+  // 1. Export Flow (Including base64 encoded attachments, tasks, and events)
   const handleExport = async () => {
     try {
       setIsExporting(true);
       const allNotes = await notesRepo.getAllNotesForExport();
       const allTasks = await tasksRepo.getAllTasksForExport();
+      const allEvents = await eventsRepo.getAllEventsForExport();
       const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // Convert Blobs to base64 strings
@@ -137,11 +162,12 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 3, // Bumped to Version 3 for Stage 5 tasks
+        version: 4, // Bumped to Version 4 for Stage 6 calendar & events
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
         tasks: allTasks,
+        events: allEvents,
         attachments: exportedAttachments,
         settings: {
           theme: mode,
@@ -163,7 +189,7 @@ export function SettingsView() {
 
       const formattedFileSize = formatFileSize(blob.size);
       showSnackbar({
-        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks & ${allAttachments.length} attachments (${formattedFileSize}).`,
+        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allEvents.length} events & ${allAttachments.length} attachments (${formattedFileSize}).`,
       });
     } catch (err) {
       console.error('Failed to export data:', err);
@@ -172,6 +198,7 @@ export function SettingsView() {
       setIsExporting(false);
     }
   };
+
 
   // 2. Import File Picker Handler
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -196,6 +223,7 @@ export function SettingsView() {
 
       let notesArray: unknown[] = [];
       let tasksArray: Task[] = [];
+      let eventsArray: CalendarEvent[] = [];
       let attachmentsArray: ExportAttachment[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
@@ -206,6 +234,9 @@ export function SettingsView() {
         version = (parsed as BackupEnvelope).version || version;
         if ('tasks' in parsed && Array.isArray((parsed as BackupEnvelope).tasks)) {
           tasksArray = (parsed as BackupEnvelope).tasks ?? [];
+        }
+        if ('events' in parsed && Array.isArray((parsed as BackupEnvelope).events)) {
+          eventsArray = (parsed as BackupEnvelope).events ?? [];
         }
         if ('attachments' in parsed && Array.isArray((parsed as BackupEnvelope).attachments)) {
           attachmentsArray = (parsed as BackupEnvelope).attachments ?? [];
@@ -223,6 +254,7 @@ export function SettingsView() {
         exportedAt,
         notes: notesArray as Note[],
         tasks: tasksArray,
+        events: eventsArray,
         attachments: attachmentsArray,
       });
       setImportStrategy('merge');
@@ -236,13 +268,14 @@ export function SettingsView() {
     }
   };
 
-  // 3. Confirm Import (Restores Notes, Tasks, and Attachments)
+  // 3. Confirm Import (Restores Notes, Tasks, Events, and Attachments)
   const handleConfirmImport = async () => {
     if (!importCandidate) return;
 
     try {
-      // Snapshot existing tasks and attachments before mutating (for undo)
+      // Snapshot existing tasks, events, and attachments before mutating (for undo)
       const prevTasks = await tasksRepo.getAllTasksForExport();
+      const prevEvents = await eventsRepo.getAllEventsForExport();
       const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // 1. Import Notes
@@ -256,7 +289,17 @@ export function SettingsView() {
         importedTasksCount = await tasksRepo.importTasks(importCandidate.tasks, importStrategy);
       }
 
-      // 3. Import Attachments (if any in candidate)
+      // 3. Import Events
+      let importedEventsCount = 0;
+      if (importCandidate.events && importCandidate.events.length > 0) {
+        if (importStrategy === 'replace') {
+          await eventsRepo.deleteAllEvents();
+        }
+        await eventsRepo.importEvents(importCandidate.events);
+        importedEventsCount = importCandidate.events.length;
+      }
+
+      // 4. Import Attachments (if any in candidate)
       let importedAttachmentsCount = 0;
       if (importCandidate.attachments && importCandidate.attachments.length > 0) {
         const restoredAttachments: Attachment[] = [];
@@ -288,13 +331,17 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
           }
           if (importStrategy === 'replace' && prevTasks) {
             await tasksRepo.importTasks(prevTasks, 'replace');
+          }
+          if (importStrategy === 'replace' && prevEvents) {
+            await eventsRepo.deleteAllEvents();
+            await eventsRepo.importEvents(prevEvents);
           }
           if (importStrategy === 'replace' && prevAttachments) {
             await attachmentsRepo.importAttachments(prevAttachments, 'replace');
@@ -315,14 +362,16 @@ export function SettingsView() {
     try {
       await notesRepo.deleteAllNotes();
       await tasksRepo.deleteAllTasks();
+      await eventsRepo.deleteAllEvents();
       setShowDeleteAllModal(false);
       setDeleteConfirmationInput('');
       await loadStorageEstimate();
-      showSnackbar({ message: 'All notes, tasks, and attachments have been completely deleted.' });
+      showSnackbar({ message: 'All notes, tasks, events, and attachments have been completely deleted.' });
     } catch (err) {
       console.error('Failed to delete all data:', err);
     }
   };
+
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-12">
@@ -422,8 +471,69 @@ export function SettingsView() {
         </div>
       </section>
 
-      {/* 2. Browser Storage & Quota Estimation */}
+      {/* 2. Notifications & Reminders */}
       <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+            Notifications & Reminders
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Browser notification alerts for upcoming events and scheduled notes.
+          </p>
+        </div>
+
+        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+              </div>
+              <div>
+                <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 block">
+                  Notification Alerts
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {notifPermission === 'granted'
+                    ? 'Notifications are active'
+                    : notifPermission === 'denied'
+                      ? 'Notifications are blocked in browser settings'
+                      : notifPermission === 'unsupported'
+                        ? 'Notifications are not supported in this browser'
+                        : 'Notifications not yet enabled'}
+                </span>
+              </div>
+            </div>
+
+            {notifPermission !== 'granted' && notifPermission !== 'unsupported' && (
+              <button
+                type="button"
+                onClick={handleRequestNotif}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors cursor-pointer shrink-0"
+              >
+                Enable Notifications
+              </button>
+            )}
+
+            {notifPermission === 'granted' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span>Enabled</span>
+              </span>
+            )}
+          </div>
+
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed border-t border-slate-100 dark:border-slate-800 pt-2.5">
+            <strong>Why enable?</strong> Reminders send you timely alerts when events are starting or when scheduled notes require your attention. In offline installable PWAs, reminders trigger locally whenever the app is open or running on your device.
+          </p>
+        </div>
+      </section>
+
+      {/* 3. Browser Storage & Quota Estimation */}
+      <section className="space-y-4">
+
         <div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-white">
             Storage & Persistence
@@ -722,9 +832,10 @@ export function SettingsView() {
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              This action permanently purges all notes and attachments. To proceed, please type{' '}
+              This action permanently purges all notes, tasks, events, and attachments. To proceed, please type{' '}
               <span className="font-mono font-bold text-red-600 dark:text-red-400">DELETE ALL</span> below:
             </p>
+
 
             <input
               type="text"

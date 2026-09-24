@@ -135,3 +135,63 @@ export function formatDueDate(dateInput: Date | string | number | null | undefin
     year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
   });
 }
+
+/**
+ * Returns 'YYYY-MM-DD' in local time for a Date.
+ */
+export function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Parses 'YYYY-MM-DD' into a local Date at 00:00:00.
+ */
+export function parseDateKey(key: string): Date {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+/**
+ * Checks if two dates fall on the exact same local calendar day.
+ */
+export function isSameDay(d1: Date, d2: Date): boolean {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+}
+
+/**
+ * Formats a Date into a long header (e.g. "Tuesday, September 24, 2026").
+ */
+export function formatDayHeader(date: Date): string {
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Formats event time block (e.g. "All day", "9:00 AM - 10:30 AM", or "9:00 AM").
+ */
+export function formatEventTime(startAt: Date, endAt?: Date | null, allDay?: boolean): string {
+  if (allDay) return 'All day';
+
+  const timeOptions: Intl.DateTimeFormatOptions = {
+    hour: 'numeric',
+    minute: '2-digit',
+  };
+
+  const startTimeStr = new Date(startAt).toLocaleTimeString(undefined, timeOptions);
+  if (!endAt) return startTimeStr;
+
+  const endTimeStr = new Date(endAt).toLocaleTimeString(undefined, timeOptions);
+  return `${startTimeStr} - ${endTimeStr}`;
+}
+

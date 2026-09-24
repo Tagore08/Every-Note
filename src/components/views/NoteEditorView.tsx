@@ -4,7 +4,7 @@ import { notesRepo, useNote } from '../../db/notesRepo';
 import { attachmentsRepo, useAttachments } from '../../db/attachmentsRepo';
 import { tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
-import { formatRelativeTime, formatFileSize } from '../../utils/format';
+import { formatRelativeTime, formatFileSize, formatDateKey, parseDateKey } from '../../utils/format';
 import { AttachmentGallery } from '../attachments/AttachmentGallery';
 import { AddLinkModal } from '../attachments/AddLinkModal';
 
@@ -22,8 +22,12 @@ export function NoteEditorView() {
   const [tags, setTags] = useState<string[]>([]);
   const [isPinned, setIsPinned] = useState(false);
   const [isArchived, setIsArchived] = useState(false);
+  const [scheduledAtStr, setScheduledAtStr] = useState('');
+  const [reminderTimeStr, setReminderTimeStr] = useState('');
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
+
 
   // Attachment modal & drag states
   const [isAddLinkOpen, setIsAddLinkOpen] = useState(false);
@@ -59,13 +63,30 @@ export function NoteEditorView() {
       setTags(note.tags || []);
       setIsPinned(note.pinned || false);
       setIsArchived(note.archived || false);
+      if (note.scheduledAt) {
+        setScheduledAtStr(formatDateKey(new Date(note.scheduledAt)));
+      }
+      if (note.reminderAt) {
+        const r = new Date(note.reminderAt);
+        setReminderTimeStr(
+          `${String(r.getHours()).padStart(2, '0')}:${String(r.getMinutes()).padStart(2, '0')}`
+        );
+      }
       initialLoadDone.current = true;
     }
   }, [note]);
 
   // Persist changes to Dexie with ~500ms debounce
   const triggerAutoSave = useCallback(
-    (newTitle: string, newContent: string, newTags: string[], pinnedState: boolean, archivedState: boolean) => {
+    (
+      newTitle: string,
+      newContent: string,
+      newTags: string[],
+      pinnedState: boolean,
+      archivedState: boolean,
+      schedStr?: string,
+      remTimeStr?: string
+    ) => {
       if (!numericId) return;
       setSaveStatus('saving');
 
@@ -75,12 +96,29 @@ export function NoteEditorView() {
 
       saveTimer.current = setTimeout(async () => {
         try {
+          const finalSched = schedStr !== undefined ? schedStr : scheduledAtStr;
+          const finalRem = remTimeStr !== undefined ? remTimeStr : reminderTimeStr;
+
+          let schedDate: Date | null = null;
+          let remDate: Date | null = null;
+
+          if (finalSched) {
+            const base = parseDateKey(finalSched);
+            schedDate = base;
+            if (finalRem) {
+              const [h, m] = finalRem.split(':').map(Number);
+              remDate = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
+            }
+          }
+
           await notesRepo.updateNote(numericId, {
             title: newTitle,
             content: newContent,
             tags: newTags,
             pinned: pinnedState,
             archived: archivedState,
+            scheduledAt: schedDate,
+            reminderAt: remDate,
           });
           setSaveStatus('saved');
         } catch (err) {
@@ -89,8 +127,9 @@ export function NoteEditorView() {
         }
       }, 500);
     },
-    [numericId]
+    [numericId, scheduledAtStr, reminderTimeStr]
   );
+
 
   // Flush any pending save on unmount
   useEffect(() => {
@@ -191,6 +230,23 @@ export function NoteEditorView() {
       handleRemoveTag(tags[tags.length - 1]);
     }
   };
+
+  const handleScheduleDateChange = (val: string) => {
+    setScheduledAtStr(val);
+    triggerAutoSave(title, content, tags, isPinned, isArchived, val, reminderTimeStr);
+  };
+
+  const handleReminderTimeChange = (val: string) => {
+    setReminderTimeStr(val);
+    triggerAutoSave(title, content, tags, isPinned, isArchived, scheduledAtStr, val);
+  };
+
+  const handleClearSchedule = () => {
+    setScheduledAtStr('');
+    setReminderTimeStr('');
+    triggerAutoSave(title, content, tags, isPinned, isArchived, '', '');
+  };
+
 
   // Process files with size guards
   const processSingleFile = async (file: File) => {
@@ -449,6 +505,26 @@ export function NoteEditorView() {
             <span className="hidden sm:inline">To Task</span>
           </button>
 
+          {/* Schedule note action */}
+          <button
+            type="button"
+            onClick={() => setIsScheduleOpen(!isScheduleOpen)}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              scheduledAtStr
+                ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300'
+                : 'text-slate-600 hover:text-purple-600 dark:text-slate-300 dark:hover:text-purple-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+            title={scheduledAtStr ? `Scheduled on ${scheduledAtStr}` : 'Schedule note'}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span className="hidden sm:inline">Schedule</span>
+          </button>
+
           <span className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
 
           {/* Pin action */}
@@ -503,6 +579,63 @@ export function NoteEditorView() {
           </button>
         </div>
       </div>
+
+      {/* Optional Schedule / Reminder Disclosure Section */}
+      {isScheduleOpen && (
+        <div className="mt-3 p-3.5 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-900/50 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in duration-150">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-purple-900 dark:text-purple-200">
+                Show me this note on:
+              </span>
+              <input
+                type="date"
+                value={scheduledAtStr}
+                onChange={(e) => handleScheduleDateChange(e.target.value)}
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+
+            {scheduledAtStr && (
+              <div className="flex items-center gap-2">
+                <span className="text-purple-700 dark:text-purple-300">
+                  Reminder time:
+                </span>
+                <input
+                  type="time"
+                  value={reminderTimeStr}
+                  onChange={(e) => handleReminderTimeChange(e.target.value)}
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {scheduledAtStr && (
+              <button
+                type="button"
+                onClick={handleClearSchedule}
+                className="text-xs text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+              >
+                Clear date
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsScheduleOpen(false)}
+              className="p-1 rounded text-purple-500 hover:text-purple-700 dark:hover:text-purple-200 cursor-pointer"
+              aria-label="Close schedule section"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
 
       {/* Editor Body */}
       <div className="flex-1 flex flex-col py-6 space-y-4">

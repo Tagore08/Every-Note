@@ -2,11 +2,14 @@ import Dexie, { type EntityTable } from 'dexie';
 import type { Note } from '../types/note';
 import type { Attachment } from '../types/attachment';
 import type { Task } from '../types/task';
+import type { CalendarEvent } from '../types/event';
 
 export class AppDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
   attachments!: EntityTable<Attachment, 'id'>;
   tasks!: EntityTable<Task, 'id'>;
+  events!: EntityTable<CalendarEvent, 'id'>;
+
 
   constructor() {
     super('NotesAppDatabase');
@@ -29,23 +32,24 @@ export class AppDatabase extends Dexie {
     });
 
     // Schema Version 3 (Stage 5: Tasks)
-    // Fields indexed:
-    // - id: primary key, autoincrementing
-    // - status: 'todo' | 'done'
-    // - priority: 'none' | 'low' | 'medium' | 'high'
-    // - dueAt: timestamp for due dates
-    // - completedAt: timestamp when marked done
-    // - createdAt, updatedAt: ordering and recency
-    // - importance, urgency: boolean flags for Eisenhower matrix
-    // - *tags: multi-entry index for tag queries
-    // - trashedAt: soft delete timestamp
-    // - sourceNoteId: parent note reference
     this.version(3).stores({
       notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, createdAt, updatedAt',
       attachments: '++id, noteId, ownerType, kind, createdAt',
       tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId',
     });
+
+    // Schema Version 4 (Stage 6: Events & Calendar, Scheduled Notes)
+    // Fields indexed:
+    // - notes: added scheduledAt, reminderAt
+    // - events: ++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, *tags, trashedAt, createdAt
+    this.version(4).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, *tags, trashedAt, createdAt',
+    });
   }
 }
+
 
 export const db = new AppDatabase();

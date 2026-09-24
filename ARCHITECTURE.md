@@ -86,6 +86,16 @@ this.version(3).stores({
 });
 ```
 
+### Schema Version 4 (Stage 6 Events, Calendar & Scheduled Notes)
+```ts
+this.version(4).stores({
+  notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, createdAt, updatedAt',
+  attachments: '++id, noteId, ownerType, kind, createdAt',
+  tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId',
+  events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, *tags, trashedAt, createdAt',
+});
+```
+
 #### Table: `notes`
 | Field | Type | Dexie Index Key | Description |
 |---|---|---|---|
@@ -97,6 +107,8 @@ this.version(3).stores({
 | `archived` | `boolean` | `archived` | Archive status flag |
 | `trashedAt` | `Date \| null` | `trashedAt` | Soft-delete timestamp (null when active, Date when trashed) |
 | `inbox` | `boolean` | `inbox` | Quick-capture triage flag |
+| `scheduledAt` | `Date \| null` (optional) | `scheduledAt` | Calendar scheduled date index |
+| `reminderAt` | `Date \| null` (optional) | `reminderAt` | Notification reminder timestamp index |
 | `createdAt` | `Date` | `createdAt` | Creation timestamp, chronological ordering index |
 | `updatedAt` | `Date` | `updatedAt` | Last modification timestamp, recency ordering index |
 
@@ -132,6 +144,27 @@ this.version(3).stores({
 | `trashedAt` | `Date \| null` (optional) | `trashedAt` | Soft-delete timestamp index |
 | `sourceNoteId` | `number` (optional) | `sourceNoteId` | Informational backlink to source note ID |
 
+#### Table: `events` (Realized in Stage 6)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `title` | `string` | — | Event title |
+| `description` | `string` (optional) | — | Event notes or agenda description |
+| `startAt` | `Date` | `startAt` | Fixed time block start timestamp index |
+| `endAt` | `Date \| null` (optional) | `endAt` | Fixed time block end timestamp index |
+| `allDay` | `boolean` | — | All-day event flag |
+| `recurrence` | `'none' \| 'daily' \| 'weekly' \| 'monthly'` | `recurrence` | Recurrence series pattern index |
+| `reminderAt` | `Date \| null` (optional) | `reminderAt` | Notification reminder timestamp index |
+| `personId` | `number \| null` (optional) | — | Optional contact or attendee reference |
+| `relatedTaskId` | `number \| null` (optional) | `relatedTaskId` | Optional related task ID index |
+| `tags` | `string[]` | `*tags` (multiEntry) | Multi-entry index for tag lookups |
+| `createdAt` | `Date` | `createdAt` | Creation timestamp index |
+| `updatedAt` | `Date` | — | Last modification timestamp |
+| `trashedAt` | `Date \| null` (optional) | `trashedAt` | Soft-delete timestamp index |
+| `exceptions` | `EventException[]` (optional) | — | Single-occurrence overrides or cancellations |
+
+> **CRITICAL Data-Model Rule**: An event's `startAt`/`endAt` represents a fixed scheduled time block. It is completely separate from a task's `dueAt`. These date fields are never merged or conflated.
+
 ### Versioning & Migrations Policy
 1. **Monotonic Version Numbers**: Every schema alteration increments the version number by 1 (`version(1)`, `version(2)`).
 2. **Schema Declaration vs Index Changes**:
@@ -144,13 +177,13 @@ this.version(3).stores({
 
 ## 3. Data Access & State Management Approach
 
-### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts` & `src/db/tasksRepo.ts`)
+### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts`, `src/db/tasksRepo.ts` & `src/db/eventsRepo.ts`)
 - **Isolation**: Screens and UI components **never** call Dexie directly. All read queries and write mutations pass through the repository layer.
 - **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into the repos without modifying views.
-- **Cascading Deletions**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Tasks linked via `sourceNoteId` are informational and are never deleted when notes are removed.
+- **Cascading Deletions**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Tasks and events linked via informational references are never destroyed when notes are removed.
 
 ### Reactive Reads
-- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`) backed by Dexie's `useLiveQuery`.
+- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`, `useOccurrencesForRange`, `useTasksDueForRange`, `useScheduledNotesForRange`, `useEvent`) backed by Dexie's `useLiveQuery`.
 
 ---
 
@@ -228,6 +261,31 @@ this.version(3).stores({
    - Import supports merging or replacing tasks, with full undo restoration.
    - Danger zone includes task counts and wipes tasks upon typed confirmation.
 
+### Stage 6: Events + Calendar
+1. **Dedicated Events Data Model (Schema Version 4)**:
+   - Dedicated `events` table: `id`, `title`, `description`, `startAt` (Date), `endAt` (Date), `allDay` (bool), `recurrence` ('none'|'daily'|'weekly'|'monthly'), `reminderAt`, `personId`, `relatedTaskId`, `tags`, `createdAt`, `updatedAt`, `trashedAt`, `exceptions`.
+   - **Fixed Time Block vs Due Date Separation**: `startAt`/`endAt` define scheduled time blocks on calendar grids. `tasks.dueAt` defines deadline targets. Both are kept strictly segregated in schema.
+   - `notes` table schema updated with indexed `scheduledAt` and `reminderAt` fields.
+2. **Calendar Screen (`/calendar`)**:
+   - Month view: responsive 7-column calendar grid with month navigation, "Today" jumper, and multi-colored activity dots for events (blue), due tasks (amber), and scheduled notes (purple).
+   - Day agenda: displays occurrences for selected day chronologically grouped with badges ("Event", "Task", "Note"). Tap-to-edit for events, tap-to-complete circular checkbox for tasks, tap-to-open for scheduled notes.
+   - "+ Add Event" quick action pre-filling selected day.
+3. **Recurring Series & Dynamic Occurrence Math**:
+   - Recurring events are stored as a single master record. Occurrences are computed dynamically across requested date ranges (daily, weekly, monthly) clamped safely to month day counts.
+   - Exceptions array stores single-occurrence overrides (`title`, `startAt`, `endAt`, `allDay`, `description`) or cancellations (`cancelled: true`).
+   - Modal editor prompts user for scope ("This occurrence only" vs "All occurrences") when editing or deleting recurring event instances.
+4. **Note Scheduling in Optional Disclosure**:
+   - Note editor exposes "Show me this note on <date>" and reminder time strictly inside a collapsible disclosure section, keeping the primary writing canvas clean and distraction-free.
+5. **Browser Notification API Reminders**:
+   - Background check runs on app start and every 30 seconds scanning IndexedDB for upcoming/due reminders across events and scheduled notes.
+   - Graceful permission prompt in Settings explaining *why* alerts are needed.
+   - Tapping an alert focuses the window and navigates to the item.
+   - **Offline PWA Limitation**: In client-side offline PWAs without a central push server, web notifications trigger locally via the browser Notification API while the application is running/open in the browser or operating system.
+6. **Data Portability & Portability Upgrades (Envelope Version 4)**:
+   - JSON export and import envelopes upgraded to Version 4 containing notes, attachments, tasks, events, and settings.
+   - Full merge/replace support with undo snapshot rollback.
+   - Danger zone wipes events and includes event counts.
+
 ---
 
 ## 5. Future Extension Points
@@ -235,19 +293,17 @@ this.version(3).stores({
 > **Realized Extension Points**:
 > - **Attachments** (Stage 3): Generalized entity-type attachments (`ownerType: 'note' | 'task' | 'event'`).
 > - **Tasks** (Stage 5): Standalone tasks with due dates, priority, tags, Eisenhower flags (`importance` & `urgency`), and note backlinks.
+> - **Events & Calendar** (Stage 6): Fixed time blocks, recurrence series with exceptions, calendar month & agenda views, note scheduling, and local reminders.
 
 1. **Eisenhower Matrix View**
-   - **Target**: 4-quadrant visualization utilizing the existing `importance` and `urgency` task fields.
-2. **Events**
-   - **Target**: Calendar scheduling, date-time reminders, and agenda planning.
-   - **DB Extension**: `events` table (`++id, noteId, title, startTime, endTime, allDay, recurrenceRule`).
-   - **Integration**: Can reuse `attachments` table with `ownerType: 'event'`.
-3. **Habits**
+   - **Target**: 4-quadrant interactive visualization utilizing the existing `importance` and `urgency` task fields.
+2. **Habits**
    - **Target**: Daily recurring tracker and streak counter.
    - **DB Extension**: `habits` table (`++id, title, frequency, targetCount`) and `habit_logs` table (`++id, habitId, date, count`).
-4. **People**
-   - **Target**: Contacts, CRM mentions, and attendee links.
+3. **People**
+   - **Target**: Contacts, CRM mentions, attendee links, and birthday reminders (connected to `events.personId`).
    - **DB Extension**: `people` table (`++id, name, email, avatar, *tags, createdAt`).
-5. **Sync**
+4. **Sync**
    - **Target**: Cross-device synchronization and backups without a centralized custodial backend.
    - **Design**: Integrated through repository layers with change-vector logging or CRDTs.
+

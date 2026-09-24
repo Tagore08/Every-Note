@@ -7,6 +7,9 @@ export interface Note {
   archived: boolean;
   trashedAt: Date | null;
   inbox: boolean;
+  scheduledAt?: Date | null;
+  reminderAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
