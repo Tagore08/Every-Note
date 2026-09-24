@@ -158,6 +158,28 @@ this.version(2).stores({
    - Full backup export embedding attachments as base64 in a Version 2 envelope (`{ version: 2, app, exportedAt, notes, attachments, settings }`).
    - Import restores base64 strings back to native Blobs in IndexedDB.
 
+### Stage 4: Installable Offline PWA
+1. **Workbox Precache & Caching Architecture**:
+   - `vite-plugin-pwa` configured in `generateSW` mode.
+   - Comprehensive app-shell precache matching `**/*.{js,css,html,ico,png,svg,webmanifest}`.
+   - Workbox `navigateFallback: '/index.html'` to guarantee subroute navigation (`/inbox`, `/notes`, `/tags`, `/trash`, etc.) works completely offline without network fallback errors.
+   - Strict runtime caching boundary: Only same-origin assets are cached via `StaleWhileRevalidate`. External origins, APIs, or IndexedDB operations are strictly omitted from caching.
+2. **Web App Manifest**:
+   - Registered manifest: `name: "Notes App"`, `short_name: "Notes"`, `start_url: "/"`, `scope: "/"`, `display: "standalone"`, `orientation: "any"`, `background_color: "#0f172a"`, `theme_color: "#0f172a"`.
+3. **Local Icon Generation**:
+   - Generated entirely offline via local vector processing (`rsvg-convert` and `convert`).
+   - Standard icons: 192x192 PNG, 512x512 PNG, multi-resolution `favicon.ico`, and `favicon.svg`.
+   - Adaptive Maskable icon: 512x512 PNG with safe-zone margin (inner icon within 80% circle) to avoid OS clipping on Android adaptive icons.
+   - Apple Touch Icon: 180x180 PNG with opaque background for iOS Safari home screen bookmarks.
+4. **Zero-White-Flash Branded Splash**:
+   - Inline script in `<head>` executes before rendering starts, checking `localStorage` and `matchMedia('(prefers-color-scheme: dark)')` to apply `.dark` class instantaneously.
+   - Inline HTML and CSS inside `<div id="root">` presents an animated vector loader in the exact color scheme of the app before React scripts load, smoothly replaced once React 19 mounts.
+5. **Static SPA Client-Side Routing**:
+   - `public/_redirects` contains `/* /index.html 200` to support static SPA hosts (Cloudflare Pages, Netlify) so all direct URL visits and reloads map cleanly to `index.html`.
+6. **PWA Lifecycle & Update Delivery**:
+   - `registerType: 'autoUpdate'` with Workbox `clientsClaim: true` and `skipWaiting: true`.
+   - Connected to central `useSnackbar` via `useRegisterSW`: prompts user with "Update available — reload to apply latest changes" and a "Reload" action invoking `updateServiceWorker(true)`.
+
 ---
 
 ## 5. Future Extension Points

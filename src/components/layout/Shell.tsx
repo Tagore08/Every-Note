@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, Link } from 'react-router-dom';
+import { useRegisterSW } from 'virtual:pwa-register/react';
+import { useSnackbar } from '../../context/SnackbarContext';
 import { useTheme } from '../../hooks/useTheme';
 import { useInboxCount, notesRepo } from '../../db/notesRepo';
 import { CaptureModal } from '../capture/CaptureModal';
@@ -153,9 +155,53 @@ const mobileBottomNavItems: NavItem[] = [
 
 export function Shell() {
   const { mode, toggleTheme } = useTheme();
+  const { showSnackbar } = useSnackbar();
   const location = useLocation();
   const inboxCount = useInboxCount();
   const [isCaptureOpen, setIsCaptureOpen] = useState(false);
+
+  // PWA Service Worker Registration & Update Notification
+  const {
+    needRefresh: [needRefresh],
+    offlineReady: [offlineReady],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(r) {
+      if (r) {
+        // Check for updates periodically (e.g. every 60 minutes)
+        setInterval(() => {
+          r.update().catch((e) => console.debug('SW check failed:', e));
+        }, 60 * 60 * 1000);
+      }
+    },
+    onRegisterError(error) {
+      console.warn('SW registration failed:', error);
+    },
+  });
+
+  useEffect(() => {
+    if (needRefresh) {
+      showSnackbar({
+        message: 'Update available — reload to apply latest changes',
+        action: {
+          label: 'Reload',
+          onClick: () => {
+            updateServiceWorker(true);
+          },
+        },
+        duration: 30000,
+      });
+    }
+  }, [needRefresh, showSnackbar, updateServiceWorker]);
+
+  useEffect(() => {
+    if (offlineReady) {
+      showSnackbar({
+        message: 'App is cached and ready for offline use',
+        duration: 4000,
+      });
+    }
+  }, [offlineReady, showSnackbar]);
 
   // Auto-purge trashed notes older than 30 days on app mount
   useEffect(() => {
@@ -326,8 +372,8 @@ export function Shell() {
           </button>
 
           <div className="px-3 py-1 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between">
-            <span>Stage 2 · Reliable</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500" title="Offline ready" />
+            <span>Stage 4 · Offline PWA</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500" title="Offline PWA Ready" />
           </div>
         </div>
       </aside>

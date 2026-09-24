@@ -94,13 +94,36 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 
 ---
 
-### [ ] Stage 4: Markdown & Tasks (Upcoming)
-- Markdown preview rendering & live toggle.
-- Checklist / task blocks inside notes (reusing attachments with `ownerType: 'task'`).
-- People mentions (`@name`).
+### [x] Stage 4: Proper Installable Offline PWA
+- **1. Vite PWA & Workbox Configuration**:
+  - `vite-plugin-pwa` configured in `generateSW` mode with `autoUpdate`.
+  - App shell, icons, html, scripts, and stylesheets fully precached (`**/*.{js,css,html,ico,png,svg,webmanifest}`).
+  - Strict runtime caching: same-origin assets cached with `StaleWhileRevalidate`, completely omitting any IndexedDB or external API caching.
+  - Workbox `navigateFallback: '/index.html'` to ensure direct visits to `/inbox`, `/notes`, `/tags`, `/trash`, etc., resolve cleanly offline.
+- **2. Web App Manifest**:
+  - Full PWA manifest: `name: "Notes App"`, `short_name: "Notes"`, `description: "Local-first personal notes"`, `theme_color: "#0f172a"`, `background_color: "#0f172a"`, `display: "standalone"`, `orientation: "any"`, `start_url: "/"`, `scope: "/"`.
+- **3. Complete Local Icon Suite**:
+  - Vector icon (`public/favicon.svg`), multi-size Windows ICO (`public/favicon.ico`).
+  - Standard PWA icons: 192x192 PNG (`pwa-192x192.png`) and 512x512 PNG (`pwa-512x512.png`).
+  - Adaptive Android maskable icon with safe margin (`pwa-maskable-512x512.png`).
+  - Apple touch icon: 180x180 PNG (`apple-touch-icon.png`).
+  - Generated 100% locally with zero external network dependencies or web APIs.
+- **4. Instant Theme Flash Prevention & Branded Splash**:
+  - Synchronous theme-detection script in `<head>` inspecting `localStorage` and `matchMedia` before DOM paint.
+  - Pure inline CSS and SVG loader in `index.html` inside `<div id="root">`, eliminated white flash on load, smoothly replaced once React 19 mounts.
+- **5. Client-Side Static SPA Routing**:
+  - Added `public/_redirects` (`/* /index.html 200`) for static hosts (Cloudflare Pages, Netlify).
+- **6. Service Worker Update Notification**:
+  - Registered through `useRegisterSW` in `Shell.tsx` with periodic 60-min checks.
+  - Prompts with a persistent snackbar: `"Update available — reload to apply latest changes"` and a `"Reload"` button invoking `updateServiceWorker(true)`.
+- **7. Deployment & Verification**:
+  - Complete Cloudflare Pages deployment documentation in `README.md`.
+  - Production build and preview verification (`npm run build`).
 
 ---
 
-### [ ] Stage 5: Sync & Offline Resilience
-- Change log integration in repository layers.
+### [ ] Stage 5: Markdown, Tasks & Sync (Upcoming)
+- Markdown preview rendering & live toggle.
+- Checklist / task blocks inside notes (reusing attachments with `ownerType: 'task'`).
+- People mentions (`@name`).
 - Peer-to-peer / user-owned cloud synchronization (WebRTC / WebDAV).
