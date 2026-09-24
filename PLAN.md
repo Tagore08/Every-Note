@@ -295,4 +295,23 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
   - Merge and replace import support with undo restoration.
   - Danger zone reports and wipes focus sessions upon typed confirmation.
 
+---
+
+### [x] Stage 11: Android App Wrapper (Capacitor 8)
+- **1. Native Packaging Setup**:
+  - `@capacitor/core`, `@capacitor/cli`, and `@capacitor/android` v8.x installed.
+  - `capacitor.config.ts`: `appId: 'com.tagore.notes'`, `appName: 'Notes App'`, `webDir: 'dist'`.
+  - Plugins: `@capacitor/splash-screen` and `@capacitor/status-bar`.
+- **2. Android Prerequisites & API 36 Target**:
+  - Gradle `8.14.3` + AGP `8.13.0` running on JDK 21.
+  - Verified `android/variables.gradle` targets `compileSdkVersion = 36` and `targetSdkVersion = 36` (Android 16), satisfying Google Play's deadline requirement.
+- **3. Web vs Native Runtime Adaptations**:
+  - Disabled service worker on native platform (`Capacitor.isNativePlatform()`), purging any existing WebView SW registrations.
+  - Dismiss native splash screen on React mount using `SplashScreen.hide()`.
+  - Styled status bar via `StatusBar.setStyle()` and `StatusBar.setBackgroundColor()` matching light/dark theme.
+  - IndexedDB operates unmodified and 100% locally inside the native WebView.
+- **4. Verified Build & Documentation**:
+  - Successfully compiled debug APK via `./gradlew assembleDebug` (`android/app/build/outputs/apk/debug/app-debug.apk`).
+  - Created `ANDROID.md` detailing debug APK builds, keystore creation, Gradle signing, release `.aab` generation, bundletool verification, and version bumping.
+
 

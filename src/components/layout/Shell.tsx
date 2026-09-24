@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { Capacitor } from '@capacitor/core';
+import { SplashScreen } from '@capacitor/splash-screen';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { useTheme } from '../../hooks/useTheme';
 import { useInboxCount, notesRepo } from '../../db/notesRepo';
@@ -296,12 +299,51 @@ const mobileBottomNavItems: NavItem[] = [
 
 export function Shell() {
   const navigate = useNavigate();
-  const { mode, toggleTheme } = useTheme();
+  const { mode, toggleTheme, isDark } = useTheme();
   const { showSnackbar } = useSnackbar();
   const location = useLocation();
   const inboxCount = useInboxCount();
   const todoCount = useTodoCount();
   const [isCaptureOpen, setIsCaptureOpen] = useState(false);
+
+  const isNative = Capacitor.isNativePlatform();
+
+  // Clean up any stale Service Workers if running in native WebView
+  useEffect(() => {
+    if (isNative && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const reg of registrations) {
+          reg.unregister();
+        }
+      });
+    }
+  }, [isNative]);
+
+  // Native Splash Screen: hide when React shell is ready
+  useEffect(() => {
+    if (isNative) {
+      SplashScreen.hide().catch((err) => {
+        console.debug('Failed to hide splash screen:', err);
+      });
+    }
+  }, [isNative]);
+
+  // Native Status Bar styling matching light/dark theme
+  useEffect(() => {
+    if (isNative) {
+      StatusBar.setStyle({
+        style: isDark ? Style.Dark : Style.Light,
+      }).catch((err) => {
+        console.debug('StatusBar setStyle failed:', err);
+      });
+
+      StatusBar.setBackgroundColor({
+        color: isDark ? '#0f172a' : '#f8fafc',
+      }).catch((err) => {
+        console.debug('StatusBar setBackgroundColor failed:', err);
+      });
+    }
+  }, [isNative, isDark]);
 
   // Initialize reminder scheduler loop on app mount
   useEffect(() => {
@@ -309,14 +351,18 @@ export function Shell() {
     return cleanup;
   }, [navigate]);
 
-
-  // PWA Service Worker Registration & Update Notification
+  // PWA Service Worker Registration & Update Notification (Web only)
   const {
     needRefresh: [needRefresh],
     offlineReady: [offlineReady],
     updateServiceWorker,
   } = useRegisterSW({
+    immediate: !isNative,
     onRegistered(r) {
+      if (isNative) {
+        r?.unregister();
+        return;
+      }
       if (r) {
         // Check for updates periodically (e.g. every 60 minutes)
         setInterval(() => {
@@ -325,11 +371,14 @@ export function Shell() {
       }
     },
     onRegisterError(error) {
-      console.warn('SW registration failed:', error);
+      if (!isNative) {
+        console.warn('SW registration failed:', error);
+      }
     },
   });
 
   useEffect(() => {
+    if (isNative) return;
     if (needRefresh) {
       showSnackbar({
         message: 'Update available — reload to apply latest changes',
@@ -342,16 +391,17 @@ export function Shell() {
         duration: 30000,
       });
     }
-  }, [needRefresh, showSnackbar, updateServiceWorker]);
+  }, [needRefresh, showSnackbar, updateServiceWorker, isNative]);
 
   useEffect(() => {
+    if (isNative) return;
     if (offlineReady) {
       showSnackbar({
         message: 'App is cached and ready for offline use',
         duration: 4000,
       });
     }
-  }, [offlineReady, showSnackbar]);
+  }, [offlineReady, showSnackbar, isNative]);
 
   // Auto-purge trashed notes older than 30 days on app mount
   useEffect(() => {
@@ -527,8 +577,8 @@ export function Shell() {
           </button>
 
           <div className="px-3 py-1 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between">
-            <span>Stage 4 · Offline PWA</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500" title="Offline PWA Ready" />
+            <span>{isNative ? 'Android App · Offline' : 'Stage 4 · Offline PWA'}</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500" title={isNative ? 'Android App Ready' : 'Offline PWA Ready'} />
           </div>
         </div>
       </aside>
