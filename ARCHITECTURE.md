@@ -27,15 +27,17 @@ notes-app/
     │   ├── attachment.ts    # Attachment interfaces (Attachment, AttachmentKind)
     │   ├── task.ts          # Task data contracts (Task, TaskStatus, TaskPriority)
     │   ├── event.ts         # Calendar event and recurrence occurrence contracts
-    │   └── person.ts        # Person contracts (Person interface, contact info, notes)
+    │   ├── person.ts        # Person contracts (Person interface, contact info, notes)
+    │   └── habit.ts         # Habit & HabitLog data contracts (streaks, frequency)
     ├── db/
-    │   ├── database.ts      # Dexie 4 database class, schema versions 1-5, and DB singleton
+    │   ├── database.ts      # Dexie 4 database class, schema versions 1-6, and DB singleton
     │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes
     │   ├── attachmentsRepo.ts# Data access layer & reactive hooks for attachments & storage
     │   ├── tasksRepo.ts     # Data access layer & reactive hooks for tasks
     │   ├── eventsRepo.ts    # Data access layer & recurrence occurrence engine
     │   ├── upcomingRepo.ts  # Cross-entity date horizon aggregation engine
-    │   └── peopleRepo.ts    # Data access layer & reactive hooks for people
+    │   ├── peopleRepo.ts    # Data access layer & reactive hooks for people
+    │   └── habitsRepo.ts    # Data access layer, streak calculation engine & reactive hooks
     ├── context/
     │   └── SnackbarContext.tsx # Global ~6s snackbar & undo notification system
     ├── hooks/
@@ -55,20 +57,23 @@ notes-app/
         │   ├── PersonAvatar.tsx      # Photo and initial circle avatar component
         │   ├── PersonBadge.tsx       # Reusable inline person chip with clear action
         │   └── PersonPickerModal.tsx # Modal to pick or create person inline
+        ├── habits/
+        │   └── HabitEditorModal.tsx  # Create/edit habit modal, emoji picker, frequency choice
         └── views/
-            ├── UpcomingView.tsx     # Home screen date horizon aggregation
+            ├── UpcomingView.tsx     # Home screen date horizon aggregation & Today habits row
             ├── InboxView.tsx        # Quick-capture triage view with "File as note" & soft delete
             ├── NotesView.tsx        # Active notes list (pinned-first, tag filter, long-press pin, card actions)
             ├── NoteEditorView.tsx   # Full-screen editor (~500ms debounced autosave, attachments, tag pills, person picker)
             ├── TasksView.tsx        # Todo & Done segmentation, quick-add, completion gestures
             ├── CalendarView.tsx     # Month grid, day agenda, recurring series math, reminders
+            ├── HabitsView.tsx       # Habits screen, big tap-to-complete circles, streak counts, 30-day dot grid
             ├── PeopleView.tsx       # Avatar/initial circles, instant name filter, new person dialog
             ├── PersonProfileView.tsx# Editable profile, local photo Blob, auto-lists of events/tasks/notes, delete forever
             ├── SearchView.tsx       # Instant as-you-type local search with highlighted snippets
             ├── TagsView.tsx         # Tag cloud with usage frequencies and filtered note browser
             ├── ArchiveView.tsx      # Archive management and unarchive browser
             ├── TrashView.tsx        # Soft-deleted notes browser, restore, and permanent deletion dialogs
-            └── SettingsView.tsx     # Theme choice, storage quota estimate, JSON backup export/import (v5), and danger zone
+            └── SettingsView.tsx     # Theme choice, storage quota estimate, JSON backup export/import (v6), and danger zone
 ```
 
 ---
@@ -120,6 +125,19 @@ this.version(5).stores({
   tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
   events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
   people: '++id, name, trashedAt, createdAt, updatedAt',
+});
+```
+
+### Schema Version 6 (Stage 9 Habits Extension)
+```ts
+this.version(6).stores({
+  notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+  attachments: '++id, noteId, ownerType, kind, createdAt',
+  tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+  events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+  people: '++id, name, trashedAt, createdAt, updatedAt',
+  habits: '++id, name, archived, createdAt, updatedAt',
+  habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
 });
 ```
 
@@ -204,6 +222,30 @@ this.version(5).stores({
 | `updatedAt` | `Date` | `updatedAt` | Last modification timestamp index |
 | `trashedAt` | `Date \| null` (optional) | `trashedAt` | Soft-delete timestamp index |
 
+#### Table: `habits` (Realized in Stage 9)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `name` | `string` | `name` | Habit display name index |
+| `iconOrEmoji` | `string` (optional) | — | Emoji icon (e.g. 💧, 🏃, 📚) |
+| `frequency` | `'daily' \| 'weekdays' \| 'weekly'` | — | Repetition cadence schedule |
+| `targetDaysPerWeek` | `number` (optional) | — | Target days for weekly frequency (1-7, default 3) |
+| `reminderAt` | `string \| null` (optional) | — | Optional 24-hr reminder time string (HH:MM) |
+| `archived` | `boolean` | `archived` | Archival status index |
+| `createdAt` | `Date` | `createdAt` | Creation timestamp index |
+| `updatedAt` | `Date` | `updatedAt` | Last modification timestamp index |
+
+#### Table: `habitLogs` (Realized in Stage 9)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `habitId` | `number` | `habitId` | Parent habit ID reference index |
+| `date` | `string` | `date` | Local date string (`YYYY-MM-DD`) index |
+| `done` | `boolean` | `done` | Completion status index |
+| `value` | `number` (optional) | — | Numeric value for future numeric habit tracking |
+| `[habitId+date]` | `[number, string]` | `[habitId+date]` | Compound unique day lookup index |
+| `createdAt` | `Date` | `createdAt` | Creation timestamp index |
+
 > **CRITICAL Data-Model Rule**: An event's `startAt`/`endAt` represents a fixed scheduled time block. It is completely separate from a task's `dueAt`. These date fields are never merged or conflated.
 
 ### Versioning & Migrations Policy
@@ -218,13 +260,13 @@ this.version(5).stores({
 
 ## 3. Data Access & State Management Approach
 
-### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts`, `src/db/tasksRepo.ts`, `src/db/eventsRepo.ts`, `src/db/upcomingRepo.ts` & `src/db/peopleRepo.ts`)
+### Repository Pattern (`src/db/notesRepo.ts`, `src/db/attachmentsRepo.ts`, `src/db/tasksRepo.ts`, `src/db/eventsRepo.ts`, `src/db/upcomingRepo.ts`, `src/db/peopleRepo.ts` & `src/db/habitsRepo.ts`)
 - **Isolation**: Screens and UI components **never** call Dexie directly. All read queries and write mutations pass through the repository layer.
 - **Sync Extension Point**: The repository layer isolates all storage access. When cross-device sync is added in later stages, change log interception and conflict resolution will hook directly into the repos without modifying views.
-- **Cascading Deletions & Reference Cleanup**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Permanent person deletion cleans up references in linked events, tasks, and notes by setting `personId: null` in a single Dexie transaction. Tasks and events linked via informational references are never destroyed when notes are removed.
+- **Cascading Deletions & Reference Cleanup**: Permanent note deletions (`deletePermanently`, `emptyTrash`, `purgeOldTrash`, `deleteAllNotes`) automatically cascade and purge associated attachments. Permanent person deletion cleans up references in linked events, tasks, and notes by setting `personId: null` in a single Dexie transaction. Deleting a habit permanently cascades and clears all associated `habitLogs`.
 
 ### Reactive Reads
-- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`, `useOccurrencesForRange`, `useTasksDueForRange`, `useScheduledNotesForRange`, `useEvent`, `useUpcomingData`, `usePeople`, `usePerson`, `usePersonEvents`, `usePersonTasks`, `usePersonNotes`) backed by Dexie's `useLiveQuery`.
+- Components consume data via reactive hooks (`useInboxNotes`, `useActiveNotes`, `useArchivedNotes`, `useTrashNotes`, `useNote`, `useAttachments`, `useTodoTasks`, `useDoneTasks`, `useTodoCount`, `useTask`, `useOccurrencesForRange`, `useTasksDueForRange`, `useScheduledNotesForRange`, `useEvent`, `useUpcomingData`, `usePeople`, `usePerson`, `usePersonEvents`, `usePersonTasks`, `usePersonNotes`, `useHabitsWithStats`, `useHabitsTodaySummary`) backed by Dexie's `useLiveQuery`.
 
 ---
 
@@ -374,6 +416,36 @@ this.version(5).stores({
    - Import restores base64 strings back into native Blobs with merge and replace support.
    - Settings danger zone reports people counts and wipes people data upon typed confirmation.
 
+### Stage 9: Habits
+1. **Dedicated Habits & HabitLogs Data Model (Schema Version 6)**:
+   - Dedicated `habits` table: `id`, `name`, `iconOrEmoji` (string), `frequency` ('daily' | 'weekdays' | 'weekly'), `targetDaysPerWeek` (number, for weekly), `reminderAt` (HH:MM string or null), `archived` (bool), `createdAt`, `updatedAt`.
+   - Dedicated `habitLogs` table: `id`, `habitId` (indexed), `date` ('YYYY-MM-DD' local date string), `done` (bool), `value` (optional number for future numeric habits), `createdAt`, with compound index `[habitId+date]`.
+   - Dedicated data access repository `src/db/habitsRepo.ts` with reactive hooks (`useHabitsWithStats`, `useHabitsTodaySummary`).
+2. **Habits Screen (`/habits`)**:
+   - Big tap-to-complete circles for today's habits: one tap toggles completion status for today with animated visual feedback.
+   - Streak counters: displays current streak (`🔥`) and all-time best streak (`🏆`).
+   - Last 30 days dot grid: 30-day historical timeline strip below each habit (emerald green dot = done, slate dot = not done, with hover date tooltips and today indicator).
+   - Card edit action opening `HabitEditorModal`.
+3. **Streak Calculation Engine (`calculateHabitStreaks`)**:
+   - Fully consolidated and commented in `src/db/habitsRepo.ts`:
+     - **daily**: consecutive days completed (today counts if done; if today is not yet done, streak stays alive based on yesterday).
+     - **weekdays**: consecutive weekdays (Mon-Fri) completed; weekends (Sat/Sun) do not break streaks nor are they required.
+     - **weekly**: consecutive weeks meeting `targetDaysPerWeek` (Mon-Sun); active week stays alive if previous week succeeded.
+4. **Create / Edit Habit Modal (`HabitEditorModal`)**:
+   - Clean, minimal dialog with habit name input, 30-emoji picker grid, cadence buttons ('daily', 'weekdays', 'weekly' with target days stepper), and optional HH:MM reminder time.
+   - Archive/unarchive toggle and permanent delete option with history wipe.
+5. **Archived Section**:
+   - Archiving hides habits from the active list while preserving historical logs.
+   - Collapsible "Archived Habits" section at the bottom of the screen with one-click unarchive.
+6. **Undo Snackbar Integration**:
+   - Reuses centralized `useSnackbar` from Stage 2: 6-second undo toast on toggling completion status with instant rollback.
+7. **Upcoming / Home Screen Integration (`UpcomingView`)**:
+   - "Today → Habits" row displaying "x of y completed" with progress indicator and 1-tap navigation to `/habits`.
+8. **Notification Reminders & Data Portability (Envelope Version 6)**:
+   - Habit reminders integrated into `reminderService.ts` checking HH:MM times on active habits if incomplete for today.
+   - JSON export and import envelopes upgraded to Version 6 including `habits` and `habitLogs` with merge/replace and undo rollback.
+   - Danger zone includes habits count and wipes habits + logs on typed confirmation.
+
 ---
 
 ## 5. Future Extension Points
@@ -384,13 +456,11 @@ this.version(5).stores({
 > - **Events & Calendar** (Stage 6): Fixed time blocks, recurrence series with exceptions, calendar month & agenda views, note scheduling, and local reminders.
 > - **Upcoming View** (Stage 7): Pure read-only home screen aggregation across events, tasks, and scheduled notes.
 > - **People** (Stage 8): Lightweight local people directory, local photo Blobs, cross-entity links to events, tasks, and notes, profile auto-lists, and inline person creation.
+> - **Habits** (Stage 9): Minimal daily/weekdays/weekly habit tracking, big tap-to-complete circles, streak calculation engine, last 30 days dot grid, Home screen integration, and local reminders.
 
 1. **Eisenhower Matrix View**
    - **Target**: 4-quadrant interactive visualization utilizing the existing `importance` and `urgency` task fields.
-2. **Habits**
-   - **Target**: Daily recurring tracker and streak counter.
-   - **DB Extension**: `habits` table (`++id, title, frequency, targetCount`) and `habit_logs` table (`++id, habitId, date, count`).
-3. **Sync**
+2. **Sync**
    - **Target**: Cross-device synchronization and backups without a centralized custodial backend.
    - **Design**: Integrated through repository layers with change-vector logging or CRDTs.
 

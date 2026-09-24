@@ -1,5 +1,7 @@
 import { eventsRepo } from '../db/eventsRepo';
 import { notesRepo } from '../db/notesRepo';
+import { habitsRepo, toLocalDateStr } from '../db/habitsRepo';
+import { db } from '../db/database';
 import { formatEventTime } from '../utils/format';
 
 const NOTIFIED_STORAGE_KEY = 'notes_app_notified_reminders_v1';
@@ -135,6 +137,49 @@ export async function checkDueReminders() {
           };
         } catch (e) {
           console.warn('Could not display note notification:', e);
+        }
+      }
+    }
+
+    // 3. Check Habits
+    const activeHabits = await habitsRepo.getActiveHabitsWithReminders();
+    const todayStr = toLocalDateStr();
+    for (const habit of activeHabits) {
+      if (!habit.id || !habit.reminderAt) continue;
+      const [hStr, mStr] = habit.reminderAt.split(':');
+      const habitRemDate = new Date();
+      habitRemDate.setHours(Number(hStr), Number(mStr), 0, 0);
+      const remTime = habitRemDate.getTime();
+      const key = `habit-${habit.id}-${todayStr}-${habit.reminderAt}`;
+
+      if (now >= remTime && now - remTime < maxPastWindowMs && !notifiedKeys.has(key)) {
+        // Check if habit is already completed today
+        const existingLog = await db.habitLogs.where({ habitId: habit.id, date: todayStr }).first();
+        if (existingLog && existingLog.done) {
+          continue;
+        }
+
+        notifiedKeys.add(key);
+        updated = true;
+
+        try {
+          const notification = new Notification(`Habit Reminder: ${habit.name}`, {
+            body: `Don't break your streak! Time to complete ${habit.name}.`,
+            icon: '/favicon.svg',
+            tag: key,
+          });
+
+          notification.onclick = () => {
+            window.focus();
+            if (navigateHandler) {
+              navigateHandler('/habits');
+            } else {
+              window.location.href = '/habits';
+            }
+            notification.close();
+          };
+        } catch (e) {
+          console.warn('Could not display habit notification:', e);
         }
       }
     }

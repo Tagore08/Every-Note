@@ -6,6 +6,7 @@ import { InboxView } from './components/views/InboxView';
 import { NotesView } from './components/views/NotesView';
 import { TasksView } from './components/views/TasksView';
 import { CalendarView } from './components/views/CalendarView';
+import { HabitsView } from './components/views/HabitsView';
 import { PeopleView } from './components/views/PeopleView';
 import { PersonProfileView } from './components/views/PersonProfileView';
 import { NoteEditorView } from './components/views/NoteEditorView';
@@ -27,6 +28,7 @@ export function App() {
           <Route path="notes/:id" element={<NoteEditorView />} />
           <Route path="tasks" element={<TasksView />} />
           <Route path="calendar" element={<CalendarView />} />
+          <Route path="habits" element={<HabitsView />} />
           <Route path="people" element={<PeopleView />} />
           <Route path="people/:id" element={<PersonProfileView />} />
           <Route path="search" element={<SearchView />} />

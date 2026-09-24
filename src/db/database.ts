@@ -4,6 +4,7 @@ import type { Attachment } from '../types/attachment';
 import type { Task } from '../types/task';
 import type { CalendarEvent } from '../types/event';
 import type { Person } from '../types/person';
+import type { Habit, HabitLog } from '../types/habit';
 
 export class AppDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
@@ -11,6 +12,8 @@ export class AppDatabase extends Dexie {
   tasks!: EntityTable<Task, 'id'>;
   events!: EntityTable<CalendarEvent, 'id'>;
   people!: EntityTable<Person, 'id'>;
+  habits!: EntityTable<Habit, 'id'>;
+  habitLogs!: EntityTable<HabitLog, 'id'>;
 
 
   constructor() {
@@ -63,6 +66,20 @@ export class AppDatabase extends Dexie {
       tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
       events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
       people: '++id, name, trashedAt, createdAt, updatedAt',
+    });
+
+    // Schema Version 6 (Stage 9: Habits)
+    // Fields indexed:
+    // - habits: ++id, name, archived, createdAt, updatedAt
+    // - habitLogs: ++id, habitId, date, done, [habitId+date], createdAt
+    this.version(6).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
     });
   }
 }

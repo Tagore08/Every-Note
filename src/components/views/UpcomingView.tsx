@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUpcomingData, type UpcomingItem } from '../../db/upcomingRepo';
 import { tasksRepo } from '../../db/tasksRepo';
+import { useHabitsTodaySummary } from '../../db/habitsRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { EventEditorModal } from '../calendar/EventEditorModal';
 import { TaskEditorModal } from '../tasks/TaskEditorModal';
@@ -12,6 +13,7 @@ export function UpcomingView() {
   const navigate = useNavigate();
   const { showUndo } = useSnackbar();
   const data = useUpcomingData();
+  const habitsSummary = useHabitsTodaySummary();
 
   // Modals for editing items tapped from the view
   const [selectedOccurrence, setSelectedOccurrence] = useState<EventOccurrence | null>(null);
@@ -89,6 +91,9 @@ export function UpcomingView() {
   }
   if (counts.overdueTasks > 0) {
     summaryParts.push(`${counts.overdueTasks} overdue`);
+  }
+  if (habitsSummary.total > 0) {
+    summaryParts.push(`${habitsSummary.completed}/${habitsSummary.total} habits`);
   }
   const summaryStr =
     summaryParts.length > 0 ? summaryParts.join(' · ') : 'All clear for today';
@@ -197,7 +202,7 @@ export function UpcomingView() {
         </p>
       </div>
 
-      {totalUpcoming === 0 ? (
+      {totalUpcoming === 0 && habitsSummary.total === 0 ? (
         /* Empty State */
         <div className="py-16 text-center space-y-3">
           <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 mx-auto flex items-center justify-center text-slate-400">
@@ -221,19 +226,65 @@ export function UpcomingView() {
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-2">
                 <span>Today</span>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
-                  {today.length}
+                  {today.length + (habitsSummary.total > 0 ? 1 : 0)}
                 </span>
               </h2>
             </div>
 
-            {today.length === 0 ? (
+            {/* Today → Habits row */}
+            {habitsSummary.total > 0 && (
+              <div
+                onClick={() => navigate('/habits')}
+                className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 hover:border-emerald-500/50 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-base">
+                    🎯
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wider font-bold text-emerald-600 dark:text-emerald-400">
+                      Today → Habits
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      {habitsSummary.completed} of {habitsSummary.total} completed
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                      habitsSummary.allDone
+                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {habitsSummary.allDone
+                      ? 'All done! 🎉'
+                      : `${habitsSummary.completed}/${habitsSummary.total}`}
+                  </span>
+                  <svg
+                    className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </div>
+              </div>
+            )}
+
+            {today.length === 0 && habitsSummary.total === 0 ? (
               <p className="text-xs text-slate-400 dark:text-slate-500 py-2 italic">
                 Nothing scheduled for today.
               </p>
             ) : (
-              <div className="space-y-2">
-                {today.map((item) => renderItemRow(item, false))}
-              </div>
+              today.length > 0 && (
+                <div className="space-y-2">
+                  {today.map((item) => renderItemRow(item, false))}
+                </div>
+              )
             )}
           </section>
 

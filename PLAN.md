@@ -233,7 +233,40 @@ A calm, lightning-fast, local-first personal knowledge base built with React 19,
 
 ---
 
-### [ ] Stage 9: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
+### [x] Stage 9: Habits
+- **1. Database Schema Extension (Version 6)**:
+  - New `habits` table in Dexie: `id`, `name`, `iconOrEmoji`, `frequency ('daily'|'weekdays'|'weekly')`, `targetDaysPerWeek`, `reminderAt`, `archived (bool)`, `createdAt`, `updatedAt`.
+  - New `habitLogs` table: `id`, `habitId`, `date ('YYYY-MM-DD')`, `done (bool)`, `value`, `createdAt`, with compound index `[habitId+date]`.
+  - Non-destructive Dexie schema evolution: Versions 1 through 6 preserved sequentially.
+  - Dedicated repository `src/db/habitsRepo.ts` with reactive hooks (`useHabitsWithStats`, `useHabitsTodaySummary`).
+- **2. Habits Screen (`/habits`)**:
+  - Big tap-to-complete circles for today's habits with instant visual feedback.
+  - Reactive streak counters: current streak (`🔥`) and all-time best streak (`🏆`).
+  - Last 30 days dot grid: 30-day timeline strip below each habit (emerald green = completed, slate = incomplete, hover tooltips with date, ring on today).
+  - Empty state with guided creation action.
+- **3. Consolidated Streak Calculation Engine (`calculateHabitStreaks`)**:
+  - Well-commented function in `src/db/habitsRepo.ts`.
+  - Daily: consecutive days done (today counts if done; alive from yesterday if not done yet).
+  - Weekdays: consecutive weekdays (Mon-Fri) done (weekends skipped).
+  - Weekly: consecutive weeks meeting `targetDaysPerWeek` (Mon-Sun).
+- **4. Create & Edit Habit Modal (`HabitEditorModal`)**:
+  - Habit name, 30-emoji picker grid, frequency choice ('daily', 'weekdays', 'weekly' with target days selector), optional reminder time (HH:MM).
+  - Archive/unarchive toggle and permanent delete option with history wipe.
+- **5. Archiving Flow**:
+  - Archiving hides habits from the active list while preserving all historical logs.
+  - Collapsible "Archived Habits" section at the bottom with one-click unarchive.
+- **6. Undo Snackbar Integration**:
+  - Connected to centralized `useSnackbar`: 6-second undo toast on toggling completion status with instant rollback.
+- **7. Upcoming / Home Screen Integration (`UpcomingView`)**:
+  - "Today → Habits" row displaying "x of y completed" with progress indicator and 1-tap navigation to `/habits`.
+- **8. Local Reminders & Data Portability (Envelope Version 6)**:
+  - Habit reminders checked in background via `reminderService.ts`.
+  - JSON backup export and import upgraded to Version 6 including `habits` and `habitLogs` with merge/replace and undo rollback.
+  - Settings danger zone reports habits count and wipes habits + logs on typed confirmation.
+
+---
+
+### [ ] Stage 10: Eisenhower Matrix, Markdown & Advanced Features (Upcoming)
 - Eisenhower Matrix 4-quadrant interactive visualization view (`urgent` x `important`).
 - Markdown preview rendering & live toggle in note editor.
 - Checklist / task blocks inside notes.

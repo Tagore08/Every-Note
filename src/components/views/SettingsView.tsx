@@ -6,6 +6,7 @@ import { attachmentsRepo } from '../../db/attachmentsRepo';
 import { tasksRepo } from '../../db/tasksRepo';
 import { eventsRepo } from '../../db/eventsRepo';
 import { peopleRepo } from '../../db/peopleRepo';
+import { habitsRepo } from '../../db/habitsRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -18,6 +19,7 @@ import type { Attachment } from '../../types/attachment';
 import type { Task } from '../../types/task';
 import type { CalendarEvent } from '../../types/event';
 import type { Person } from '../../types/person';
+import type { Habit, HabitLog } from '../../types/habit';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -36,6 +38,8 @@ interface BackupEnvelope {
   events?: CalendarEvent[];
   people?: ExportPerson[];
   attachments?: ExportAttachment[];
+  habits?: Habit[];
+  habitLogs?: HabitLog[];
   settings?: {
     theme?: string;
   };
@@ -142,6 +146,8 @@ export function SettingsView() {
       const allTasks = await tasksRepo.getAllTasksForExport();
       const allEvents = await eventsRepo.getAllEventsForExport();
       const allPeople = await peopleRepo.getAllPeopleForExport();
+      const allHabits = await habitsRepo.getAllHabitsForExport();
+      const allHabitLogs = await habitsRepo.getAllHabitLogsForExport();
       const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // Convert Blobs to base64 strings
@@ -193,13 +199,15 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 5, // Bumped to Version 5 for Stage 8 People
+        version: 6, // Bumped to Version 6 for Stage 9 Habits
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
         tasks: allTasks,
         events: allEvents,
         people: exportedPeople,
+        habits: allHabits,
+        habitLogs: allHabitLogs,
         attachments: exportedAttachments,
         settings: {
           theme: mode,
@@ -221,7 +229,7 @@ export function SettingsView() {
 
       const formattedFileSize = formatFileSize(blob.size);
       showSnackbar({
-        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allEvents.length} events, ${allPeople.length} people & ${allAttachments.length} attachments (${formattedFileSize}).`,
+        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allEvents.length} events, ${allPeople.length} people, ${allHabits.length} habits & ${allAttachments.length} attachments (${formattedFileSize}).`,
       });
     } catch (err) {
       console.error('Failed to export data:', err);
@@ -258,6 +266,8 @@ export function SettingsView() {
       let eventsArray: CalendarEvent[] = [];
       let peopleArray: ExportPerson[] = [];
       let attachmentsArray: ExportAttachment[] = [];
+      let habitsArray: Habit[] = [];
+      let habitLogsArray: HabitLog[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
 
@@ -277,6 +287,12 @@ export function SettingsView() {
         if ('attachments' in parsed && Array.isArray((parsed as BackupEnvelope).attachments)) {
           attachmentsArray = (parsed as BackupEnvelope).attachments ?? [];
         }
+        if ('habits' in parsed && Array.isArray((parsed as BackupEnvelope).habits)) {
+          habitsArray = (parsed as BackupEnvelope).habits ?? [];
+        }
+        if ('habitLogs' in parsed && Array.isArray((parsed as BackupEnvelope).habitLogs)) {
+          habitLogsArray = (parsed as BackupEnvelope).habitLogs ?? [];
+        }
       } else if (Array.isArray(parsed)) {
         notesArray = parsed;
       } else {
@@ -293,6 +309,8 @@ export function SettingsView() {
         events: eventsArray,
         people: peopleArray,
         attachments: attachmentsArray,
+        habits: habitsArray,
+        habitLogs: habitLogsArray,
       });
       setImportStrategy('merge');
     } catch (err) {
@@ -310,10 +328,12 @@ export function SettingsView() {
     if (!importCandidate) return;
 
     try {
-      // Snapshot existing tasks, events, people, and attachments before mutating (for undo)
+      // Snapshot existing tasks, events, people, habits, and attachments before mutating (for undo)
       const prevTasks = await tasksRepo.getAllTasksForExport();
       const prevEvents = await eventsRepo.getAllEventsForExport();
       const prevPeople = await peopleRepo.getAllPeopleForExport();
+      const prevHabits = await habitsRepo.getAllHabitsForExport();
+      const prevHabitLogs = await habitsRepo.getAllHabitLogsForExport();
       const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
 
       // 1. Import Notes
@@ -360,7 +380,18 @@ export function SettingsView() {
         importedPeopleCount = await peopleRepo.importPeople(restoredPeople, importStrategy);
       }
 
-      // 5. Import Attachments (if any in candidate)
+      // 5. Import Habits & Logs
+      let importedHabitsCount = 0;
+      if (importCandidate.habits && importCandidate.habits.length > 0) {
+        const { habitsCount } = await habitsRepo.importHabits(
+          importCandidate.habits,
+          importCandidate.habitLogs || [],
+          importStrategy
+        );
+        importedHabitsCount = habitsCount;
+      }
+
+      // 6. Import Attachments (if any in candidate)
       let importedAttachmentsCount = 0;
       if (importCandidate.attachments && importCandidate.attachments.length > 0) {
         const restoredAttachments: Attachment[] = [];
@@ -392,7 +423,7 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events, ${importedPeopleCount} people & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -406,6 +437,9 @@ export function SettingsView() {
           }
           if (importStrategy === 'replace' && prevPeople) {
             await peopleRepo.importPeople(prevPeople, 'replace');
+          }
+          if (importStrategy === 'replace' && prevHabits) {
+            await habitsRepo.importHabits(prevHabits, prevHabitLogs || [], 'replace');
           }
           if (importStrategy === 'replace' && prevAttachments) {
             await attachmentsRepo.importAttachments(prevAttachments, 'replace');
@@ -428,10 +462,11 @@ export function SettingsView() {
       await tasksRepo.deleteAllTasks();
       await eventsRepo.deleteAllEvents();
       await peopleRepo.deleteAllPeople();
+      await habitsRepo.deleteAllHabits();
       setShowDeleteAllModal(false);
       setDeleteConfirmationInput('');
       await loadStorageEstimate();
-      showSnackbar({ message: 'All notes, tasks, events, people, and attachments have been completely deleted.' });
+      showSnackbar({ message: 'All notes, tasks, events, people, habits, and attachments have been completely deleted.' });
     } catch (err) {
       console.error('Failed to delete all data:', err);
     }
@@ -897,7 +932,7 @@ export function SettingsView() {
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              This action permanently purges all notes, tasks, events, and attachments. To proceed, please type{' '}
+              This action permanently purges all notes, tasks, events, people, habits, and attachments. To proceed, please type{' '}
               <span className="font-mono font-bold text-red-600 dark:text-red-400">DELETE ALL</span> below:
             </p>
 
