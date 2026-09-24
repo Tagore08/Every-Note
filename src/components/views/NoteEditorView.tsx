@@ -10,6 +10,10 @@ import { AddLinkModal } from '../attachments/AddLinkModal';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
 import { LifeAreaPicker } from '../../features/areas/LifeAreaPicker';
+import { linksRepo } from '../../db/repos/linksRepo';
+import { WikilinkAutocomplete } from '../../features/notes/WikilinkAutocomplete';
+import { BacklinksPanel } from '../../features/notes/BacklinksPanel';
+import { LocalGraphPanel } from '../../features/notes/LocalGraphPanel';
 
 export function NoteEditorView() {
   const { id } = useParams<{ id: string }>();
@@ -45,6 +49,13 @@ export function NoteEditorView() {
   // Used to prevent re-initializing local state while typing
   const initialLoadDone = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reindexTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Wikilink autocomplete state
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isAutocompleteOpen, setIsAutocompleteOpen] = useState(false);
+  const [wikilinkQuery, setWikilinkQuery] = useState('');
+  const [wikilinkStartIndex, setWikilinkStartIndex] = useState<number | null>(null);
 
   // If navigating to /notes/new, instantly create a note and redirect to /notes/:id
   useEffect(() => {
@@ -84,7 +95,7 @@ export function NoteEditorView() {
     }
   }, [note]);
 
-  // Persist changes to Dexie with ~500ms debounce
+  // Persist changes to Dexie with ~500ms debounce + 800ms link reindexing
   const triggerAutoSave = useCallback(
     (
       newTitle: string,
@@ -140,10 +151,24 @@ export function NoteEditorView() {
           setSaveStatus('idle');
         }
       }, 500);
+
+      // Re-index outgoing wikilinks and claim unresolved incoming links (debounced 800ms per spec)
+      if (reindexTimer.current) {
+        clearTimeout(reindexTimer.current);
+      }
+      reindexTimer.current = setTimeout(async () => {
+        try {
+          await linksRepo.reindexNote(numericId);
+          if (newTitle) {
+            await linksRepo.claimUnresolvedLinks(numericId, newTitle);
+          }
+        } catch (err) {
+          console.error('Failed to reindex links:', err);
+        }
+      }, 800);
     },
     [numericId, scheduledAtStr, reminderTimeStr, personId, lifeAreaId]
   );
-
 
   // Flush any pending save on unmount
   useEffect(() => {
@@ -151,17 +176,62 @@ export function NoteEditorView() {
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
       }
+      if (reindexTimer.current) {
+        clearTimeout(reindexTimer.current);
+      }
     };
   }, []);
+
+  const checkWikilinkTrigger = (text: string, cursorIndex: number) => {
+    const textBeforeCursor = text.slice(0, cursorIndex);
+    const match = textBeforeCursor.match(/\[\[([^\]\n]*)$/);
+    if (match) {
+      setIsAutocompleteOpen(true);
+      setWikilinkQuery(match[1]);
+      setWikilinkStartIndex(cursorIndex - match[0].length);
+    } else {
+      setIsAutocompleteOpen(false);
+      setWikilinkQuery('');
+      setWikilinkStartIndex(null);
+    }
+  };
 
   const handleTitleChange = (val: string) => {
     setTitle(val);
     triggerAutoSave(val, content, tags, isPinned, isArchived);
   };
 
-  const handleContentChange = (val: string) => {
+  const handleContentChange = (val: string, cursorIndex?: number) => {
     setContent(val);
     triggerAutoSave(title, val, tags, isPinned, isArchived);
+    if (cursorIndex !== undefined) {
+      checkWikilinkTrigger(val, cursorIndex);
+    }
+  };
+
+  const handleSelectWikilink = (targetTitle: string) => {
+    if (wikilinkStartIndex === null || !textareaRef.current) return;
+    const cursorIndex = textareaRef.current.selectionStart || 0;
+
+    const before = content.slice(0, wikilinkStartIndex);
+    const after = content.slice(cursorIndex);
+    const inserted = `[[${targetTitle}]]`;
+    const nextContent = before + inserted + after;
+
+    setContent(nextContent);
+    setIsAutocompleteOpen(false);
+    setWikilinkQuery('');
+    setWikilinkStartIndex(null);
+
+    triggerAutoSave(title, nextContent, tags, isPinned, isArchived);
+
+    const nextCursor = (before + inserted).length;
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(nextCursor, nextCursor);
+      }
+    }, 10);
   };
 
   const handleTogglePin = async () => {
@@ -741,19 +811,40 @@ export function NoteEditorView() {
           />
         </div>
 
-        {/* Content Textarea */}
-        <textarea
-          value={content}
-          onChange={(e) => handleContentChange(e.target.value)}
-          placeholder="Start writing plain text... (paste images with Ctrl+V, drag & drop files, or use Attach)"
-          className="flex-1 w-full bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-700 text-base leading-relaxed resize-none focus:outline-none min-h-[300px]"
-        />
+        {/* Content Textarea & Wikilink Autocomplete */}
+        <div className="relative flex-1 flex flex-col">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => handleContentChange(e.target.value, e.target.selectionStart)}
+            onKeyUp={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
+            onClick={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
+            placeholder="Start writing... (type [[ to link another note, paste images with Ctrl+V, drag & drop files)"
+            className="flex-1 w-full bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-700 text-base leading-relaxed resize-none focus:outline-none min-h-[300px]"
+          />
+
+          <WikilinkAutocomplete
+            query={wikilinkQuery}
+            isOpen={isAutocompleteOpen}
+            onSelect={handleSelectWikilink}
+            onClose={() => setIsAutocompleteOpen(false)}
+            currentNoteId={numericId}
+          />
+        </div>
 
         {/* Attachments Section */}
         <AttachmentGallery
           attachments={attachments ?? []}
           onDeleteAttachment={handleDeleteAttachment}
         />
+
+        {/* Backlinks & Local Graph Panels */}
+        {note && (
+          <>
+            <BacklinksPanel note={note} />
+            {numericId && <LocalGraphPanel noteId={numericId} noteTitle={title || 'Untitled'} />}
+          </>
+        )}
       </div>
 
       {/* Add Link Dialog */}

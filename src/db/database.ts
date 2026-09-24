@@ -9,6 +9,7 @@ import type { FocusSession } from '../types/focus';
 import type { AppMeta } from '../types/meta';
 import type { LifeArea } from '../types/area';
 import type { Template } from '../types/template';
+import type { NoteLink } from '../types/link';
 
 export class AppDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
@@ -22,6 +23,7 @@ export class AppDatabase extends Dexie {
   appMeta!: EntityTable<AppMeta, 'key'>;
   lifeAreas!: EntityTable<LifeArea, 'id'>;
   templates!: EntityTable<Template, 'id'>;
+  links!: EntityTable<NoteLink, 'id'>;
 
   constructor(dbName = 'NotesAppDatabase') {
     super(dbName);
@@ -173,6 +175,30 @@ export class AppDatabase extends Dexie {
       await meta.put({
         key: 'schemaVersion',
         value: 10,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 11 (v2 Phase 2B: Wikilinks, Backlinks & Graph - links table)
+    // All tables re-declared with complete index lists per safety contract
+    this.version(11).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
+      appMeta: 'key',
+      lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+      templates: '++id, kind, name, usageCount, createdAt',
+      links: '++id, sourceId, targetId, targetTitle',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 11,
         updatedAt: Date.now(),
       });
     });

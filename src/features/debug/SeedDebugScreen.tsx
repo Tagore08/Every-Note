@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { db } from '../../db/database';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { linksRepo } from '../../db/repos/linksRepo';
 
 const SAMPLE_TAGS = ['work', 'ideas', 'health', 'reading', 'finance', 'project', 'weekly', 'quotes'];
 const SAMPLE_TOPICS = [
@@ -22,6 +23,71 @@ export function SeedDebugScreen() {
   const [status, setStatus] = useState<string | null>(null);
 
   const totalNotes = useLiveQuery(() => db.notes.count()) ?? 0;
+  const totalLinks = useLiveQuery(() => db.links.count()) ?? 0;
+
+  const handleSeedGraph = async () => {
+    try {
+      setIsSeeding(true);
+      const startTime = performance.now();
+      setStatus('Generating 1,000 notes with 2,000 wikilinks...');
+      const notesToInsert = [];
+      const now = Date.now();
+
+      for (let i = 1; i <= 1000; i++) {
+        const target1 = ((i * 7) % 1000) + 1;
+        const target2 = ((i * 13) % 1000) + 1;
+        const areaId = (i % 7) + 1;
+
+        notesToInsert.push({
+          title: `Graph Benchmark #${i}`,
+          content: `Benchmark note #${i}.\n\nReferences [[Graph Benchmark #${target1}]] for architecture and [[Graph Benchmark #${target2}|module info]] for implementation details.`,
+          tags: [SAMPLE_TAGS[i % SAMPLE_TAGS.length]],
+          pinned: false,
+          archived: false,
+          inbox: false,
+          lifeAreaId: areaId,
+          trashedAt: null,
+          scheduledAt: null,
+          reminderAt: null,
+          personId: null,
+          createdAt: new Date(now - i * 60000),
+          updatedAt: new Date(now - i * 30000),
+        });
+      }
+
+      await db.notes.bulkAdd(notesToInsert);
+      setStatus('Re-indexing 2,000 wikilinks across database...');
+      const res = await linksRepo.reindexAllLinks();
+      const elapsed = Math.round(performance.now() - startTime);
+
+      setStatus(
+        `Successfully seeded 1,000 notes + ${res.createdLinks} links in ${elapsed}ms! Open /graph to test rendering.`
+      );
+    } catch (err: any) {
+      setStatus(`Error seeding graph: ${err?.message || String(err)}`);
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  const handleClearGraph = async () => {
+    try {
+      setIsSeeding(true);
+      setStatus('Removing graph benchmark notes...');
+      const testNotes = await db.notes
+        .filter((n) => n.title.startsWith('Graph Benchmark #'))
+        .toArray();
+      const testIds = testNotes.map((n) => n.id!);
+
+      await db.notes.bulkDelete(testIds);
+      await linksRepo.reindexAllLinks();
+      setStatus(`Removed ${testIds.length} graph benchmark notes and reset links.`);
+    } catch (err: any) {
+      setStatus(`Error clearing graph notes: ${err?.message || String(err)}`);
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   const handleSeed = async () => {
     try {
@@ -137,6 +203,41 @@ export function SeedDebugScreen() {
             className="py-2.5 px-4 rounded-pill bg-surface-2 hover:bg-surface text-danger text-sm font-semibold border border-border transition-colors cursor-pointer disabled:opacity-50 min-h-[44px]"
           >
             Clear Test Notes
+          </button>
+        </div>
+      </div>
+
+      {/* Phase 2B Performance Gate Card */}
+      <div className="p-6 rounded-card bg-surface border border-border shadow-card space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-ink">Graph Benchmark Dataset</div>
+            <p className="text-xs text-ink-muted mt-0.5">
+              1,000 notes + 2,000 interconnected wikilinks to verify d3-force & canvas render speed.
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-ink-muted">Total Links</div>
+            <div className="text-2xl font-bold text-accent mt-0.5">{totalLinks}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <button
+            type="button"
+            onClick={handleSeedGraph}
+            disabled={isSeeding}
+            className="flex-1 py-2.5 px-4 rounded-pill bg-accent text-accent-ink text-sm font-semibold hover:opacity-90 active:scale-95 transition-all shadow-card cursor-pointer disabled:opacity-50 min-h-[44px]"
+          >
+            {isSeeding ? 'Benchmarking...' : 'Seed 1,000 Notes + 2,000 Links'}
+          </button>
+          <button
+            type="button"
+            onClick={handleClearGraph}
+            disabled={isSeeding}
+            className="py-2.5 px-4 rounded-pill bg-surface-2 hover:bg-surface text-danger text-sm font-semibold border border-border transition-colors cursor-pointer disabled:opacity-50 min-h-[44px]"
+          >
+            Clear Graph Benchmark
           </button>
         </div>
       </div>

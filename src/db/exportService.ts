@@ -9,6 +9,7 @@ import type { Habit, HabitLog } from '../types/habit';
 import type { FocusSession } from '../types/focus';
 import type { LifeArea } from '../types/area';
 import type { Template } from '../types/template';
+import type { NoteLink } from '../types/link';
 
 export interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -32,6 +33,7 @@ export interface BackupEnvelope {
   focusSessions?: FocusSession[];
   lifeAreas?: LifeArea[];
   templates?: Template[];
+  links?: NoteLink[];
   settings?: {
     theme?: string;
     flags?: Record<string, boolean>;
@@ -122,11 +124,13 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
     });
   }
 
+  const allLinks = await db.links.toArray();
+
   const currentTheme = localStorage.getItem('notes_theme_mode') || 'system';
   const currentFlags = getStoredFlags();
 
   return {
-    version: 10,
+    version: 11,
     app: 'notes-app',
     exportedAt: new Date().toISOString(),
     notes: allNotes,
@@ -139,6 +143,7 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
     attachments: exportedAttachments,
     lifeAreas: allLifeAreas,
     templates: allTemplates,
+    links: allLinks,
     settings: {
       theme: currentTheme,
       flags: currentFlags,

@@ -10,6 +10,7 @@ import { habitsRepo } from '../../db/habitsRepo';
 import { focusRepo } from '../../db/focusRepo';
 import { areasRepo } from '../../db/repos/areasRepo';
 import { templatesRepo } from '../../db/repos/templatesRepo';
+import { linksRepo } from '../../db/repos/linksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -211,7 +212,7 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 10,
+        version: 11,
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
@@ -476,6 +477,9 @@ export function SettingsView() {
           importStrategy
         );
       }
+
+      // Re-index all wikilinks after import so the graph & backlinks are fully resolved
+      await linksRepo.reindexAllLinks();
 
       setImportCandidate(null);
       await loadStorageEstimate();

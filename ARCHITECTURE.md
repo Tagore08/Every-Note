@@ -48,9 +48,9 @@ notes-app/
     │   ├── habit.ts         # Habit & HabitLog data contracts (streaks, frequency)
     │   └── focus.ts         # Focus session data contract (FocusSession interface)
     ├── db/
-    │   ├── database.ts      # Dexie 4 database class, schema versions 1-10 (append-only)
-    │   ├── backupGate.ts    # Pre-upgrade OPFS and JSON file backup safety gate (TARGET_VERSION=10)
-    │   ├── exportService.ts # JSON envelope serialization & import engine (Envelope v10)
+    │   ├── database.ts      # Dexie 4 database class, schema versions 1-11 (append-only)
+    │   ├── backupGate.ts    # Pre-upgrade OPFS and JSON file backup safety gate (TARGET_VERSION=11)
+    │   ├── exportService.ts # JSON envelope serialization & import engine (Envelope v11)
     │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes and journal entries
     │   ├── tasksRepo.ts     # Data access layer & subtask tree manipulation hooks
     │   ├── eventsRepo.ts    # Data access layer & recurrence occurrence engine
@@ -60,17 +60,22 @@ notes-app/
     │   ├── focusRepo.ts     # Data access layer & reactive hooks for focus sessions
     │   └── repos/
     │       ├── areasRepo.ts # Life Areas CRUD, sortOrder, and idempotent default seeding
-    │       └── templatesRepo.ts # Starter templates CRUD, usage counts, and default seeding
+    │       ├── templatesRepo.ts # Starter templates CRUD, usage counts, and default seeding
+    │       └── linksRepo.ts # Wikilinks extraction, resolution, chunked reindexing & graph data
     ├── lib/
     │   ├── date.ts          # Timezone-safe local calendar date formatting & manipulation
     │   ├── date.test.ts     # Vitest tests for local date string & midnight boundaries
     │   ├── journal.ts       # Pure streak calculation and "On This Day" filtering algorithms
     │   ├── journal.test.ts  # Vitest tests for journal streak & past-year matching
+    │   ├── wikilinks.ts     # [[wikilinks]] parser, title normalization & context snippet extractor
+    │   ├── wikilinks.test.ts # Vitest tests for wikilink extraction, aliases, headings, snippets
     │   ├── quickAdd.ts      # Natural language parser using chrono-node (#tag, @Area, dates)
     │   └── quickAdd.test.ts # 13 Vitest unit tests for quick-add NLP logic
     ├── features/
     │   ├── areas/           # LifeAreaPicker & AreasScreen management
     │   ├── journal/         # JournalScreen, MoodRow, PromptChips, OnThisDayCard, JournalPromptSection
+    │   ├── graph/           # GraphScreen, GraphCanvas (d3-force + canvas 2D), GraphFiltersSheet, graphData
+    │   ├── notes/           # WikilinkAutocomplete, BacklinksPanel, LocalGraphPanel
     │   ├── templates/       # TemplatePickerSheet & TemplatesScreen management
     │   ├── inbox/           # InboxAnalyticsHeader & FileAsSheet triage
     │   ├── settings/        # LabsScreen feature flags management
@@ -311,6 +316,16 @@ this.version(7).stores({
 | `minutes` | `number` | — | Session duration in minutes (e.g. 15, 25, 45, 60) |
 | `taskId` | `number \| null` (optional) | `taskId` | Optional associated task reference index |
 | `createdAt` | `Date` | `createdAt` | Creation timestamp index |
+
+#### Table: `links` (Realized in Phase 2B)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `sourceId` | `number` | `sourceId` | Source note containing the [[wikilink]] |
+| `targetId` | `number \| null` | `targetId` | Resolved note ID, or null if unresolved |
+| `targetTitle` | `string` | `targetTitle` | Raw extracted link title |
+| `context` | `string` | — | Snippet of ±60 characters around link in source note |
+| `createdAt` | `number` | — | Epoch timestamp of link extraction |
 
 > **CRITICAL Data-Model Rule**: An event's `startAt`/`endAt` represents a fixed scheduled time block. It is completely separate from a task's `dueAt`. These date fields are never merged or conflated.
 
@@ -904,15 +919,118 @@ this.version(7).stores({
 
 ---
 
-## 8. Future Extension Points
+## 8. v2.0 Phase 2B: Wikilinks, Backlinks & Knowledge Graph (Feature Flag: 'graph')
 
-1. **Phase 2B: Knowledge Graph & Bi-directional Links**
-   - Notes `[[wikilinks]]` parsing, inline autocompletion, forward links index, backlinks panel, and interactive force-directed graph canvas.
-2. **Phase 3: Calendar Pro**
+### 1. Safety Contract & Dexie Schema Version 11
+- **Append-Only Schema Evolution**:
+  - Schema changes adhere strictly to §0 Safety Contract.
+  - Version 11 adds the `links` table and re-declares all 12 table schemas with **complete index sets**.
+  - New table `links: '++id, sourceId, targetId, targetTitle'`.
+- **Complete Version 11 Index Declaration**:
+  ```ts
+  this.version(11).stores({
+    notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+    attachments: '++id, noteId, ownerType, kind, createdAt',
+    tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+    events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+    people: '++id, name, trashedAt, createdAt, updatedAt',
+    habits: '++id, name, archived, createdAt, updatedAt',
+    habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+    focusSessions: '++id, startedAt, taskId, createdAt',
+    appMeta: 'key',
+    lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+    templates: '++id, kind, name, usageCount, createdAt',
+    links: '++id, sourceId, targetId, targetTitle',
+  }).upgrade(async (tx) => {
+    const meta = tx.table('appMeta');
+    await meta.put({
+      key: 'schemaVersion',
+      value: 11,
+      updatedAt: Date.now(),
+    });
+  });
+  ```
+- **Pre-Upgrade Backup Gate (`src/db/backupGate.ts`)**:
+  - `TARGET_VERSION = 11` ensures auto-backup to JSON and OPFS runs before schema migration.
+- **Backup & Restore v11 Envelope (`src/db/exportService.ts` & `src/components/views/SettingsView.tsx`)**:
+  - Envelope bumped to Version 11, including `links` table in export/import and auto-reindexing on import completion.
+
+### 2. Wikilink Parsing Engine (`src/lib/wikilinks.ts`)
+- **Regular Expression**:
+  `const WIKILINK_RE = /\[\[([^\[\]|#]+)(?:#([^\[\]|]*))?(?:\|([^\[\]]*))?\]\]/g;`
+  - Captures `rawTitle`, optional `#heading` anchor, and optional `|alias` display label.
+- **Title Normalization**:
+  - `normalizeTitle(title)`: Trims, lowercases, and collapses inner whitespace (`\s+` -> `' '`), ensuring resilient cross-note link resolution.
+- **Context Snippet Extraction**:
+  - `extractContextSnippet(content, index, length, 60)` extracts `±60` characters around link matches, normalizing newlines and adding ellipsis indicators.
+
+### 3. Links Repository & Chunked Reindexing (`src/db/repos/linksRepo.ts`)
+- **Single Note Reindex (`reindexNote`)**:
+  - Clears previous outgoing links where `sourceId === noteId`.
+  - Extracts wikilinks, normalizes targets, and matches against existing active notes by title or journalDate.
+  - Generates resolved (`targetId: number`) or unresolved (`targetId: null`) links with surrounding context.
+- **Chunked Database Reindex (`reindexAllLinks`)**:
+  - Processes notes in batches of 50, yielding to the browser event loop with `setTimeout(0)` to prevent UI jank.
+  - Automatically triggered on first launch after Schema v11 upgrade via `appMeta` key `links_reindexed_v11`.
+- **Claim Flow (`claimUnresolvedLinks`)**:
+  - When a note is created or renamed, automatically scans unresolved links matching the new title and resolves them.
+- **Reactive Hooks**:
+  - `useBacklinks(noteId)`: Reactive incoming backlinks with source note entities.
+  - `useUnresolvedBacklinks(title)`: Incoming unlinked mentions eligible for 1-click claiming.
+  - `useOutgoingLinks(noteId)`: Outgoing links with resolution status.
+  - `useAllGraphData()`: Complete dataset of active notes and resolved edges for force-directed visualization.
+
+### 4. Editor Integration (`NoteEditorView.tsx`)
+- **Typing Popup (`src/features/notes/WikilinkAutocomplete.tsx`)**:
+  - Typing `[[` immediately triggers the floating autocomplete popup.
+  - Real-time prefix and substring ranking across existing notes and journal entries, capped at 8 rows.
+  - Full keyboard navigation (ArrowUp, ArrowDown, Enter, Tab, Escape) and touch support.
+  - Affordance to create new target note directly from the autocomplete dropdown.
+- **Debounced Link Reindexing**:
+  - Automatically calls `linksRepo.reindexNote(numericId)` debounced at 800ms after typing stops, decoupled from the 500ms note content save.
+- **Backlinks Panel (`src/features/notes/BacklinksPanel.tsx`)**:
+  - Collapsible section under the editor displaying "Linked in N notes".
+  - Shows source note title, context snippet with bolded target match, and tap-to-navigate.
+  - Shows unclaimed mentions with a "Claim all" button.
+  - Outgoing links chip row with solid chips for resolved notes and dashed chips with "+" affordance for uncreated target notes.
+- **In-Note Local Graph Panel (`src/features/notes/LocalGraphPanel.tsx`)**:
+  - Embedded interactive mini-graph showing depth 1 or depth 2 connections to the current note.
+  - Centered active note with accent halo.
+  - "Expand" button jumps directly to the full-screen `/graph/:noteId` route.
+
+### 5. Knowledge Graph Screen (`/graph` & `/graph/:noteId`)
+- **Simulation Engine (`d3-force`)**:
+  - Standard force simulation:
+    - `forceLink`: distance 60 (or 80 in local view)
+    - `forceManyBody`: strength -120 (or -180 in local view)
+    - `forceCollide`: radius by node degree + 5px padding
+    - `forceCenter`: origin centering
+- **Hardware-Accelerated Canvas 2D (`src/features/graph/components/GraphCanvas.tsx`)**:
+  - High-DPI handling via `devicePixelRatio` scaling.
+  - Node radius: `3 + degree` (scaled for regular vs journal notes).
+  - Node color: resolved dynamically from Life Area palette `--area-1` … `--area-8` (fallback neutral slate).
+  - Accent halos for today's journal entries and focused local nodes.
+  - Pan and pinch-to-zoom (touch + mouse wheel) with cursor-centered scaling.
+  - Node dragging reheats simulation with `alpha(0.3)`.
+  - Tap/click opens inspection tooltip; double-click navigates to note.
+  - Simulation automatically cools down and halts RAF render loop when alpha < 0.005, saving CPU and battery.
+- **Performance Cap & Filters (`src/features/graph/components/GraphFiltersSheet.tsx`)**:
+  - Caps global graph rendering at 500 highest-degree nodes when datasets exceed 500 notes.
+  - Filter by Life Area, by tag, include/exclude journals toggle, and orphan node suppression.
+
+### 6. Performance Gate Verification (`SeedDebugScreen.tsx`)
+- Benchmarking tool generating 1,000 interconnected notes and 2,000 wikilinks.
+- Graph canvas renders smoothly in < 1.5s with 60fps pan/zoom interactions.
+
+---
+
+## 9. Future Extension Points
+
+1. **Phase 3: Calendar Pro**
    - Multi-day time-grid agenda engine, drag-and-drop event resizing, time block conflicts, and external calendar (.ics) sync.
-3. **Phase 4: Routines & Enhanced Today**
+2. **Phase 4: Routines & Enhanced Today**
    - Morning/evening routines execution checklist, streak protection, and unified Today dashboard combining habits, tasks, routines, and journal.
-4. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
+3. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
    - Pressure-sensitive vector canvas, timer presets, 12-month habit heatmaps, and local insights hub.
 
 

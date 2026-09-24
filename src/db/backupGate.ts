@@ -7,7 +7,7 @@ import {
 } from './exportService';
 
 const SCHEMA_VERSION_KEY = 'notes_app_schema_version';
-const TARGET_VERSION = 10; // Phase 2A schema version
+const TARGET_VERSION = 11; // Phase 2B schema version
 
 export interface BackupGateStatus {
   isUpgrading: boolean;

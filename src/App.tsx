@@ -5,6 +5,7 @@ import { AppShell } from './app/AppShell';
 import { PageSkeleton } from './design/ui/Skeleton';
 import { areasRepo } from './db/repos/areasRepo';
 import { templatesRepo } from './db/repos/templatesRepo';
+import { linksRepo } from './db/repos/linksRepo';
 
 // Code-split all feature views using React.lazy per EXPANSION_PLAN §6 & §7
 const TodayView = lazy(() =>
@@ -18,6 +19,9 @@ const NotesView = lazy(() =>
 );
 const NoteEditorView = lazy(() =>
   import('./components/views/NoteEditorView').then((m) => ({ default: m.NoteEditorView }))
+);
+const GraphScreen = lazy(() =>
+  import('./features/graph/GraphScreen').then((m) => ({ default: m.GraphScreen }))
 );
 const TasksView = lazy(() =>
   import('./components/views/TasksView').then((m) => ({ default: m.TasksView }))
@@ -87,6 +91,7 @@ export function App() {
     // Seed defaults for Life Areas and Templates idempotently on first load
     areasRepo.seedDefaults().catch((err) => console.error('Failed to seed areas:', err));
     templatesRepo.seedDefaults().catch((err) => console.error('Failed to seed templates:', err));
+    linksRepo.ensureInitialReindex().catch((err) => console.error('Failed to ensure links reindex:', err));
   }, []);
 
   return (
@@ -107,6 +112,8 @@ export function App() {
             <Route path="journal/:date" element={<JournalScreen />} />
             <Route path="notes" element={<NotesView />} />
             <Route path="notes/:id" element={<NoteEditorView />} />
+            <Route path="graph" element={<GraphScreen />} />
+            <Route path="graph/:noteId" element={<GraphScreen />} />
             <Route path="tasks" element={<TasksView />} />
             <Route path="matrix" element={<EisenhowerMatrixView />} />
             <Route path="calendar" element={<CalendarView />} />
