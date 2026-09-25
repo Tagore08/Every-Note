@@ -133,4 +133,61 @@ describe('Habit Streak Engine (Phase 6)', () => {
       expect(res.bestStreak).toBe(1);
     });
   });
+
+  describe('Custom Days Habits', () => {
+    // 2026-09-21: Mon (1)
+    // 2026-09-22: Tue (2)
+    // 2026-09-23: Wed (3)
+    // 2026-09-24: Thu (4)
+    // 2026-09-25: Fri (5)
+    // 2026-09-26: Sat (6)
+    // 2026-09-27: Sun (0)
+    // 2026-09-28: Mon (1)
+    const mwfHabit = {
+      id: 1,
+      name: 'Gym',
+      frequency: 'custom' as const,
+      customDays: [1, 3, 5], // Mon, Wed, Fri
+      archived: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('calculates current streak when all scheduled days are completed', () => {
+      const logs = makeLogs(['2026-09-21', '2026-09-23', '2026-09-25']); // Mon, Wed, Fri
+      const res = habitsRepo.calculateHabitStreaks(mwfHabit, logs, '2026-09-25');
+      expect(res.currentStreak).toBe(3);
+      expect(res.bestStreak).toBe(3);
+    });
+
+    it('maintains streak on rest days', () => {
+      const logs = makeLogs(['2026-09-21', '2026-09-23', '2026-09-25']); // Mon, Wed, Fri
+      // Check on Saturday 2026-09-26 (rest day)
+      const resSat = habitsRepo.calculateHabitStreaks(mwfHabit, logs, '2026-09-26');
+      expect(resSat.currentStreak).toBe(3);
+
+      // Check on Sunday 2026-09-27 (rest day)
+      const resSun = habitsRepo.calculateHabitStreaks(mwfHabit, logs, '2026-09-27');
+      expect(resSun.currentStreak).toBe(3);
+    });
+
+    it('gives grace period on scheduled day before completing it', () => {
+      const logs = makeLogs(['2026-09-21', '2026-09-23']); // Mon, Wed completed
+      // On Friday 2026-09-25 (not completed yet today)
+      const res = habitsRepo.calculateHabitStreaks(mwfHabit, logs, '2026-09-25');
+      expect(res.currentStreak).toBe(2);
+    });
+
+    it('breaks streak when a scheduled custom day was missed', () => {
+      const logs = makeLogs([
+        '2026-09-21', // Mon (done)
+        // Wed 2026-09-23 missed!
+        '2026-09-25', // Fri (done)
+      ]);
+      const res = habitsRepo.calculateHabitStreaks(mwfHabit, logs, '2026-09-25');
+      expect(res.currentStreak).toBe(1);
+      expect(res.bestStreak).toBe(1);
+    });
+  });
 });
+

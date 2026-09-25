@@ -4,6 +4,7 @@ import type {
   Habit,
   HabitLog,
   HabitFrequency,
+  HabitTimeOfDay,
   HabitStreakResult,
   HabitWithStats,
 } from '../types/habit';
@@ -231,9 +232,10 @@ export function calculateHabitStreaks(
   // -------------------------------------------------------------
   // 3. WEEKLY FREQUENCY (Target days per week, Mon-Sun)
   // -------------------------------------------------------------
-  const targetDays =
-    targetDaysSetting && targetDaysSetting >= 1 && targetDaysSetting <= 7 ? targetDaysSetting
-      : 3;
+  if (frequency === 'weekly' || (frequency as string) === 'weekly_target') {
+    const targetDays =
+      targetDaysSetting && targetDaysSetting >= 1 && targetDaysSetting <= 7 ? targetDaysSetting
+        : 3;
 
   // Group done dates by Monday of their week
   const weekDoneCount = new Map<string, number>();
@@ -288,8 +290,101 @@ export function calculateHabitStreaks(
     cursorMonday = addDays(cursorMonday, 7);
   }
 
-  bestStreak = Math.max(bestStreak, currentStreak);
-  return { currentStreak, bestStreak };
+    bestStreak = Math.max(bestStreak, currentStreak);
+    return { currentStreak, bestStreak };
+  }
+
+  // -------------------------------------------------------------
+  // 4. CUSTOM DAYS FREQUENCY
+  // -------------------------------------------------------------
+  if (frequency === 'custom') {
+    const customDaysArr = (typeof habitOrFreq === 'object' && Array.isArray(habitOrFreq.customDays) && habitOrFreq.customDays.length > 0)
+      ? habitOrFreq.customDays
+      : [1, 2, 3, 4, 5];
+    const customDaysSet = new Set(customDaysArr);
+    const isCustomDay = (d: Date) => customDaysSet.has(d.getDay());
+
+    let currentStreak = 0;
+
+    if (isCustomDay(today)) {
+      if (doneDates.has(todayStr)) {
+        currentStreak = 1;
+        let checkDate = addDays(today, -1);
+        while (true) {
+          if (isCustomDay(checkDate)) {
+            if (doneDates.has(toLocalDateStr(checkDate))) {
+              currentStreak++;
+            } else {
+              break;
+            }
+          }
+          checkDate = addDays(checkDate, -1);
+        }
+      } else {
+        let prevDay = addDays(today, -1);
+        while (!isCustomDay(prevDay)) {
+          prevDay = addDays(prevDay, -1);
+        }
+        if (doneDates.has(toLocalDateStr(prevDay))) {
+          currentStreak = 1;
+          let checkDate = addDays(prevDay, -1);
+          while (true) {
+            if (isCustomDay(checkDate)) {
+              if (doneDates.has(toLocalDateStr(checkDate))) {
+                currentStreak++;
+              } else {
+                break;
+              }
+            }
+            checkDate = addDays(checkDate, -1);
+          }
+        }
+      }
+    } else {
+      let lastScheduled = addDays(today, -1);
+      while (!isCustomDay(lastScheduled)) {
+        lastScheduled = addDays(lastScheduled, -1);
+      }
+      if (doneDates.has(toLocalDateStr(lastScheduled))) {
+        currentStreak = 1;
+        let checkDate = addDays(lastScheduled, -1);
+        while (true) {
+          if (isCustomDay(checkDate)) {
+            if (doneDates.has(toLocalDateStr(checkDate))) {
+              currentStreak++;
+            } else {
+              break;
+            }
+          }
+          checkDate = addDays(checkDate, -1);
+        }
+      }
+    }
+
+    const sortedDates = Array.from(doneDates).sort();
+    const earliest = parseLocalDateStr(sortedDates[0]);
+    let bestStreak = 0;
+    let run = 0;
+    let cursor = earliest;
+
+    while (cursor <= today) {
+      if (isCustomDay(cursor)) {
+        const cStr = toLocalDateStr(cursor);
+        if (doneDates.has(cStr)) {
+          run++;
+          if (run > bestStreak) bestStreak = run;
+        } else {
+          run = 0;
+        }
+      }
+      cursor = addDays(cursor, 1);
+    }
+
+    bestStreak = Math.max(bestStreak, currentStreak);
+    return { currentStreak, bestStreak };
+  }
+
+  return { currentStreak: 0, bestStreak: 0 };
 }
 
 /**
@@ -325,6 +420,8 @@ export const habitsRepo = {
     iconOrEmoji?: string;
     frequency: HabitFrequency;
     targetDaysPerWeek?: number;
+    customDays?: number[];
+    timeOfDay?: HabitTimeOfDay;
     reminderAt?: string | null;
   }): Promise<Habit> {
     const now = new Date();
@@ -334,6 +431,9 @@ export const habitsRepo = {
       frequency: draft.frequency,
       targetDaysPerWeek:
         draft.frequency === 'weekly' ? Math.max(1, Math.min(7, draft.targetDaysPerWeek || 3)) : undefined,
+      customDays:
+        draft.frequency === 'custom' ? (draft.customDays && draft.customDays.length > 0 ? draft.customDays : [1, 2, 3, 4, 5]) : undefined,
+      timeOfDay: draft.timeOfDay || 'anytime',
       reminderAt: draft.reminderAt || null,
       archived: false,
       createdAt: now,
@@ -392,6 +492,20 @@ export const habitsRepo = {
       await db.habitLogs.where('habitId').equals(id).delete();
       await db.habits.delete(id);
     });
+  },
+
+  /**
+   * Retrieves any routines that reference this habit.
+   */
+  async getRoutinesReferencingHabit(habitId: number): Promise<any[]> {
+    try {
+      const routines = await db.routines.toArray();
+      return routines.filter((r) =>
+        r.items && r.items.some((it: any) => it.kind === 'habit' && it.refId === habitId)
+      );
+    } catch {
+      return [];
+    }
   },
 
   /**
@@ -747,10 +861,14 @@ export function useHabitsWithStats(): {
         if (!habit.id) continue;
         const habitLogs = logsByHabit.get(habit.id) || [];
 
-        // Check if done today
+        // Check if done today & map all logs
         const doneDates = new Set<string>();
+        const logsMap: Record<string, boolean> = {};
         for (const log of habitLogs) {
-          if (log.done) doneDates.add(log.date);
+          if (log.done) {
+            doneDates.add(log.date);
+            logsMap[log.date] = true;
+          }
         }
         const isDoneToday = doneDates.has(todayStr);
 
@@ -766,6 +884,7 @@ export function useHabitsWithStats(): {
           currentStreak,
           bestStreak,
           last30Days,
+          logsMap,
         };
 
         if (habit.archived) {

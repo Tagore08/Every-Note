@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Habit, HabitFrequency } from '../../types/habit';
+import type { Habit, HabitFrequency, HabitTimeOfDay } from '../../types/habit';
 
 interface HabitEditorModalProps {
   isOpen: boolean;
@@ -10,6 +10,8 @@ interface HabitEditorModalProps {
     iconOrEmoji: string;
     frequency: HabitFrequency;
     targetDaysPerWeek?: number;
+    customDays?: number[];
+    timeOfDay?: HabitTimeOfDay;
     reminderAt?: string | null;
   }) => Promise<void>;
   onArchiveToggle?: (id: number, archived: boolean) => Promise<void>;
@@ -22,6 +24,23 @@ const COMMON_EMOJIS = [
   '🚶', '🎨', '🎸', '🍳', '🧹', '🌿',
   '☀️', '🧠', '🍵', '🍎', '📝', '🏊',
   '🧗', '🚭', '💡', '✨', '💪', '🌱',
+];
+
+const DAYS_OF_WEEK = [
+  { day: 1, label: 'M', name: 'Mon' },
+  { day: 2, label: 'T', name: 'Tue' },
+  { day: 3, label: 'W', name: 'Wed' },
+  { day: 4, label: 'T', name: 'Thu' },
+  { day: 5, label: 'F', name: 'Fri' },
+  { day: 6, label: 'S', name: 'Sat' },
+  { day: 0, label: 'S', name: 'Sun' },
+];
+
+const TIME_BUCKETS: { value: HabitTimeOfDay; label: string; icon: string }[] = [
+  { value: 'anytime', label: 'Anytime', icon: '✨' },
+  { value: 'morning', label: 'Morning', icon: '🌅' },
+  { value: 'afternoon', label: 'Afternoon', icon: '☀️' },
+  { value: 'evening', label: 'Evening', icon: '🌙' },
 ];
 
 export function HabitEditorModal({
@@ -38,6 +57,8 @@ export function HabitEditorModal({
   const [iconOrEmoji, setIconOrEmoji] = useState('🎯');
   const [frequency, setFrequency] = useState<HabitFrequency>('daily');
   const [targetDaysPerWeek, setTargetDaysPerWeek] = useState(3);
+  const [customDays, setCustomDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [timeOfDay, setTimeOfDay] = useState<HabitTimeOfDay>('anytime');
   const [reminderAt, setReminderAt] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -49,12 +70,16 @@ export function HabitEditorModal({
         setIconOrEmoji(habit.iconOrEmoji || '🎯');
         setFrequency(habit.frequency);
         setTargetDaysPerWeek(habit.targetDaysPerWeek || 3);
+        setCustomDays(habit.customDays && habit.customDays.length > 0 ? habit.customDays : [1, 2, 3, 4, 5]);
+        setTimeOfDay(habit.timeOfDay || 'anytime');
         setReminderAt(habit.reminderAt || '');
       } else {
         setName('');
         setIconOrEmoji('🎯');
         setFrequency('daily');
         setTargetDaysPerWeek(3);
+        setCustomDays([1, 2, 3, 4, 5]);
+        setTimeOfDay('anytime');
         setReminderAt('');
       }
       setShowDeleteConfirm(false);
@@ -63,6 +88,16 @@ export function HabitEditorModal({
   }, [isOpen, habit]);
 
   if (!isOpen) return null;
+
+  const toggleCustomDay = (day: number) => {
+    if (customDays.includes(day)) {
+      if (customDays.length > 1) {
+        setCustomDays(customDays.filter((d) => d !== day));
+      }
+    } else {
+      setCustomDays([...customDays, day].sort());
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +110,8 @@ export function HabitEditorModal({
         iconOrEmoji: iconOrEmoji || '🎯',
         frequency,
         targetDaysPerWeek: frequency === 'weekly' ? targetDaysPerWeek : undefined,
+        customDays: frequency === 'custom' ? customDays : undefined,
+        timeOfDay,
         reminderAt: reminderAt.trim() || null,
       });
       onClose();
@@ -183,11 +220,11 @@ export function HabitEditorModal({
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Frequency
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
                 onClick={() => setFrequency('daily')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                className={`py-2 px-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center ${
                   frequency === 'daily'
                     ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-700 dark:text-blue-300'
                     : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -198,7 +235,7 @@ export function HabitEditorModal({
               <button
                 type="button"
                 onClick={() => setFrequency('weekdays')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                className={`py-2 px-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center ${
                   frequency === 'weekdays'
                     ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-700 dark:text-blue-300'
                     : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -209,13 +246,24 @@ export function HabitEditorModal({
               <button
                 type="button"
                 onClick={() => setFrequency('weekly')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                className={`py-2 px-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center ${
                   frequency === 'weekly'
                     ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-700 dark:text-blue-300'
                     : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
                 Weekly
+              </button>
+              <button
+                type="button"
+                onClick={() => setFrequency('custom')}
+                className={`py-2 px-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center ${
+                  frequency === 'custom'
+                    ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-700 dark:text-blue-300'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                }`}
+              >
+                Custom Days
               </button>
             </div>
 
@@ -243,6 +291,64 @@ export function HabitEditorModal({
                 </div>
               </div>
             )}
+
+            {/* Custom days of week picker (when custom selected) */}
+            {frequency === 'custom' && (
+              <div className="pt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                    Active days: <strong>{customDays.length} days / week</strong>
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    Rest days won't break streaks
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 justify-between">
+                  {DAYS_OF_WEEK.map(({ day, label, name: dayName }) => {
+                    const isSelected = customDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => toggleCustomDay(day)}
+                        title={dayName}
+                        className={`w-9 h-9 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-400'
+                            : 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-blue-400'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Time Bucket (Morning / Afternoon / Evening / Anytime) */}
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Time of Day
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {TIME_BUCKETS.map((tb) => (
+                <button
+                  key={tb.value}
+                  type="button"
+                  onClick={() => setTimeOfDay(tb.value)}
+                  className={`py-2 px-2 rounded-xl text-xs font-semibold border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                    timeOfDay === tb.value
+                      ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-700 dark:text-blue-300 ring-1 ring-blue-400'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span className="text-base">{tb.icon}</span>
+                  <span>{tb.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Optional Reminder Time */}

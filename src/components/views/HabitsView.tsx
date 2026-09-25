@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFlag } from '../../app/flags';
 import {
@@ -8,7 +8,38 @@ import {
 } from '../../db/habitsRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { HabitEditorModal } from '../habits/HabitEditorModal';
-import type { Habit, HabitWithStats, HabitFrequency } from '../../types/habit';
+import { Heatmap } from '../../design/ui/Heatmap';
+import type { Habit, HabitWithStats, HabitFrequency, HabitTimeOfDay } from '../../types/habit';
+
+type FilterTimeBucket = 'all' | 'morning' | 'afternoon' | 'evening' | 'anytime';
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function formatHabitSchedule(habit: Habit): string {
+  if (habit.frequency === 'daily') return 'Daily';
+  if (habit.frequency === 'weekdays') return 'Mon - Fri';
+  if (habit.frequency === 'weekly') return `${habit.targetDaysPerWeek || 3}x / week`;
+  if (habit.frequency === 'custom') {
+    if (!habit.customDays || habit.customDays.length === 0) return 'Custom';
+    if (habit.customDays.length === 7) return 'Daily';
+    return habit.customDays.map((d) => DAY_NAMES[d]).join(', ');
+  }
+  return 'Daily';
+}
+
+function getTimeBucketBadge(timeOfDay?: HabitTimeOfDay): { label: string; icon: string } {
+  switch (timeOfDay) {
+    case 'morning':
+      return { label: 'Morning', icon: '🌅' };
+    case 'afternoon':
+      return { label: 'Afternoon', icon: '☀️' };
+    case 'evening':
+      return { label: 'Evening', icon: '🌙' };
+    case 'anytime':
+    default:
+      return { label: 'Anytime', icon: '✨' };
+  }
+}
 
 export function HabitsView() {
   const navigate = useNavigate();
@@ -21,10 +52,12 @@ export function HabitsView() {
     completedTodayCount,
   } = useHabitsWithStats();
 
-  // Modals state
+  // Modals & filter state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [selectedBucket, setSelectedBucket] = useState<FilterTimeBucket>('all');
+  const [expandedHeatmaps, setExpandedHeatmaps] = useState<Record<number, boolean>>({});
 
   const handleOpenCreate = () => {
     setEditingHabit(null);
@@ -36,11 +69,26 @@ export function HabitsView() {
     setIsModalOpen(true);
   };
 
+  const toggleHeatmap = (habitId: number) => {
+    setExpandedHeatmaps((prev) => ({ ...prev, [habitId]: !prev[habitId] }));
+  };
+
+  const handleToggleHabitDate = async (habitId: number, dateStr: string) => {
+    try {
+      const isDone = await habitsRepo.toggleHabitDate(habitId, dateStr);
+      showSnackbar({ message: isDone ? 'Marked as completed' : 'Marked as incomplete' });
+    } catch (err) {
+      console.error('Failed to toggle habit date:', err);
+    }
+  };
+
   const handleSaveHabit = async (draft: {
     name: string;
     iconOrEmoji: string;
     frequency: HabitFrequency;
     targetDaysPerWeek?: number;
+    customDays?: number[];
+    timeOfDay?: HabitTimeOfDay;
     reminderAt?: string | null;
   }) => {
     if (editingHabit?.id) {
@@ -94,8 +142,43 @@ export function HabitsView() {
   const progressPercent =
     totalActive > 0 ? Math.round((completedTodayCount / totalActive) * 100) : 0;
 
+  // Time bucket counts & filtering
+  const bucketCounts = useMemo(() => {
+    const counts: Record<FilterTimeBucket, number> = {
+      all: activeHabits.length,
+      morning: 0,
+      afternoon: 0,
+      evening: 0,
+      anytime: 0,
+    };
+    for (const h of activeHabits) {
+      const bucket = h.timeOfDay || 'anytime';
+      if (bucket in counts) {
+        counts[bucket]++;
+      }
+    }
+    return counts;
+  }, [activeHabits]);
+
+  const filteredHabits = useMemo(() => {
+    if (selectedBucket === 'all') return activeHabits;
+    return activeHabits.filter((h) => (h.timeOfDay || 'anytime') === selectedBucket);
+  }, [activeHabits, selectedBucket]);
+
+  // Top streak highlight
+  const topStreakHabit = useMemo(() => {
+    if (activeHabits.length === 0) return null;
+    const sorted = [...activeHabits].sort((a, b) => b.currentStreak - a.currentStreak);
+    return sorted[0]?.currentStreak > 0 ? sorted[0] : null;
+  }, [activeHabits]);
+
+  // SVG circular ring properties
+  const radius = 30;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - progressPercent / 100);
+
   return (
-    <div className="max-w-3xl mx-auto space-y-8 pb-16">
+    <div className="max-w-3xl mx-auto space-y-6 pb-16">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -110,7 +193,7 @@ export function HabitsView() {
         <button
           type="button"
           onClick={handleOpenCreate}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 active:scale-95 text-white transition-all shadow-sm cursor-pointer self-start sm:self-auto"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 active:scale-95 text-white transition-all shadow-sm cursor-pointer self-start sm:self-auto"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <line x1="12" y1="5" x2="12" y2="19" />
@@ -120,34 +203,122 @@ export function HabitsView() {
         </button>
       </div>
 
-      {/* Today's Progress Card */}
+      {/* Today's Progress Card with Progress Ring */}
       {totalActive > 0 && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-950/40 dark:via-emerald-950/20 dark:to-transparent border border-emerald-500/20 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">✨</span>
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                Today's Progress
-              </span>
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-950/40 dark:via-emerald-950/20 dark:to-transparent border border-emerald-500/20 shadow-xs">
+          <div className="flex items-center gap-5">
+            {/* Circular Progress Ring */}
+            <div className="relative flex items-center justify-center shrink-0">
+              <svg className="w-18 h-18 -rotate-90 transform" viewBox="0 0 72 72">
+                <circle
+                  cx="36"
+                  cy="36"
+                  r={radius}
+                  stroke="currentColor"
+                  strokeWidth="6"
+                  className="text-slate-200 dark:text-slate-800/80"
+                  fill="transparent"
+                />
+                <circle
+                  cx="36"
+                  cy="36"
+                  r={radius}
+                  stroke="currentColor"
+                  strokeWidth="6"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeDashoffset}
+                  strokeLinecap="round"
+                  className="text-emerald-500 transition-all duration-700 ease-out"
+                  fill="transparent"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                  {progressPercent}%
+                </span>
+              </div>
             </div>
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
-              {completedTodayCount} of {totalActive} completed ({progressPercent}%)
-            </span>
-          </div>
 
-          {/* Progress bar */}
-          <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700/60 overflow-hidden">
-            <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
+            {/* Stats Breakdown */}
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">✨</span>
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Today's Progress
+                  </span>
+                </div>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                  {completedTodayCount} of {totalActive} completed
+                </span>
+              </div>
 
-          {progressPercent === 100 && (
-            <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              All habits completed for today! Keep the streak alive! 🔥
-            </p>
-          )}
+              {/* Progress bar line */}
+              <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700/60 overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-0.5">
+                {progressPercent === 100 ? (
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    All habits completed today! Keep the momentum going! 🔥
+                  </span>
+                ) : (
+                  <span>
+                    {totalActive - completedTodayCount} {totalActive - completedTodayCount === 1 ? 'habit' : 'habits'} remaining today
+                  </span>
+                )}
+
+                {topStreakHabit && (
+                  <span className="hidden sm:inline font-semibold text-amber-600 dark:text-amber-400">
+                    🔥 Top streak: {topStreakHabit.currentStreak} {topStreakHabit.frequency === 'weekly' ? 'wks' : 'days'} ({topStreakHabit.name})
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Time Bucket Navigation Pills */}
+      {totalActive > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+          {[
+            { id: 'all', label: 'All', icon: '📋', count: bucketCounts.all },
+            { id: 'morning', label: 'Morning', icon: '🌅', count: bucketCounts.morning },
+            { id: 'afternoon', label: 'Afternoon', icon: '☀️', count: bucketCounts.afternoon },
+            { id: 'evening', label: 'Evening', icon: '🌙', count: bucketCounts.evening },
+            { id: 'anytime', label: 'Anytime', icon: '✨', count: bucketCounts.anytime },
+          ].map((bucket) => {
+            const isSelected = selectedBucket === bucket.id;
+            return (
+              <button
+                key={bucket.id}
+                type="button"
+                onClick={() => setSelectedBucket(bucket.id as FilterTimeBucket)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isSelected
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                }`}
+              >
+                <span>{bucket.icon}</span>
+                <span>{bucket.label}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    isSelected
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {bucket.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -173,18 +344,30 @@ export function HabitsView() {
             Create your first habit
           </button>
         </div>
+      ) : filteredHabits.length === 0 ? (
+        <div className="py-12 text-center space-y-3 bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+          <span className="text-2xl">
+            {selectedBucket === 'morning' ? '🌅' : selectedBucket === 'afternoon' ? '☀️' : selectedBucket === 'evening' ? '🌙' : '✨'}
+          </span>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            No habits scheduled for {selectedBucket}.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSelectedBucket('all')}
+            className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer"
+          >
+            View all habits
+          </button>
+        </div>
       ) : (
         <div className="space-y-4">
-          {activeHabits.map((habit) => {
+          {filteredHabits.map((habit) => {
             const isDone = habit.isDoneToday;
-            const freqLabel =
-              habit.frequency === 'daily'
-                ? 'Daily'
-                : habit.frequency === 'weekdays'
-                  ? 'Weekdays'
-                  : `${habit.targetDaysPerWeek || 3}x / week`;
-
+            const freqLabel = formatHabitSchedule(habit);
+            const timeBadge = getTimeBucketBadge(habit.timeOfDay);
             const unitLabel = habit.frequency === 'weekly' ? 'wk' : 'd';
+            const isHeatmapExpanded = Boolean(habit.id && expandedHeatmaps[habit.id]);
 
             return (
               <div
@@ -221,7 +404,7 @@ export function HabitsView() {
                       )}
                     </button>
 
-                    {/* Habit Name & Frequency / Reminder Info */}
+                    {/* Habit Name & Badges */}
                     <div
                       className={`min-w-0 ${isHabitAnalytics ? 'cursor-pointer group/title' : ''}`}
                       onClick={() => {
@@ -248,10 +431,19 @@ export function HabitsView() {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap text-xs text-slate-500 dark:text-slate-400">
+                        {/* Time bucket badge */}
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium flex items-center gap-1">
+                          <span>{timeBadge.icon}</span>
+                          <span>{timeBadge.label}</span>
+                        </span>
+
+                        {/* Frequency badge */}
                         <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium">
                           {freqLabel}
                         </span>
+
+                        {/* Reminder badge */}
                         {habit.reminderAt && (
                           <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium flex items-center gap-1">
                             <span>⏰</span>
@@ -277,7 +469,7 @@ export function HabitsView() {
                         <span>{habit.currentStreak} {unitLabel}</span>
                       </div>
                       <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                        Best: {habit.bestStreak} {unitLabel}
+                        🏆 Best: {habit.bestStreak} {unitLabel}
                       </div>
                     </div>
 
@@ -315,7 +507,7 @@ export function HabitsView() {
                 {/* Mobile Streaks Bar (visible on small screens) */}
                 <div className="flex sm:hidden items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-slate-800/80">
                   <div className="flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400">
-                    <span>🔥 Current Streak:</span>
+                    <span>🔥 Current:</span>
                     <span>{habit.currentStreak} {unitLabel}</span>
                   </div>
                   <div className="text-slate-400 dark:text-slate-500 font-medium">
@@ -323,11 +515,28 @@ export function HabitsView() {
                   </div>
                 </div>
 
-                {/* Bottom Section: Last 30 Days Dot Grid */}
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+                {/* Bottom Section: 30-day dots + Heatmap expand toggle */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
                   <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-                    <span>30 days history</span>
-                    <span>Today</span>
+                    <span>30 days activity</span>
+                    {habit.id && (
+                      <button
+                        type="button"
+                        onClick={() => toggleHeatmap(habit.id!)}
+                        className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>{isHeatmapExpanded ? 'Hide Heatmap' : 'Year Heatmap'}</span>
+                        <svg
+                          className={`w-3.5 h-3.5 transition-transform ${isHeatmapExpanded ? 'rotate-180' : ''}`}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
 
                   {/* 30 Dots Grid */}
@@ -348,6 +557,21 @@ export function HabitsView() {
                       />
                     ))}
                   </div>
+
+                  {/* Expandable GitHub-style Contribution Graph */}
+                  {isHeatmapExpanded && habit.id && (
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 animate-in fade-in duration-200">
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-1">
+                        52-week contribution graph (tap any square to view or toggle)
+                      </p>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-2 overflow-x-auto">
+                        <Heatmap
+                          logs={habit.logsMap || {}}
+                          onToggleDate={(d) => handleToggleHabitDate(habit.id!, d)}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );

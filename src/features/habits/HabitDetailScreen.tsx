@@ -25,6 +25,11 @@ export function HabitDetailScreen() {
     return await db.habitLogs.where('habitId').equals(habitId).toArray();
   }, [habitId]);
 
+  const referencingRoutines = useLiveQuery(async () => {
+    if (!habitId) return [];
+    return await habitsRepo.getRoutinesReferencingHabit(habitId);
+  }, [habitId]);
+
   const todayStr = useMemo(() => toLocalDateStr(), []);
 
   // Map of date -> boolean
@@ -43,7 +48,7 @@ export function HabitDetailScreen() {
     if (!habit || !habitLogs) {
       return { currentStreak: 0, bestStreak: 0 };
     }
-    return habitsRepo.calculateHabitStreaks(habit.frequency, habitLogs, todayStr, habit.targetDaysPerWeek);
+    return habitsRepo.calculateHabitStreaks(habit, habitLogs, todayStr);
   }, [habit, habitLogs, todayStr]);
 
   // Compute 30-day completion rate
@@ -51,6 +56,7 @@ export function HabitDetailScreen() {
     if (!habit || !habitLogs) return 0;
     let scheduledDays = 0;
     let completedDays = 0;
+    const customSet = new Set(habit.customDays || [1, 2, 3, 4, 5]);
 
     for (let i = 29; i >= 0; i--) {
       const d = addDays(parseLocalDateStr(todayStr), -i);
@@ -62,6 +68,11 @@ export function HabitDetailScreen() {
         if (logsMap[dStr]) completedDays++;
       } else if (habit.frequency === 'weekdays') {
         if (isWeekdayDate) {
+          scheduledDays++;
+          if (logsMap[dStr]) completedDays++;
+        }
+      } else if (habit.frequency === 'custom') {
+        if (customSet.has(d.getDay())) {
           scheduledDays++;
           if (logsMap[dStr]) completedDays++;
         }
@@ -86,6 +97,7 @@ export function HabitDetailScreen() {
       const monday = getMondayOfWeek(weekDate);
       let target = 7;
       if (habit.frequency === 'weekdays') target = 5;
+      else if (habit.frequency === 'custom') target = habit.customDays?.length || 5;
       else if (habit.frequency === 'weekly') target = habit.targetDaysPerWeek || 3;
 
       let completed = 0;
@@ -118,6 +130,33 @@ export function HabitDetailScreen() {
     showSnackbar({ message: !isDone ? 'Marked complete' : 'Marked incomplete' });
   };
 
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const formatSchedule = () => {
+    if (!habit) return '';
+    if (habit.frequency === 'daily') return 'Daily';
+    if (habit.frequency === 'weekdays') return 'Weekdays (Mon-Fri)';
+    if (habit.frequency === 'weekly') return `${habit.targetDaysPerWeek || 3}x / week`;
+    if (habit.frequency === 'custom') {
+      if (!habit.customDays || habit.customDays.length === 0) return 'Custom';
+      return habit.customDays.map((d) => dayNames[d]).join(', ');
+    }
+    return 'Daily';
+  };
+
+  const getTimeBadge = () => {
+    switch (habit?.timeOfDay) {
+      case 'morning':
+        return { label: 'Morning', icon: '🌅' };
+      case 'afternoon':
+        return { label: 'Afternoon', icon: '☀️' };
+      case 'evening':
+        return { label: 'Evening', icon: '🌙' };
+      case 'anytime':
+      default:
+        return { label: 'Anytime', icon: '✨' };
+    }
+  };
+
   if (!habit) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
@@ -126,6 +165,8 @@ export function HabitDetailScreen() {
     );
   }
 
+  const timeBadge = getTimeBadge();
+
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -133,18 +174,21 @@ export function HabitDetailScreen() {
         <button
           type="button"
           onClick={() => navigate('/habits')}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink transition-colors px-2.5 py-1.5 rounded-pill bg-surface border border-border"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink transition-colors px-2.5 py-1.5 rounded-pill bg-surface border border-border cursor-pointer"
         >
           ← Back to Habits
         </button>
 
-        <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-surface-2 text-ink-muted border border-border">
-          {habit.frequency === 'daily'
-            ? 'Daily'
-            : habit.frequency === 'weekdays'
-            ? 'Weekdays'
-            : `${habit.targetDaysPerWeek}x/week`}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-surface-2 text-ink border border-border flex items-center gap-1">
+            <span>{timeBadge.icon}</span>
+            <span>{timeBadge.label}</span>
+          </span>
+
+          <span className="text-xs font-bold tracking-wider px-2.5 py-1 rounded-full bg-surface-2 text-ink-muted border border-border">
+            {formatSchedule()}
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
@@ -196,6 +240,35 @@ export function HabitDetailScreen() {
         />
         <Heatmap logs={logsMap} onToggleDate={handleToggleDate} />
       </div>
+
+      {/* Linked Routines Section */}
+      {referencingRoutines && referencingRoutines.length > 0 && (
+        <div className="p-4 rounded-card bg-surface border border-border space-y-3">
+          <SectionHeader
+            title="Linked in Routines"
+            description="Routines that include this habit as a scheduled step."
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {referencingRoutines.map((routine: any) => (
+              <div
+                key={routine.id}
+                className="flex items-center gap-3 p-3 rounded-xl bg-surface-2 border border-border"
+              >
+                <span className="text-xl p-2 rounded-lg bg-surface border border-border flex items-center justify-center">
+                  {routine.emoji || '⚡'}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-semibold text-ink truncate">{routine.name}</h4>
+                  <p className="text-[11px] text-ink-muted capitalize">
+                    {routine.timeOfDay} routine • {routine.items?.length || 0} steps
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
