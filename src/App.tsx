@@ -9,7 +9,10 @@ import { linksRepo } from './db/repos/linksRepo';
 
 // Code-split all feature views using React.lazy per EXPANSION_PLAN §6 & §7
 const TodayView = lazy(() =>
-  import('./components/views/UpcomingView').then((m) => ({ default: m.UpcomingView }))
+  import('./features/today/TodayScreen').then((m) => ({ default: m.TodayScreen }))
+);
+const RoutinesScreen = lazy(() =>
+  import('./features/routines/RoutinesScreen').then((m) => ({ default: m.RoutinesScreen }))
 );
 const InboxView = lazy(() =>
   import('./components/views/InboxView').then((m) => ({ default: m.InboxView }))
@@ -117,6 +120,7 @@ export function App() {
             <Route path="tasks" element={<TasksView />} />
             <Route path="matrix" element={<EisenhowerMatrixView />} />
             <Route path="calendar" element={<CalendarView />} />
+            <Route path="routines" element={<RoutinesScreen />} />
             <Route path="focus" element={<FocusTimerView />} />
             <Route path="habits" element={<HabitsView />} />
             <Route path="people" element={<PeopleView />} />

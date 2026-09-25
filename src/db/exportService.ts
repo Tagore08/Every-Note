@@ -10,6 +10,7 @@ import type { FocusSession } from '../types/focus';
 import type { LifeArea } from '../types/area';
 import type { Template } from '../types/template';
 import type { NoteLink } from '../types/link';
+import type { Routine, RoutineRun } from '../types/routine';
 
 export interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -34,6 +35,8 @@ export interface BackupEnvelope {
   lifeAreas?: LifeArea[];
   templates?: Template[];
   links?: NoteLink[];
+  routines?: Routine[];
+  routineRuns?: RoutineRun[];
   settings?: {
     theme?: string;
     flags?: Record<string, boolean>;
@@ -125,12 +128,14 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   }
 
   const allLinks = await db.links.toArray();
+  const allRoutines = await db.routines.toArray();
+  const allRoutineRuns = await db.routineRuns.toArray();
 
   const currentTheme = localStorage.getItem('notes_theme_mode') || 'system';
   const currentFlags = getStoredFlags();
 
   return {
-    version: 11,
+    version: 12,
     app: 'notes-app',
     exportedAt: new Date().toISOString(),
     notes: allNotes,
@@ -144,6 +149,8 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
     lifeAreas: allLifeAreas,
     templates: allTemplates,
     links: allLinks,
+    routines: allRoutines,
+    routineRuns: allRoutineRuns,
     settings: {
       theme: currentTheme,
       flags: currentFlags,

@@ -58,6 +58,19 @@ export const DEFAULT_TEMPLATES: Omit<Template, 'id' | 'createdAt' | 'usageCount'
       ],
     },
   },
+  {
+    kind: 'routine',
+    name: 'Morning Launch Routine',
+    body: {
+      title: 'Morning Launch',
+      items: [
+        { uid: 'seed-step-1', kind: 'custom', title: 'Drink glass of water', durationMin: 2 },
+        { uid: 'seed-step-2', kind: 'custom', title: 'Stretch or light mobility', durationMin: 10 },
+        { uid: 'seed-step-3', kind: 'journal', title: "Write today's journal entry", durationMin: 10 },
+        { uid: 'seed-step-4', kind: 'custom', title: 'Plan top 3 daily priorities', durationMin: 5 },
+      ],
+    },
+  },
 ];
 
 export const templatesRepo = {
@@ -88,6 +101,26 @@ export const templatesRepo = {
               'What went well today?',
               'What drained my energy?',
               'Tomorrow I will focus on…',
+            ],
+          },
+          usageCount: 0,
+          createdAt: now,
+        });
+      }
+
+      // Ensure routine template exists
+      const routineCount = await db.templates.filter((t) => t.kind === 'routine').count();
+      if (routineCount === 0) {
+        await db.templates.add({
+          kind: 'routine',
+          name: 'Morning Launch Routine',
+          body: {
+            title: 'Morning Launch',
+            items: [
+              { uid: 'seed-step-1', kind: 'custom', title: 'Drink glass of water', durationMin: 2 },
+              { uid: 'seed-step-2', kind: 'custom', title: 'Stretch or light mobility', durationMin: 10 },
+              { uid: 'seed-step-3', kind: 'journal', title: "Write today's journal entry", durationMin: 10 },
+              { uid: 'seed-step-4', kind: 'custom', title: 'Plan top 3 daily priorities', durationMin: 5 },
             ],
           },
           usageCount: 0,

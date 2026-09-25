@@ -1069,12 +1069,55 @@ Calendar Pro replaces the single-month calendar view with a multi-view time-grid
 
 ---
 
-## 10. Future Extension Points
+## 10. Phase 4 Architecture: Routines & Today Dashboard
 
-1. **Phase 4: Routines & Enhanced Today**
-   - Morning/evening routines execution checklist, streak protection, and unified Today dashboard combining habits, tasks, routines, and journal.
-2. **Phase 5 & 6: Canvas & Focus Pro / Analytics**
-   - Pressure-sensitive vector canvas, timer presets, 12-month habit heatmaps, and local insights hub.
+Phase 4 introduces the unified Today Dashboard and the Routines Materialization Engine, gated behind the `routines` feature flag.
+
+### 1. Database Schema Version 12 (`src/db/database.ts`)
+- **`routines` table**:
+  - `++id, name, timeOfDay, *daysOfWeek, active, createdAt, updatedAt`
+  - Stores recurring daily/weekly routine templates with time-of-day anchors (`morning`, `afternoon`, `evening`, `any`).
+- **`routineRuns` table**:
+  - `++id, &[routineId+date], routineId, date, createdAt`
+  - Stores single-day instances of routines with compound unique index `[routineId+date]` enforcing strict idempotency.
+
+### 2. Materialization Engine (`routinesRepo.materializeRoutinesFor`)
+- **Execution Timing**: Runs on application startup for today (`localDateStr()`), on mount of `TodayScreen`, and on midnight rollover detection (30s interval check).
+- **Idempotency Guarantee**: If a `routineRun` record already exists for the compound key `[routineId+date]`, materialization skips without modifying state or duplicating tasks.
+- **Custom Steps vs. Pointer Items**:
+  - **Custom steps**: Converted into real task rows in `db.tasks` carrying `routineRunId = run.id`, due at the routine's time anchor (Morning: `09:00`, Afternoon: `14:00`, Evening: `19:00`, Anytime: `12:00`). Checking them synchronizes task status and routine item state.
+  - **Pointer items (`habit`, `task`, `journal`, `note`)**: Never duplicated. They are read live from their respective repositories. Toggling a habit pointer logs the habit for today in `db.habitLogs`. Toggling a task pointer updates the source task in `db.tasks`.
+
+### 3. Editing Semantics
+- **Snapshot Isolation**: Editing an existing routine does **NOT** retroactively alter previously created or active runs for today. Each `routineRun` retains an `itemsSnapshot` recorded at creation time.
+- Changes made to routine items or schedule apply strictly to future materializations (starting tomorrow).
+
+### 4. Today Dashboard Architecture (`src/features/today/TodayScreen.tsx`)
+Replacing the legacy `UpcomingView`, the Today Dashboard provides a fixed-hierarchy command center:
+1. **Time-Aware Greeting & Date**: Dynamic greeting ("Good morning", "Good afternoon", "Good evening") with settings shortcut.
+2. **NowNext Card**: Computes the nearest upcoming event or routine block within 3 hours and displays a live countdown timer, or a calm idle message.
+3. **Routine Card**: Renders today's active routine for the current time of day with interactive checkboxes, live pointer resolution, and completion progress.
+4. **Schedule Rail**: Compact timeline of today's calendar events with Life Area color dots.
+5. **Due & Overdue Tasks**: Chronological task list with overdue tasks prioritized at the top with danger styling.
+6. **Habits Row**: Horizontal scroll strip of today's habit circles with completion count (`completed/total`).
+7. **Journal Prompt**: Streak flame and direct jump to today's daily reflection.
+8. **Sticky Quick-Capture Bar**: Pinned bottom capture bar enabling `<3s` text entry directly into the Inbox.
+
+### 5. Calendar & Timeline Integration
+- `routinesRepo.itemsFor(date)` returns materialized routine blocks formatted as `[Routine Name] (completed/total)` for display in the Calendar Pro Timeline view.
+
+### 6. Routine Templates
+- Templates of kind `'routine'` allow exporting custom routines into reusable templates and instantiating new routines from starter presets.
+
+---
+
+## 11. Future Extension Points
+
+1. **Phase 5: Canvas & Ink**
+   - Pressure-sensitive vector canvas, tool palettes (pen, brush, highlighter, eraser), export to note, and thumbnail generation.
+2. **Phase 6: Focus Pro & Analytics**
+   - Customizable Pomodoro timer presets, 12-month habit heatmap, and local personal productivity insights hub.
+
 
 
 
