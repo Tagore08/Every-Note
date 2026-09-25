@@ -24,6 +24,11 @@ export const tasksRepo = {
       trashedAt: null,
       sourceNoteId: typeof draft.sourceNoteId === 'number' ? draft.sourceNoteId : null,
       personId: typeof draft.personId === 'number' ? draft.personId : null,
+      lifeAreaId: typeof draft.lifeAreaId === 'number' ? draft.lifeAreaId : null,
+      parentTaskId: typeof draft.parentTaskId === 'number' ? draft.parentTaskId : null,
+      routineRunId: typeof draft.routineRunId === 'number' ? draft.routineRunId : null,
+      sortOrder: typeof draft.sortOrder === 'number' ? draft.sortOrder : 0,
+      estimatedMin: typeof draft.estimatedMin === 'number' ? draft.estimatedMin : undefined,
     };
 
     const id = await db.tasks.add(newTask);
@@ -109,12 +114,12 @@ export const tasksRepo = {
   },
 
   /**
-   * Returns active todo tasks (status === 'todo', trashedAt === null).
+   * Returns active top-level todo tasks (status === 'todo', trashedAt === null, parentTaskId == null).
    * Sorted with due dates first (soonest first), then by recency.
    */
   async getTodoTasks(): Promise<Task[]> {
     const tasks = await db.tasks
-      .filter((task) => task.status === 'todo' && (!task.trashedAt || task.trashedAt === null))
+      .filter((task) => task.status === 'todo' && (!task.trashedAt || task.trashedAt === null) && (!task.parentTaskId))
       .toArray();
 
     return tasks.sort((a, b) => {
@@ -132,12 +137,12 @@ export const tasksRepo = {
   },
 
   /**
-   * Returns completed tasks (status === 'done', trashedAt === null).
+   * Returns completed top-level tasks (status === 'done', trashedAt === null, parentTaskId == null).
    * Sorted newest completedAt first.
    */
   async getDoneTasks(): Promise<Task[]> {
     const tasks = await db.tasks
-      .filter((task) => task.status === 'done' && (!task.trashedAt || task.trashedAt === null))
+      .filter((task) => task.status === 'done' && (!task.trashedAt || task.trashedAt === null) && (!task.parentTaskId))
       .toArray();
 
     return tasks.sort((a, b) => {
@@ -149,12 +154,68 @@ export const tasksRepo = {
   },
 
   /**
-   * Returns total count of active todo tasks for navigation badges.
+   * Returns total count of active top-level todo tasks for navigation badges.
    */
   async getTodoCount(): Promise<number> {
     return await db.tasks
-      .filter((task) => task.status === 'todo' && (!task.trashedAt || task.trashedAt === null))
+      .filter((task) => task.status === 'todo' && (!task.trashedAt || task.trashedAt === null) && (!task.parentTaskId))
       .count();
+  },
+
+  /**
+   * Subtasks for a specific parent task.
+   */
+  async getSubtasks(parentTaskId: number): Promise<Task[]> {
+    const subtasks = await db.tasks
+      .filter((t) => t.parentTaskId === parentTaskId && (!t.trashedAt || t.trashedAt === null))
+      .toArray();
+    return subtasks.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  },
+
+  /**
+   * Quick subtask creation.
+   */
+  async createSubtask(parentTaskId: number, title: string, options?: Partial<Task>): Promise<Task> {
+    const count = await db.tasks.where('parentTaskId').equals(parentTaskId).count();
+    return await this.createTask({
+      title,
+      parentTaskId,
+      sortOrder: count,
+      ...options,
+    });
+  },
+
+  /**
+   * Returns progress counts { total, completed } for subtasks of a parent.
+   */
+  async getSubtaskProgress(parentTaskId: number): Promise<{ total: number; completed: number }> {
+    const subtasks = await db.tasks
+      .filter((t) => t.parentTaskId === parentTaskId && (!t.trashedAt || t.trashedAt === null))
+      .toArray();
+    const total = subtasks.length;
+    const completed = subtasks.filter((t) => t.status === 'done').length;
+    return { total, completed };
+  },
+
+  /**
+   * Checks if a parent task has any incomplete subtasks.
+   */
+  async hasIncompleteSubtasks(parentTaskId: number): Promise<boolean> {
+    const subtasks = await db.tasks
+      .filter((t) => t.parentTaskId === parentTaskId && (!t.trashedAt || t.trashedAt === null))
+      .toArray();
+    return subtasks.some((t) => t.status === 'todo');
+  },
+
+  /**
+   * Reorders subtasks.
+   */
+  async reorderSubtasks(orderedIds: number[]): Promise<void> {
+    await db.transaction('rw', db.tasks, async () => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await db.tasks.update(orderedIds[i], { sortOrder: i });
+      }
+    });
   },
 
   /**
@@ -193,6 +254,12 @@ export const tasksRepo = {
         tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
         trashedAt: isNaN(trashedAt?.getTime() ?? 0) ? null : trashedAt,
         sourceNoteId: typeof raw.sourceNoteId === 'number' ? raw.sourceNoteId : null,
+        personId: typeof raw.personId === 'number' ? raw.personId : null,
+        lifeAreaId: typeof raw.lifeAreaId === 'number' ? raw.lifeAreaId : null,
+        parentTaskId: typeof raw.parentTaskId === 'number' ? raw.parentTaskId : null,
+        routineRunId: typeof raw.routineRunId === 'number' ? raw.routineRunId : null,
+        sortOrder: typeof raw.sortOrder === 'number' ? raw.sortOrder : 0,
+        estimatedMin: typeof raw.estimatedMin === 'number' ? raw.estimatedMin : undefined,
       };
     });
 
@@ -272,6 +339,22 @@ export function useTask(id: number | null | undefined): Task | null | undefined 
     const task = await tasksRepo.getTaskById(id);
     return task ?? null;
   }, [id]);
+}
+
+export function useSubtasks(parentTaskId: number | null | undefined): Task[] {
+  const subtasks = useLiveQuery(async () => {
+    if (typeof parentTaskId !== 'number' || isNaN(parentTaskId)) return [];
+    return await tasksRepo.getSubtasks(parentTaskId);
+  }, [parentTaskId]);
+  return subtasks ?? [];
+}
+
+export function useSubtaskProgress(parentTaskId: number | null | undefined): { total: number; completed: number } {
+  const progress = useLiveQuery(async () => {
+    if (typeof parentTaskId !== 'number' || isNaN(parentTaskId)) return { total: 0, completed: 0 };
+    return await tasksRepo.getSubtaskProgress(parentTaskId);
+  }, [parentTaskId]);
+  return progress ?? { total: 0, completed: 0 };
 }
 
 export function useTasksDueForRange(start: Date, end: Date): Task[] | undefined {

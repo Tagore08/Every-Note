@@ -67,10 +67,17 @@ export function getMondayOfWeek(d: Date): Date {
  *   the previous week's success.
  */
 export function calculateHabitStreaks(
-  habit: Habit,
+  habitOrFreq: Habit | HabitFrequency | 'weekly_target',
   logs: HabitLog[],
-  todayStr: string = toLocalDateStr()
+  todayStr: string = toLocalDateStr(),
+  targetDaysPerWeekArg?: number
 ): HabitStreakResult {
+  const frequency: HabitFrequency = typeof habitOrFreq === 'string'
+    ? (habitOrFreq === 'weekly_target' ? 'weekly' : habitOrFreq)
+    : habitOrFreq.frequency;
+  const targetDaysSetting = typeof habitOrFreq === 'object'
+    ? habitOrFreq.targetDaysPerWeek
+    : targetDaysPerWeekArg;
   // Collect all distinct dates where done === true
   const doneDates = new Set<string>();
   for (const log of logs) {
@@ -88,7 +95,7 @@ export function calculateHabitStreaks(
   // -------------------------------------------------------------
   // 1. DAILY FREQUENCY
   // -------------------------------------------------------------
-  if (habit.frequency === 'daily') {
+  if (frequency === 'daily') {
     // Current streak
     let currentStreak = 0;
     if (doneDates.has(todayStr)) {
@@ -136,7 +143,7 @@ export function calculateHabitStreaks(
   // -------------------------------------------------------------
   // 2. WEEKDAYS FREQUENCY (Mon-Fri)
   // -------------------------------------------------------------
-  if (habit.frequency === 'weekdays') {
+  if (frequency === 'weekdays') {
     // Current streak
     let currentStreak = 0;
 
@@ -225,8 +232,7 @@ export function calculateHabitStreaks(
   // 3. WEEKLY FREQUENCY (Target days per week, Mon-Sun)
   // -------------------------------------------------------------
   const targetDays =
-    habit.targetDaysPerWeek && habit.targetDaysPerWeek >= 1 && habit.targetDaysPerWeek <= 7
-      ? habit.targetDaysPerWeek
+    targetDaysSetting && targetDaysSetting >= 1 && targetDaysSetting <= 7 ? targetDaysSetting
       : 3;
 
   // Group done dates by Monday of their week
@@ -543,7 +549,171 @@ export const habitsRepo = {
     const habits = await db.habits.filter((h) => !h.archived && !!h.reminderAt).toArray();
     return habits;
   },
+
+  /**
+   * Pure selector / query: get comprehensive analytics for a single habit.
+   */
+  async getHabitAnalytics(habitId: number): Promise<HabitAnalytics | null> {
+    const habit = await db.habits.get(habitId);
+    if (!habit) return null;
+
+    const logs = await db.habitLogs.where('habitId').equals(habitId).toArray();
+    const doneLogs = logs.filter((l) => l.done);
+    const doneDates = new Set<string>(doneLogs.map((l) => l.date));
+    const todayStr = toLocalDateStr();
+    const today = parseLocalDateStr(todayStr);
+
+    const { currentStreak, bestStreak } = calculateHabitStreaks(habit, logs, todayStr);
+
+    // 1. Total completions
+    const totalCompletions = doneDates.size;
+
+    // 2. 30-day completion percentage
+    let targetDays30d = 30;
+    let actualDays30d = 0;
+
+    if (habit.frequency === 'weekdays') {
+      let weekdaysCount = 0;
+      for (let i = 0; i < 30; i++) {
+        const d = addDays(today, -i);
+        if (isWeekday(d)) {
+          weekdaysCount++;
+          if (doneDates.has(toLocalDateStr(d))) {
+            actualDays30d++;
+          }
+        }
+      }
+      targetDays30d = weekdaysCount || 1;
+    } else if (habit.frequency === 'weekly') {
+      const targetWeekly = habit.targetDaysPerWeek || 3;
+      targetDays30d = Math.round(targetWeekly * (30 / 7));
+      for (let i = 0; i < 30; i++) {
+        const d = addDays(today, -i);
+        if (doneDates.has(toLocalDateStr(d))) {
+          actualDays30d++;
+        }
+      }
+    } else {
+      // Daily
+      targetDays30d = 30;
+      for (let i = 0; i < 30; i++) {
+        const d = addDays(today, -i);
+        if (doneDates.has(toLocalDateStr(d))) {
+          actualDays30d++;
+        }
+      }
+    }
+
+    const completionRate30d = Math.min(100, Math.round((actualDays30d / targetDays30d) * 100));
+
+    // 3. 8-week trend sparkline
+    const sparkline8Weeks: Array<{
+      weekLabel: string;
+      count: number;
+      target: number;
+      percentage: number;
+    }> = [];
+
+    const thisMonday = getMondayOfWeek(today);
+    const weeklyTarget =
+      habit.frequency === 'weekly'
+        ? habit.targetDaysPerWeek || 3
+        : habit.frequency === 'weekdays'
+        ? 5
+        : 7;
+
+    for (let w = 7; w >= 0; w--) {
+      const monday = addDays(thisMonday, -w * 7);
+      let count = 0;
+
+      for (let d = 0; d < 7; d++) {
+        const curDay = addDays(monday, d);
+        if (habit.frequency === 'weekdays' && !isWeekday(curDay)) {
+          continue;
+        }
+        if (doneDates.has(toLocalDateStr(curDay))) {
+          count++;
+        }
+      }
+
+      const percentage = Math.min(100, Math.round((count / weeklyTarget) * 100));
+      const weekLabel = `${monday.getMonth() + 1}/${monday.getDate()}`;
+
+      sparkline8Weeks.push({
+        weekLabel,
+        count,
+        target: weeklyTarget,
+        percentage,
+      });
+    }
+
+    // 4. 12-month Heatmap (last 365 days / 52 weeks)
+    const heatmapData = new Map<string, { date: string; level: 0 | 1 | 2 | 3 | 4; label?: string }>();
+    const totalDays = 52 * 7;
+    const startDay = addDays(today, -totalDays);
+
+    for (let i = 0; i <= totalDays; i++) {
+      const cur = addDays(startDay, i);
+      const dStr = toLocalDateStr(cur);
+      const isDone = doneDates.has(dStr);
+
+      heatmapData.set(dStr, {
+        date: dStr,
+        level: isDone ? 4 : 0,
+        label: isDone ? 'Completed' : 'Missed',
+      });
+    }
+
+    return {
+      habit,
+      totalCompletions,
+      currentStreak,
+      bestStreak,
+      completionRate30d,
+      sparkline8Weeks,
+      heatmapData,
+    };
+  },
+
+  calculateHabitStreaks,
 };
+
+export interface HabitAnalytics {
+  habit: Habit;
+  totalCompletions: number;
+  currentStreak: number;
+  bestStreak: number;
+  completionRate30d: number;
+  sparkline8Weeks: Array<{
+    weekLabel: string;
+    count: number;
+    target: number;
+    percentage: number;
+  }>;
+  heatmapData: Map<string, { date: string; level: 0 | 1 | 2 | 3 | 4; label?: string }>;
+}
+
+/**
+ * Reactive hook: get analytics for a specific habit.
+ */
+export function useHabitAnalytics(habitId: number | null): {
+  analytics: HabitAnalytics | null;
+  isLoading: boolean;
+} {
+  const result = useLiveQuery(
+    async () => {
+      if (!habitId) return null;
+      return await habitsRepo.getHabitAnalytics(habitId);
+    },
+    [habitId],
+    null
+  );
+
+  return {
+    analytics: result,
+    isLoading: result === null && !!habitId,
+  };
+}
 
 /**
  * Reactive hook: get all habits with calculated streak stats and last-30-days grid.

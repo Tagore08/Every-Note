@@ -5,7 +5,13 @@ import type { Task } from '../types/task';
 import type { CalendarEvent } from '../types/event';
 import type { Person } from '../types/person';
 import type { Habit, HabitLog } from '../types/habit';
-import type { FocusSession } from '../types/focus';
+import type { FocusSession, TimerPreset } from '../types/focus';
+import type { AppMeta } from '../types/meta';
+import type { LifeArea } from '../types/area';
+import type { Template } from '../types/template';
+import type { NoteLink } from '../types/link';
+import type { Routine, RoutineRun } from '../types/routine';
+import type { CanvasEntity } from '../types/canvas';
 
 export class AppDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
@@ -16,10 +22,17 @@ export class AppDatabase extends Dexie {
   habits!: EntityTable<Habit, 'id'>;
   habitLogs!: EntityTable<HabitLog, 'id'>;
   focusSessions!: EntityTable<FocusSession, 'id'>;
+  appMeta!: EntityTable<AppMeta, 'key'>;
+  lifeAreas!: EntityTable<LifeArea, 'id'>;
+  templates!: EntityTable<Template, 'id'>;
+  links!: EntityTable<NoteLink, 'id'>;
+  routines!: EntityTable<Routine, 'id'>;
+  routineRuns!: EntityTable<RoutineRun, 'id'>;
+  canvases!: EntityTable<CanvasEntity, 'id'>;
+  timerPresets!: EntityTable<TimerPreset, 'id'>;
 
-
-  constructor() {
-    super('NotesAppDatabase');
+  constructor(dbName = 'NotesAppDatabase') {
+    super(dbName);
 
     // Schema Version 1 (Baseline foundation: Notes)
     this.version(1).stores({
@@ -97,8 +110,186 @@ export class AppDatabase extends Dexie {
       habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
       focusSessions: '++id, startedAt, taskId, createdAt',
     });
+
+    // Schema Version 8 (v2 Phase 0: Foundation - appMeta store for backup gate & last-seen schema)
+    // All tables re-declared with complete index list per safety contract
+    this.version(8).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
+      appMeta: 'key',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 8,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 9 (v2 Phase 1: Life Areas, Templates, Subtasks & Area relationships)
+    // All tables re-declared with complete index lists per safety contract
+    this.version(9).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
+      appMeta: 'key',
+      lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+      templates: '++id, kind, name, usageCount, createdAt',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 9,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 10 (v2 Phase 2A: Journal entries with kind, journalDate, mood)
+    // All tables re-declared with complete index lists per safety contract
+    this.version(10).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
+      appMeta: 'key',
+      lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+      templates: '++id, kind, name, usageCount, createdAt',
+    }).upgrade(async (tx) => {
+      // Set kind='note' where undefined per §4
+      await tx.table('notes').toCollection().modify((note: any) => {
+        if (!note.kind) {
+          note.kind = 'note';
+        }
+      });
+
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 10,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 11 (v2 Phase 2B: Wikilinks, Backlinks & Graph - links table)
+    // All tables re-declared with complete index lists per safety contract
+    this.version(11).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
+      appMeta: 'key',
+      lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+      templates: '++id, kind, name, usageCount, createdAt',
+      links: '++id, sourceId, targetId, targetTitle',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 11,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 12 (v2 Phase 4: Routines & Today Dashboard - routines & routineRuns tables)
+    // All tables re-declared with complete index lists per safety contract
+    this.version(12).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
+      appMeta: 'key',
+      lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+      templates: '++id, kind, name, usageCount, createdAt',
+      links: '++id, sourceId, targetId, targetTitle',
+      routines: '++id, name, timeOfDay, *daysOfWeek, active, createdAt, updatedAt',
+      routineRuns: '++id, &[routineId+date], routineId, date, createdAt',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 12,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 13 (v2 Phase 5: Canvas & Ink - canvases table)
+    // All tables re-declared with complete index lists per safety contract §0
+    this.version(13).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, createdAt',
+      appMeta: 'key',
+      lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+      templates: '++id, kind, name, usageCount, createdAt',
+      links: '++id, sourceId, targetId, targetTitle',
+      routines: '++id, name, timeOfDay, *daysOfWeek, active, createdAt, updatedAt',
+      routineRuns: '++id, &[routineId+date], routineId, date, createdAt',
+      canvases: '++id, title, *tags, lifeAreaId, linkedNoteId, trashedAt, updatedAt',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 13,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 14 (v2 Phase 6: Focus Pro & Analytics - timerPresets table + focusSessions presetId/kind)
+    // All tables re-declared with complete index lists per safety contract §0
+    this.version(14).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, presetId, kind, createdAt',
+      appMeta: 'key',
+      lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+      templates: '++id, kind, name, usageCount, createdAt',
+      links: '++id, sourceId, targetId, targetTitle',
+      routines: '++id, name, timeOfDay, *daysOfWeek, active, createdAt, updatedAt',
+      routineRuns: '++id, &[routineId+date], routineId, date, createdAt',
+      canvases: '++id, title, *tags, lifeAreaId, linkedNoteId, trashedAt, updatedAt',
+      timerPresets: '++id, name, isDefault',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 14,
+        updatedAt: Date.now(),
+      });
+    });
   }
 }
-
 
 export const db = new AppDatabase();

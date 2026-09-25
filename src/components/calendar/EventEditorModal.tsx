@@ -5,6 +5,7 @@ import { useSnackbar } from '../../context/SnackbarContext';
 import { formatDateKey, parseDateKey } from '../../utils/format';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
+import { LifeAreaPicker } from '../../features/areas/LifeAreaPicker';
 
 interface EventEditorModalProps {
   isOpen: boolean;
@@ -13,6 +14,8 @@ interface EventEditorModalProps {
   occurrence?: EventOccurrence | null;
   // If creating new, defaultDate is provided
   defaultDate?: Date;
+  defaultStartTime?: string;
+  defaultEndTime?: string;
 }
 
 type ReminderPreset = 'none' | '0' | '5' | '15' | '30' | '60' | '1440';
@@ -22,6 +25,8 @@ export function EventEditorModal({
   onClose,
   occurrence,
   defaultDate,
+  defaultStartTime,
+  defaultEndTime,
 }: EventEditorModalProps) {
   const { showSnackbar, showUndo } = useSnackbar();
 
@@ -39,6 +44,7 @@ export function EventEditorModal({
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [personId, setPersonId] = useState<number | null>(null);
+  const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
 
   // Mode for recurring updates: 'occurrence' | 'series'
@@ -74,6 +80,7 @@ export function EventEditorModal({
       setRecurrence(occurrence.originalEvent.recurrence);
       setTags([...occurrence.tags]);
       setPersonId(occurrence.originalEvent.personId ?? null);
+      setLifeAreaId(occurrence.originalEvent.lifeAreaId ?? null);
       setEditScope('occurrence');
 
       // Compute preset if reminderAt matches
@@ -100,18 +107,19 @@ export function EventEditorModal({
       const now = new Date();
       const nextHour = (now.getHours() + 1) % 24;
       const endHour = (nextHour + 1) % 24;
-      setStartTimeStr(`${String(nextHour).padStart(2, '0')}:00`);
-      setEndTimeStr(`${String(endHour).padStart(2, '0')}:00`);
+      setStartTimeStr(defaultStartTime || `${String(nextHour).padStart(2, '0')}:00`);
+      setEndTimeStr(defaultEndTime || `${String(endHour).padStart(2, '0')}:00`);
       setRecurrence('none');
       setReminderPreset('none');
       setTags([]);
       setPersonId(null);
+      setLifeAreaId(null);
       setEditScope('series');
     }
 
     setTagInput('');
     setShowDeleteConfirm(false);
-  }, [isOpen, occurrence, defaultDate]);
+  }, [isOpen, occurrence, defaultDate, defaultStartTime, defaultEndTime]);
 
   if (!isOpen) return null;
 
@@ -201,6 +209,7 @@ export function EventEditorModal({
             reminderAt,
             tags,
             personId,
+            lifeAreaId,
           });
           showSnackbar({ message: isRecurring ? 'Updated event series' : 'Updated event' });
         }
@@ -216,6 +225,7 @@ export function EventEditorModal({
           reminderAt,
           tags,
           personId,
+          lifeAreaId,
           relatedTaskId: null,
         });
         showSnackbar({ message: 'Event scheduled' });
@@ -522,6 +532,19 @@ export function EventEditorModal({
                   <span>+ With person</span>
                 </button>
               )}
+            </div>
+          </div>
+
+          {/* Life Area */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Life Area (optional)
+            </label>
+            <div>
+              <LifeAreaPicker
+                selectedAreaId={lifeAreaId}
+                onSelect={(id) => setLifeAreaId(id)}
+              />
             </div>
           </div>
         </div>

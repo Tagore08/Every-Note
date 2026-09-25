@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { Task, TaskPriority, TaskStatus } from '../../types/task';
-import { tasksRepo } from '../../db/tasksRepo';
+import { tasksRepo, useSubtasks } from '../../db/tasksRepo';
 import { isOverdue, formatDueDate } from '../../utils/format';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
+import { LifeAreaPicker } from '../../features/areas/LifeAreaPicker';
 
 interface TaskEditorModalProps {
   task: Task | null;
@@ -38,7 +39,13 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [personId, setPersonId] = useState<number | null>(null);
+  const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
+
+  // Subtasks
+  const subtasks = useSubtasks(task?.id);
+  const [subtaskInput, setSubtaskInput] = useState('');
+  const [showSubtaskWarning, setShowSubtaskWarning] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,7 +61,10 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
       setUrgency(Boolean(task.urgency));
       setTags(task.tags ? [...task.tags] : []);
       setPersonId(task.personId ?? null);
+      setLifeAreaId(task.lifeAreaId ?? null);
       setTagInput('');
+      setSubtaskInput('');
+      setShowSubtaskWarning(false);
     }
   }, [task, isOpen]);
 
@@ -99,8 +109,38 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
       urgency,
       tags,
       personId,
+      lifeAreaId,
     });
     onClose();
+  };
+
+  const handleToggleStatus = () => {
+    if (status === 'todo') {
+      const openSubtasks = subtasks.filter((s) => s.status === 'todo');
+      if (openSubtasks.length > 0) {
+        setShowSubtaskWarning(true);
+        return;
+      }
+      setStatus('done');
+    } else {
+      setStatus('todo');
+    }
+  };
+
+  const handleAddSubtask = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const clean = subtaskInput.trim();
+    if (!clean || !task.id) return;
+    await tasksRepo.createSubtask(task.id, clean);
+    setSubtaskInput('');
+  };
+
+  const handleToggleSubtask = async (subtaskId: number, currentStatus: TaskStatus) => {
+    await tasksRepo.toggleTaskStatus(subtaskId, currentStatus);
+  };
+
+  const handleDeleteSubtask = async (subtaskId: number) => {
+    await tasksRepo.deleteTask(subtaskId);
   };
 
   const handleAddTag = (rawTag: string) => {
@@ -164,7 +204,7 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setStatus(status === 'todo' ? 'done' : 'todo')}
+              onClick={handleToggleStatus}
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
                 status === 'done'
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
@@ -443,7 +483,80 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
             </div>
           </div>
 
-          {/* 7. Linked Note Backlink (Feature 2) */}
+          {/* 7. Life Area Picker */}
+          <div className="space-y-1.5 pt-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Life Area
+            </label>
+            <div>
+              <LifeAreaPicker
+                selectedAreaId={lifeAreaId}
+                onSelect={(id) => setLifeAreaId(id)}
+              />
+            </div>
+          </div>
+
+          {/* 8. Subtasks Checklist */}
+          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Subtasks {subtasks.length > 0 && `(${subtasks.filter(s => s.status === 'done').length}/${subtasks.length})`}
+              </label>
+            </div>
+
+            {/* Subtask list */}
+            {subtasks.length > 0 && (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {subtasks.map((sub) => (
+                  <div
+                    key={sub.id}
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-xs"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={sub.status === 'done'}
+                        onChange={() => sub.id && handleToggleSubtask(sub.id, sub.status)}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                      />
+                      <span className={`truncate ${sub.status === 'done' ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                        {sub.title}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => sub.id && handleDeleteSubtask(sub.id)}
+                      className="p-1 text-slate-400 hover:text-red-500 rounded cursor-pointer transition-colors"
+                      title="Delete subtask"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Quick-add subtask line */}
+            <form onSubmit={handleAddSubtask} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={subtaskInput}
+                onChange={(e) => setSubtaskInput(e.target.value)}
+                placeholder="+ Add subtask (press Enter)..."
+                className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              {subtaskInput.trim() && (
+                <button
+                  type="submit"
+                  className="px-2.5 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer"
+                >
+                  Add
+                </button>
+              )}
+            </form>
+          </div>
+
+          {/* 9. Linked Note Backlink (Feature 2) */}
           {typeof task.sourceNoteId === 'number' && (
             <div className="pt-2">
               <Link
@@ -479,6 +592,59 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
           </button>
         </div>
       </div>
+
+      {/* Incomplete Subtasks Warning Modal */}
+      {showSubtaskWarning && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowSubtaskWarning(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Incomplete Subtasks
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  This task still has {subtasks.filter(s => s.status === 'todo').length} open subtask(s). Marking the parent task done will keep subtask states as-is.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowSubtaskWarning(false)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSubtaskWarning(false);
+                  setStatus('done');
+                }}
+                className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+              >
+                Complete Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Person Picker Modal */}
       <PersonPickerModal

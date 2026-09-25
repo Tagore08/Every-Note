@@ -8,6 +8,12 @@ import { eventsRepo } from '../../db/eventsRepo';
 import { peopleRepo } from '../../db/peopleRepo';
 import { habitsRepo } from '../../db/habitsRepo';
 import { focusRepo } from '../../db/focusRepo';
+import { areasRepo } from '../../db/repos/areasRepo';
+import { templatesRepo } from '../../db/repos/templatesRepo';
+import { linksRepo } from '../../db/repos/linksRepo';
+import { canvasRepo } from '../../db/repos/canvasRepo';
+import { timerPresetsRepo } from '../../db/repos/timerPresetsRepo';
+import { routinesRepo } from '../../db/repos/routinesRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -21,7 +27,11 @@ import type { Task } from '../../types/task';
 import type { CalendarEvent } from '../../types/event';
 import type { Person } from '../../types/person';
 import type { Habit, HabitLog } from '../../types/habit';
-import type { FocusSession } from '../../types/focus';
+import type { FocusSession, TimerPreset } from '../../types/focus';
+import type { LifeArea } from '../../types/area';
+import type { Template } from '../../types/template';
+import type { CanvasEntity } from '../../types/canvas';
+import type { Routine, RoutineRun } from '../../types/routine';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -29,6 +39,10 @@ interface ExportAttachment extends Omit<Attachment, 'data'> {
 
 interface ExportPerson extends Omit<Person, 'photoBlob'> {
   photoBase64?: string;
+}
+
+interface ExportCanvas extends Omit<CanvasEntity, 'thumbBlob'> {
+  thumbBase64?: string;
 }
 
 interface BackupEnvelope {
@@ -43,6 +57,12 @@ interface BackupEnvelope {
   habits?: Habit[];
   habitLogs?: HabitLog[];
   focusSessions?: FocusSession[];
+  lifeAreas?: LifeArea[];
+  templates?: Template[];
+  canvases?: ExportCanvas[];
+  timerPresets?: TimerPreset[];
+  routines?: Routine[];
+  routineRuns?: RoutineRun[];
   settings?: {
     theme?: string;
   };
@@ -153,6 +173,12 @@ export function SettingsView() {
       const allHabitLogs = await habitsRepo.getAllHabitLogsForExport();
       const allFocusSessions = await focusRepo.getAllSessionsForExport();
       const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
+      const allLifeAreas = await areasRepo.getAllAreasForExport();
+      const allTemplates = await templatesRepo.getAllTemplatesForExport();
+      const allCanvases = await canvasRepo.getAllCanvasesForExport();
+      const allTimerPresets = await timerPresetsRepo.getAllPresetsForExport();
+      const allRoutines = await routinesRepo.getAllRoutinesForExport();
+      const allRoutineRuns = await routinesRepo.getAllRoutineRunsForExport();
 
       // Convert Blobs to base64 strings
       const exportedAttachments: ExportAttachment[] = [];
@@ -202,8 +228,33 @@ export function SettingsView() {
         });
       }
 
+      // Convert Canvas thumbBlobs to base64 strings
+      const exportedCanvases: ExportCanvas[] = [];
+      for (const c of allCanvases) {
+        let thumbBase64: string | undefined = undefined;
+        if (c.thumbBlob) {
+          try {
+            thumbBase64 = await blobToBase64(c.thumbBlob);
+          } catch (err) {
+            console.warn(`Failed to encode canvas thumb ${c.id}:`, err);
+          }
+        }
+        exportedCanvases.push({
+          id: c.id,
+          title: c.title,
+          doc: c.doc,
+          linkedNoteId: c.linkedNoteId,
+          tags: c.tags,
+          lifeAreaId: c.lifeAreaId,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          trashedAt: c.trashedAt,
+          thumbBase64,
+        });
+      }
+
       const payload: BackupEnvelope = {
-        version: 7, // Bumped to Version 7 for Stage 10 Focus Sessions
+        version: 14,
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
@@ -214,6 +265,12 @@ export function SettingsView() {
         habitLogs: allHabitLogs,
         focusSessions: allFocusSessions,
         attachments: exportedAttachments,
+        lifeAreas: allLifeAreas,
+        templates: allTemplates,
+        canvases: exportedCanvases,
+        timerPresets: allTimerPresets,
+        routines: allRoutines,
+        routineRuns: allRoutineRuns,
         settings: {
           theme: mode,
         },
@@ -234,7 +291,7 @@ export function SettingsView() {
 
       const formattedFileSize = formatFileSize(blob.size);
       showSnackbar({
-        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allEvents.length} events, ${allPeople.length} people, ${allHabits.length} habits, ${allFocusSessions.length} focus sessions & ${allAttachments.length} attachments (${formattedFileSize}).`,
+        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allCanvases.length} canvases & data (${formattedFileSize}).`,
       });
     } catch (err) {
       console.error('Failed to export data:', err);
@@ -274,6 +331,12 @@ export function SettingsView() {
       let habitsArray: Habit[] = [];
       let habitLogsArray: HabitLog[] = [];
       let focusSessionsArray: FocusSession[] = [];
+      let lifeAreasArray: LifeArea[] = [];
+      let templatesArray: Template[] = [];
+      let canvasesArray: ExportCanvas[] = [];
+      let timerPresetsArray: TimerPreset[] = [];
+      let routinesArray: Routine[] = [];
+      let routineRunsArray: RoutineRun[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
 
@@ -302,6 +365,24 @@ export function SettingsView() {
         if ('focusSessions' in parsed && Array.isArray((parsed as BackupEnvelope).focusSessions)) {
           focusSessionsArray = (parsed as BackupEnvelope).focusSessions ?? [];
         }
+        if ('lifeAreas' in parsed && Array.isArray((parsed as BackupEnvelope).lifeAreas)) {
+          lifeAreasArray = (parsed as BackupEnvelope).lifeAreas ?? [];
+        }
+        if ('templates' in parsed && Array.isArray((parsed as BackupEnvelope).templates)) {
+          templatesArray = (parsed as BackupEnvelope).templates ?? [];
+        }
+        if ('canvases' in parsed && Array.isArray((parsed as BackupEnvelope).canvases)) {
+          canvasesArray = (parsed as BackupEnvelope).canvases ?? [];
+        }
+        if ('timerPresets' in parsed && Array.isArray((parsed as BackupEnvelope).timerPresets)) {
+          timerPresetsArray = (parsed as BackupEnvelope).timerPresets ?? [];
+        }
+        if ('routines' in parsed && Array.isArray((parsed as BackupEnvelope).routines)) {
+          routinesArray = (parsed as BackupEnvelope).routines ?? [];
+        }
+        if ('routineRuns' in parsed && Array.isArray((parsed as BackupEnvelope).routineRuns)) {
+          routineRunsArray = (parsed as BackupEnvelope).routineRuns ?? [];
+        }
       } else if (Array.isArray(parsed)) {
         notesArray = parsed;
       } else {
@@ -321,6 +402,12 @@ export function SettingsView() {
         habits: habitsArray,
         habitLogs: habitLogsArray,
         focusSessions: focusSessionsArray,
+        lifeAreas: lifeAreasArray,
+        templates: templatesArray,
+        canvases: canvasesArray,
+        timerPresets: timerPresetsArray,
+        routines: routinesArray,
+        routineRuns: routineRunsArray,
       });
       setImportStrategy('merge');
     } catch (err) {
@@ -346,6 +433,10 @@ export function SettingsView() {
       const prevHabitLogs = await habitsRepo.getAllHabitLogsForExport();
       const prevFocusSessions = await focusRepo.getAllSessionsForExport();
       const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
+      const prevCanvases = await canvasRepo.getAllCanvasesForExport();
+      const prevTimerPresets = await timerPresetsRepo.getAllPresetsForExport();
+      const prevRoutines = await routinesRepo.getAllRoutinesForExport();
+      const prevRoutineRuns = await routinesRepo.getAllRoutineRunsForExport();
 
       // 1. Import Notes
       const result = await notesRepo.importNotes(importCandidate.notes, importStrategy);
@@ -439,11 +530,77 @@ export function SettingsView() {
         );
       }
 
+      // 8. Import Life Areas
+      let importedAreasCount = 0;
+      if (importCandidate.lifeAreas && importCandidate.lifeAreas.length > 0) {
+        importedAreasCount = await areasRepo.importAreas(
+          importCandidate.lifeAreas,
+          importStrategy
+        );
+      }
+
+      // 9. Import Templates
+      let importedTemplatesCount = 0;
+      if (importCandidate.templates && importCandidate.templates.length > 0) {
+        importedTemplatesCount = await templatesRepo.importTemplates(
+          importCandidate.templates,
+          importStrategy
+        );
+      }
+
+      // 10. Import Canvases
+      let importedCanvasesCount = 0;
+      if (importCandidate.canvases && importCandidate.canvases.length > 0) {
+        const restoredCanvases: CanvasEntity[] = [];
+        for (const raw of importCandidate.canvases) {
+          let thumbBlob: Blob | undefined = undefined;
+          if (raw.thumbBase64) {
+            thumbBlob = base64ToBlob(raw.thumbBase64, 'image/png');
+          }
+          restoredCanvases.push({
+            id: typeof raw.id === 'number' ? raw.id : undefined,
+            title: raw.title || 'Untitled drawing',
+            doc: raw.doc,
+            thumbBlob,
+            linkedNoteId: raw.linkedNoteId ?? null,
+            tags: raw.tags || [],
+            lifeAreaId: raw.lifeAreaId ?? null,
+            createdAt: raw.createdAt || Date.now(),
+            updatedAt: raw.updatedAt || Date.now(),
+            trashedAt: raw.trashedAt ?? null,
+          });
+        }
+        importedCanvasesCount = await canvasRepo.importCanvases(restoredCanvases, importStrategy);
+      }
+
+      // 11. Import Timer Presets
+      let importedPresetsCount = 0;
+      if (importCandidate.timerPresets && importCandidate.timerPresets.length > 0) {
+        importedPresetsCount = await timerPresetsRepo.importPresets(
+          importCandidate.timerPresets,
+          importStrategy
+        );
+      }
+
+      // 12. Import Routines & Runs
+      let importedRoutinesCount = 0;
+      if (importCandidate.routines && importCandidate.routines.length > 0) {
+        const rResult = await routinesRepo.importRoutines(
+          importCandidate.routines,
+          importCandidate.routineRuns || [],
+          importStrategy
+        );
+        importedRoutinesCount = rResult.routinesCount;
+      }
+
+      // Re-index all wikilinks after import so the graph & backlinks are fully resolved
+      await linksRepo.reindexAllLinks();
+
       setImportCandidate(null);
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedRoutinesCount} routines, ${importedAreasCount} areas, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -467,6 +624,15 @@ export function SettingsView() {
           if (importStrategy === 'replace' && prevAttachments) {
             await attachmentsRepo.importAttachments(prevAttachments, 'replace');
           }
+          if (importStrategy === 'replace' && prevCanvases) {
+            await canvasRepo.importCanvases(prevCanvases, 'replace');
+          }
+          if (importStrategy === 'replace' && prevTimerPresets) {
+            await timerPresetsRepo.importPresets(prevTimerPresets, 'replace');
+          }
+          if (importStrategy === 'replace' && prevRoutines) {
+            await routinesRepo.importRoutines(prevRoutines, prevRoutineRuns || [], 'replace');
+          }
           await loadStorageEstimate();
         }
       );
@@ -487,10 +653,17 @@ export function SettingsView() {
       await peopleRepo.deleteAllPeople();
       await habitsRepo.deleteAllHabits();
       await focusRepo.deleteAllSessions();
+      await timerPresetsRepo.deleteAllAndReseed();
+      await routinesRepo.deleteAllRoutines();
+      await linksRepo.deleteAllLinks();
+      const allCanvases = await canvasRepo.getAllCanvasesForExport();
+      for (const c of allCanvases) {
+        if (c.id) await canvasRepo.deleteCanvasPermanently(c.id);
+      }
       setShowDeleteAllModal(false);
       setDeleteConfirmationInput('');
       await loadStorageEstimate();
-      showSnackbar({ message: 'All notes, tasks, events, people, habits, focus sessions, and attachments have been completely deleted.' });
+      showSnackbar({ message: 'All notes, tasks, events, people, habits, focus sessions, canvases, and attachments have been completely deleted.' });
     } catch (err) {
       console.error('Failed to delete all data:', err);
     }
@@ -509,40 +682,100 @@ export function SettingsView() {
         </p>
       </div>
 
-      {/* Quick Navigation to Archive & Trash */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Quick Navigation to Labs, Archive & Trash */}
+      <div className="space-y-3">
         <Link
-          to="/archive"
-          className="flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition-colors"
+          to="/settings/labs"
+          className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
         >
-          <div className="flex items-center gap-2.5">
-            <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="3" width="20" height="5" rx="1" />
-              <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
-              <path d="M10 12h4" />
-            </svg>
-            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Archive</span>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-accent-soft text-accent flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2" />
+                <path d="M8.5 2h7" />
+                <path d="M7 16h10" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-ink">Experimental Labs</div>
+              <div className="text-xs text-ink-muted">Toggle expansion feature flags and developer options</div>
+            </div>
           </div>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">
-            {archivedNotes?.length ?? 0}
+          <span className="text-accent text-xs font-semibold px-3 py-1 rounded-pill bg-accent-soft">
+            Manage Labs →
           </span>
         </Link>
 
-        <Link
-          to="/trash"
-          className="flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition-colors"
-        >
-          <div className="flex items-center gap-2.5">
-            <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
-            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Trash</span>
-          </div>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">
-            {trashNotes?.length ?? 0}
-          </span>
-        </Link>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Link
+            to="/areas"
+            className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
+          >
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+              </svg>
+              <div>
+                <div className="text-sm font-medium text-ink">Life Areas</div>
+                <div className="text-[11px] text-ink-muted">Health, Work, Personal & more</div>
+              </div>
+            </div>
+            <span className="text-accent text-xs font-semibold">Manage →</span>
+          </Link>
+
+          <Link
+            to="/settings/templates"
+            className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
+          >
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              <div>
+                <div className="text-sm font-medium text-ink">Starter Templates</div>
+                <div className="text-[11px] text-ink-muted">Task & Note skeletons</div>
+              </div>
+            </div>
+            <span className="text-accent text-xs font-semibold">Manage →</span>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            to="/archive"
+            className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
+          >
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="3" width="20" height="5" rx="1" />
+                <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+                <path d="M10 12h4" />
+              </svg>
+              <span className="text-sm font-medium text-ink">Archive</span>
+            </div>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-surface-2 text-ink border border-border font-semibold">
+              {archivedNotes?.length ?? 0}
+            </span>
+          </Link>
+
+          <Link
+            to="/trash"
+            className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
+          >
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span className="text-sm font-medium text-ink">Trash</span>
+            </div>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-surface-2 text-ink border border-border font-semibold">
+              {trashNotes?.length ?? 0}
+            </span>
+          </Link>
+        </div>
       </div>
 
       {/* 1. Appearance Section */}

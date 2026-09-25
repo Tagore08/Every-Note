@@ -9,6 +9,55 @@ import { AttachmentGallery } from '../attachments/AttachmentGallery';
 import { AddLinkModal } from '../attachments/AddLinkModal';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
+import { LifeAreaPicker } from '../../features/areas/LifeAreaPicker';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { canvasRepo } from '../../db/repos/canvasRepo';
+import { useFlag } from '../../app/flags';
+import type { CanvasEntity } from '../../types/canvas';
+import { linksRepo } from '../../db/repos/linksRepo';
+import { WikilinkAutocomplete } from '../../features/notes/WikilinkAutocomplete';
+import { BacklinksPanel } from '../../features/notes/BacklinksPanel';
+import { LocalGraphPanel } from '../../features/notes/LocalGraphPanel';
+
+function LinkedCanvasChip({ canvas, onOpen }: { canvas: CanvasEntity; onOpen: () => void }) {
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canvas.thumbBlob) return;
+    const url = URL.createObjectURL(canvas.thumbBlob);
+    setThumbUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [canvas.thumbBlob]);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="inline-flex items-center gap-2 p-1.5 pr-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 hover:border-indigo-500 text-slate-800 dark:text-slate-200 text-xs font-medium transition-colors cursor-pointer"
+    >
+      {thumbUrl ? (
+        <img src={thumbUrl} alt="" className="w-8 h-8 rounded-md object-cover border border-slate-200 dark:border-slate-800" />
+      ) : (
+        <div className="w-8 h-8 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+          </svg>
+        </div>
+      )}
+      <div className="text-left">
+        <p className="font-medium text-xs text-slate-900 dark:text-white truncate max-w-[120px]">
+          {canvas.title || 'Untitled drawing'}
+        </p>
+        <span className="text-[10px] text-slate-400">
+          {canvas.doc.strokes.length} strokes
+        </span>
+      </div>
+    </button>
+  );
+}
 
 export function NoteEditorView() {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +67,25 @@ export function NoteEditorView() {
 
   const note = useNote(numericId);
   const attachments = useAttachments(numericId);
+  const isCanvasEnabled = useFlag('canvas');
+  const linkedCanvases = useLiveQuery(
+    () => (numericId ? canvasRepo.getCanvasesForNote(numericId) : []),
+    [numericId]
+  );
+
+  const handleNewDrawing = async () => {
+    if (!numericId) return;
+    try {
+      const canvas = await canvasRepo.createCanvas({
+        linkedNoteId: numericId,
+        title: `Sketch for ${title || 'Note'}`,
+        lifeAreaId: note?.lifeAreaId ?? null,
+      });
+      navigate(`/canvas/${canvas.id}`);
+    } catch (err) {
+      console.error('Failed to create linked drawing:', err);
+    }
+  };
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -28,6 +96,7 @@ export function NoteEditorView() {
   const [reminderTimeStr, setReminderTimeStr] = useState('');
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [personId, setPersonId] = useState<number | null>(null);
+  const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
@@ -43,6 +112,13 @@ export function NoteEditorView() {
   // Used to prevent re-initializing local state while typing
   const initialLoadDone = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reindexTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Wikilink autocomplete state
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isAutocompleteOpen, setIsAutocompleteOpen] = useState(false);
+  const [wikilinkQuery, setWikilinkQuery] = useState('');
+  const [wikilinkStartIndex, setWikilinkStartIndex] = useState<number | null>(null);
 
   // If navigating to /notes/new, instantly create a note and redirect to /notes/:id
   useEffect(() => {
@@ -77,11 +153,12 @@ export function NoteEditorView() {
         );
       }
       setPersonId(note.personId ?? null);
+      setLifeAreaId(note.lifeAreaId ?? null);
       initialLoadDone.current = true;
     }
   }, [note]);
 
-  // Persist changes to Dexie with ~500ms debounce
+  // Persist changes to Dexie with ~500ms debounce + 800ms link reindexing
   const triggerAutoSave = useCallback(
     (
       newTitle: string,
@@ -91,7 +168,8 @@ export function NoteEditorView() {
       archivedState: boolean,
       schedStr?: string,
       remTimeStr?: string,
-      pId?: number | null
+      pId?: number | null,
+      areaId?: number | null
     ) => {
       if (!numericId) return;
       setSaveStatus('saving');
@@ -105,6 +183,7 @@ export function NoteEditorView() {
           const finalSched = schedStr !== undefined ? schedStr : scheduledAtStr;
           const finalRem = remTimeStr !== undefined ? remTimeStr : reminderTimeStr;
           const finalPersonId = pId !== undefined ? pId : personId;
+          const finalLifeAreaId = areaId !== undefined ? areaId : lifeAreaId;
 
           let schedDate: Date | null = null;
           let remDate: Date | null = null;
@@ -127,6 +206,7 @@ export function NoteEditorView() {
             scheduledAt: schedDate,
             reminderAt: remDate,
             personId: finalPersonId,
+            lifeAreaId: finalLifeAreaId,
           });
           setSaveStatus('saved');
         } catch (err) {
@@ -134,10 +214,24 @@ export function NoteEditorView() {
           setSaveStatus('idle');
         }
       }, 500);
-    },
-    [numericId, scheduledAtStr, reminderTimeStr, personId]
-  );
 
+      // Re-index outgoing wikilinks and claim unresolved incoming links (debounced 800ms per spec)
+      if (reindexTimer.current) {
+        clearTimeout(reindexTimer.current);
+      }
+      reindexTimer.current = setTimeout(async () => {
+        try {
+          await linksRepo.reindexNote(numericId);
+          if (newTitle) {
+            await linksRepo.claimUnresolvedLinks(numericId, newTitle);
+          }
+        } catch (err) {
+          console.error('Failed to reindex links:', err);
+        }
+      }, 800);
+    },
+    [numericId, scheduledAtStr, reminderTimeStr, personId, lifeAreaId]
+  );
 
   // Flush any pending save on unmount
   useEffect(() => {
@@ -145,17 +239,62 @@ export function NoteEditorView() {
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
       }
+      if (reindexTimer.current) {
+        clearTimeout(reindexTimer.current);
+      }
     };
   }, []);
+
+  const checkWikilinkTrigger = (text: string, cursorIndex: number) => {
+    const textBeforeCursor = text.slice(0, cursorIndex);
+    const match = textBeforeCursor.match(/\[\[([^\]\n]*)$/);
+    if (match) {
+      setIsAutocompleteOpen(true);
+      setWikilinkQuery(match[1]);
+      setWikilinkStartIndex(cursorIndex - match[0].length);
+    } else {
+      setIsAutocompleteOpen(false);
+      setWikilinkQuery('');
+      setWikilinkStartIndex(null);
+    }
+  };
 
   const handleTitleChange = (val: string) => {
     setTitle(val);
     triggerAutoSave(val, content, tags, isPinned, isArchived);
   };
 
-  const handleContentChange = (val: string) => {
+  const handleContentChange = (val: string, cursorIndex?: number) => {
     setContent(val);
     triggerAutoSave(title, val, tags, isPinned, isArchived);
+    if (cursorIndex !== undefined) {
+      checkWikilinkTrigger(val, cursorIndex);
+    }
+  };
+
+  const handleSelectWikilink = (targetTitle: string) => {
+    if (wikilinkStartIndex === null || !textareaRef.current) return;
+    const cursorIndex = textareaRef.current.selectionStart || 0;
+
+    const before = content.slice(0, wikilinkStartIndex);
+    const after = content.slice(cursorIndex);
+    const inserted = `[[${targetTitle}]]`;
+    const nextContent = before + inserted + after;
+
+    setContent(nextContent);
+    setIsAutocompleteOpen(false);
+    setWikilinkQuery('');
+    setWikilinkStartIndex(null);
+
+    triggerAutoSave(title, nextContent, tags, isPinned, isArchived);
+
+    const nextCursor = (before + inserted).length;
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(nextCursor, nextCursor);
+      }
+    }, 10);
   };
 
   const handleTogglePin = async () => {
@@ -254,6 +393,11 @@ export function NoteEditorView() {
     setScheduledAtStr('');
     setReminderTimeStr('');
     triggerAutoSave(title, content, tags, isPinned, isArchived, '', '');
+  };
+
+  const handleSetLifeArea = (areaId: number | null) => {
+    setLifeAreaId(areaId);
+    triggerAutoSave(title, content, tags, isPinned, isArchived, scheduledAtStr, reminderTimeStr, personId, areaId);
   };
 
 
@@ -500,6 +644,25 @@ export function NoteEditorView() {
             <span className="hidden sm:inline">Link</span>
           </button>
 
+          {/* Draw action */}
+          {isCanvasEnabled && (
+            <button
+              type="button"
+              onClick={handleNewDrawing}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="New drawing for note"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+                <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+                <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+                <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+              </svg>
+              <span className="hidden sm:inline">Draw</span>
+            </button>
+          )}
+
           {/* Convert to task action */}
           <button
             type="button"
@@ -553,6 +716,13 @@ export function NoteEditorView() {
             </svg>
             <span className="hidden sm:inline">Person</span>
           </button>
+
+          {/* Life Area Picker */}
+          <LifeAreaPicker
+            selectedAreaId={lifeAreaId}
+            onSelect={handleSetLifeArea}
+            compact
+          />
 
           <span className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
 
@@ -723,19 +893,58 @@ export function NoteEditorView() {
           />
         </div>
 
-        {/* Content Textarea */}
-        <textarea
-          value={content}
-          onChange={(e) => handleContentChange(e.target.value)}
-          placeholder="Start writing plain text... (paste images with Ctrl+V, drag & drop files, or use Attach)"
-          className="flex-1 w-full bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-700 text-base leading-relaxed resize-none focus:outline-none min-h-[300px]"
-        />
+        {/* Content Textarea & Wikilink Autocomplete */}
+        <div className="relative flex-1 flex flex-col">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => handleContentChange(e.target.value, e.target.selectionStart)}
+            onKeyUp={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
+            onClick={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
+            placeholder="Start writing... (type [[ to link another note, paste images with Ctrl+V, drag & drop files)"
+            className="flex-1 w-full bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-700 text-base leading-relaxed resize-none focus:outline-none min-h-[300px]"
+          />
+
+          <WikilinkAutocomplete
+            query={wikilinkQuery}
+            isOpen={isAutocompleteOpen}
+            onSelect={handleSelectWikilink}
+            onClose={() => setIsAutocompleteOpen(false)}
+            currentNoteId={numericId}
+          />
+        </div>
+
+        {/* Linked Drawings */}
+        {isCanvasEnabled && linkedCanvases && linkedCanvases.length > 0 && (
+          <div className="space-y-2 pt-2">
+            <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Linked Drawings ({linkedCanvases.length})
+            </h4>
+            <div className="flex flex-wrap gap-2.5">
+              {linkedCanvases.map((c) => (
+                <LinkedCanvasChip
+                  key={c.id}
+                  canvas={c}
+                  onOpen={() => navigate(`/canvas/${c.id}`)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Attachments Section */}
         <AttachmentGallery
           attachments={attachments ?? []}
           onDeleteAttachment={handleDeleteAttachment}
         />
+
+        {/* Backlinks & Local Graph Panels */}
+        {note && (
+          <>
+            <BacklinksPanel note={note} />
+            {numericId && <LocalGraphPanel noteId={numericId} noteTitle={title || 'Untitled'} />}
+          </>
+        )}
       </div>
 
       {/* Add Link Dialog */}

@@ -30,24 +30,56 @@ notes-app/
     ├── main.tsx             # Application bootstrap & React 19 root
     ├── App.tsx              # Route hierarchy & global providers
     ├── index.css            # Tailwind CSS v4 setup & theme styles
+    ├── app/                 # Application shell, navigation, feature flags, capture FAB
+    │   ├── AppShell.tsx     # Responsive desktop sidebar / mobile 5-slot bottom bar + library sheet
+    │   ├── CaptureFab.tsx   # Capture FAB with spring scaling, long-press, template launcher
+    │   ├── flags.ts         # Feature flags registry & useFlag hook
+    │   └── nav.ts           # Centralized navigation item declarations & groups
+    ├── design/
+    │   ├── tokens.css       # Tailwind v4 @theme design tokens and .dark mode overrides
+    │   └── ui/              # Reusable UI kit: Sheet, Segmented, StatCard, EmptyState, Skeleton, etc.
     ├── types/
-    │   ├── note.ts          # Core TypeScript data contracts (Note interface)
-    │   ├── attachment.ts    # Attachment interfaces (Attachment, AttachmentKind)
-    │   ├── task.ts          # Task data contracts (Task, TaskStatus, TaskPriority)
-    │   ├── event.ts         # Calendar event and recurrence occurrence contracts
+    │   ├── note.ts          # Core TypeScript data contracts (Note interface, lifeAreaId)
+    │   ├── task.ts          # Task data contracts (Task, parentTaskId, lifeAreaId, subtasks)
+    │   ├── event.ts         # Calendar event and recurrence occurrence contracts (lifeAreaId)
+    │   ├── area.ts          # LifeArea data contract & default palette
+    │   ├── template.ts      # Template & TemplateBody contracts (task & note templates)
     │   ├── person.ts        # Person contracts (Person interface, contact info, notes)
     │   ├── habit.ts         # Habit & HabitLog data contracts (streaks, frequency)
     │   └── focus.ts         # Focus session data contract (FocusSession interface)
     ├── db/
-    │   ├── database.ts      # Dexie 4 database class, schema versions 1-7, and DB singleton
-    │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes
-    │   ├── attachmentsRepo.ts# Data access layer & reactive hooks for attachments & storage
-    │   ├── tasksRepo.ts     # Data access layer & reactive hooks for tasks
+    │   ├── database.ts      # Dexie 4 database class, schema versions 1-11 (append-only)
+    │   ├── backupGate.ts    # Pre-upgrade OPFS and JSON file backup safety gate (TARGET_VERSION=11)
+    │   ├── exportService.ts # JSON envelope serialization & import engine (Envelope v11)
+    │   ├── notesRepo.ts     # Data access layer & reactive hooks for notes and journal entries
+    │   ├── tasksRepo.ts     # Data access layer & subtask tree manipulation hooks
     │   ├── eventsRepo.ts    # Data access layer & recurrence occurrence engine
     │   ├── upcomingRepo.ts  # Cross-entity date horizon aggregation engine
     │   ├── peopleRepo.ts    # Data access layer & reactive hooks for people
     │   ├── habitsRepo.ts    # Data access layer, streak calculation engine & reactive hooks
-    │   └── focusRepo.ts     # Data access layer & reactive hooks for focus sessions
+    │   ├── focusRepo.ts     # Data access layer & reactive hooks for focus sessions
+    │   └── repos/
+    │       ├── areasRepo.ts # Life Areas CRUD, sortOrder, and idempotent default seeding
+    │       ├── templatesRepo.ts # Starter templates CRUD, usage counts, and default seeding
+    │       └── linksRepo.ts # Wikilinks extraction, resolution, chunked reindexing & graph data
+    ├── lib/
+    │   ├── date.ts          # Timezone-safe local calendar date formatting & manipulation
+    │   ├── date.test.ts     # Vitest tests for local date string & midnight boundaries
+    │   ├── journal.ts       # Pure streak calculation and "On This Day" filtering algorithms
+    │   ├── journal.test.ts  # Vitest tests for journal streak & past-year matching
+    │   ├── wikilinks.ts     # [[wikilinks]] parser, title normalization & context snippet extractor
+    │   ├── wikilinks.test.ts # Vitest tests for wikilink extraction, aliases, headings, snippets
+    │   ├── quickAdd.ts      # Natural language parser using chrono-node (#tag, @Area, dates)
+    │   └── quickAdd.test.ts # 13 Vitest unit tests for quick-add NLP logic
+    ├── features/
+    │   ├── areas/           # LifeAreaPicker & AreasScreen management
+    │   ├── journal/         # JournalScreen, MoodRow, PromptChips, OnThisDayCard, JournalPromptSection
+    │   ├── graph/           # GraphScreen, GraphCanvas (d3-force + canvas 2D), GraphFiltersSheet, graphData
+    │   ├── notes/           # WikilinkAutocomplete, BacklinksPanel, LocalGraphPanel
+    │   ├── templates/       # TemplatePickerSheet & TemplatesScreen management
+    │   ├── inbox/           # InboxAnalyticsHeader & FileAsSheet triage
+    │   ├── settings/        # LabsScreen feature flags management
+    │   └── debug/           # MigrateDebugScreen & SeedDebugScreen
     ├── context/
     │   └── SnackbarContext.tsx # Global ~6s snackbar & undo notification system
     ├── hooks/
@@ -181,6 +213,10 @@ this.version(7).stores({
 | `scheduledAt` | `Date \| null` (optional) | `scheduledAt` | Calendar scheduled date index |
 | `reminderAt` | `Date \| null` (optional) | `reminderAt` | Notification reminder timestamp index |
 | `personId` | `number \| null` (optional) | `personId` | Optional linked person ID index |
+| `lifeAreaId` | `number \| null` (optional) | `lifeAreaId` | Optional Life Area ID index (added in Phase 1) |
+| `kind` | `'note' \| 'journal'` | `kind` | Entity kind discriminant ('note' or 'journal', added in Phase 2A) |
+| `journalDate` | `string \| null` | `journalDate` | Local date string ('YYYY-MM-DD') for daily journal entries (added in Phase 2A) |
+| `mood` | `1 \| 2 \| 3 \| 4 \| 5 \| null` | — | Journal mood reflection (1: rough to 5: great, added in Phase 2A) |
 | `createdAt` | `Date` | `createdAt` | Creation timestamp, chronological ordering index |
 | `updatedAt` | `Date` | `updatedAt` | Last modification timestamp, recency ordering index |
 
@@ -280,6 +316,49 @@ this.version(7).stores({
 | `minutes` | `number` | — | Session duration in minutes (e.g. 15, 25, 45, 60) |
 | `taskId` | `number \| null` (optional) | `taskId` | Optional associated task reference index |
 | `createdAt` | `Date` | `createdAt` | Creation timestamp index |
+
+#### Table: `links` (Realized in Phase 2B)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `sourceId` | `number` | `sourceId` | Source note containing the [[wikilink]] |
+| `targetId` | `number \| null` | `targetId` | Resolved note ID, or null if unresolved |
+| `targetTitle` | `string` | `targetTitle` | Raw extracted link title |
+| `context` | `string` | — | Snippet of ±60 characters around link in source note |
+| `createdAt` | `number` | — | Epoch timestamp of link extraction |
+
+#### Table: `routines` (Realized in Phase 4)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `name` | `string` | `name` | Routine template name |
+| `timeOfDay` | `'morning' \| 'afternoon' \| 'evening' \| 'any'` | `timeOfDay` | Daily schedule anchor |
+| `daysOfWeek` | `number[]` | `*daysOfWeek` (multiEntry) | Weekday recurrence (0=Sun, 1=Mon, ..., 6=Sat) |
+| `active` | `boolean` | `active` | Enabled flag |
+| `createdAt` | `number` | — | Creation timestamp |
+| `updatedAt` | `number` | — | Modification timestamp |
+
+#### Table: `routineRuns` (Realized in Phase 4)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `routineId` | `number` | `routineId` | Routine template reference |
+| `date` | `string` | `date` | Local date string (`YYYY-MM-DD`) |
+| `[routineId+date]` | `[number, string]` | `&[routineId+date]` (unique) | Compound unique key enforcing single materialization per day |
+| `createdAt` | `number` | — | Materialization timestamp |
+
+#### Table: `canvases` (Realized in Phase 5)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `title` | `string` | `title` | Drawing / canvas title |
+| `doc` | `CanvasDoc` | — | Fixed virtual page doc (`3000x2000`, `bg`, `strokes[]`) |
+| `thumbBlob` | `Blob` (optional) | — | 512px preview PNG generated debounced (3s) |
+| `linkedNoteId` | `number \| null` (optional) | `linkedNoteId` | Optional parent note reference |
+| `tags` | `string[]` | `*tags` (multiEntry) | Multi-entry tags index |
+| `lifeAreaId` | `number \| null` (optional) | `lifeAreaId` | Categorization life area index |
+| `trashedAt` | `number \| null` (optional) | `trashedAt` | Soft-delete timestamp index |
+| `updatedAt` | `number` | `updatedAt` | Recency ordering index |
 
 > **CRITICAL Data-Model Rule**: An event's `startAt`/`endAt` represents a fixed scheduled time block. It is completely separate from a task's `dueAt`. These date fields are never merged or conflated.
 
@@ -554,7 +633,119 @@ this.version(7).stores({
 
 ---
 
-## 5. Future Extension Points
+## 5. v2.0 Premium Expansion (Phase 0: Foundation)
+
+### 1. Safety Contract & Dexie Schema Version 8
+- **Append-Only Schema**: Schema changes are strictly append-only. Version 8 re-declares all previous table schemas with complete index lists and introduces `appMeta: 'key'` for schema tracking and backup verification.
+- **Complete Version 8 Index Declaration**:
+  ```ts
+  this.version(8).stores({
+    notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, createdAt, updatedAt',
+    attachments: '++id, noteId, ownerType, kind, createdAt',
+    tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId',
+    events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+    people: '++id, name, trashedAt, createdAt, updatedAt',
+    habits: '++id, name, archived, createdAt, updatedAt',
+    habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+    focusSessions: '++id, startedAt, taskId, createdAt',
+    appMeta: 'key',
+  });
+  ```
+- **Pre-Upgrade Backup Gate (`src/db/backupGate.ts`)**:
+  - Compares existing browser IndexedDB schema version / `appMeta.schemaVersion` with target version (`db.verno = 8`).
+  - If a schema upgrade is required on an existing database, a blocking dialog (`BackupGateModal.tsx`) halts execution.
+  - Automatically compiles a full JSON backup envelope (including all notes, tasks, events, people, habits, focus sessions, and base64 attachments).
+  - Triggers a browser file download and saves an eviction-safe copy into the Origin Private File System (`OPFS: navigator.storage.getDirectory()`).
+  - Dexie migrations run only after backup completion is guaranteed.
+- **Migration Dry-Run Page (`/debug/migrate`)**:
+  - Isolated dev-only verification tool.
+  - Clones live IndexedDB data into `notesapp_migration_test`.
+  - Runs pending schema migrations, validates table integrity, and reports before/after row counts for all tables.
+- **Performance Benchmark Seed Page (`/debug/seed`)**:
+  - Generates 500 test notes with varied tags, dates, and pinned states to stress-test virtualized scrolling and search.
+
+### 2. Design System Tokens & Shared UI Kit
+- **Design Tokens (`src/design/tokens.css`)**:
+  - Tailwind v4 `@theme` configuration with first-class `.dark` overrides per EXPANSION_PLAN §5.2.
+  - Fixed 8-color Life Area palette (`--area-1` through `--area-8`).
+  - Tone-depth hierarchy: `bg-bg` -> `bg-surface` -> `bg-surface-2`; hairline `border-border`.
+  - Single calm accent color: `--color-accent` (oklch indigo).
+  - Cards: 16px radius (`rounded-card`) with `--shadow-card`.
+  - Floating elements (FAB, sheets, snackbars): `--shadow-float`.
+  - Touch target discipline: all interactive elements feature tap targets ≥ 44px.
+- **Shared UI Kit (`src/design/ui/`)**:
+  - `Sheet`: Spring-animated bottom drawer with grab handle, Escape trap, backdrop blur, and reduced-motion fallback.
+  - `Segmented`: Accessible tab control with pill indicators and touch targets ≥ 44px.
+  - `StatCard`: Surface card with title, metric, delta indicators, and subtext.
+  - `EmptyState`: Minimal illustration-less onboarding state with single call-to-action button.
+  - `Skeleton` & `PageSkeleton`: Shimmering placeholder components for lazy route Suspense fallbacks.
+  - `Chip`: Rounded-pill tag/badge with optional dot and dismiss button.
+  - `ColorDots`: 8-color life area palette picker with active ring indicator.
+  - `RingProgress`: SVG circular progress indicator with accent stroke.
+  - `FAB`: Floating action button with spring scaling and 500ms long-press detection.
+  - `SectionHeader`: Semibold section header with count badge and action link.
+  - `SnackbarContext`: Retained Stage 2 undo notification service, restyled with design tokens.
+
+### 3. Navigation v2 & Information Architecture
+- **Single Navigation Config (`src/app/nav.ts`)**:
+  - Centralized manifest defining routes, icons, groups, badges, and feature flag gates.
+- **AppShell (`src/app/AppShell.tsx`)**:
+  - **Desktop**: Grouped collapsible sidebar (`TODAY`, `CAPTURE`, `ORGANIZE`, `PLAN`, `GROW`, `SYSTEM`).
+  - **Mobile**: 5-slot bottom navigation (`Today`, `Search`, `Capture FAB`, `Calendar`, `Library`).
+  - **Mobile Library Sheet**: Smooth bottom drawer organizing all secondary features with ≥44px touch targets.
+  - **Route Redirection**: `/upcoming` and `/` redirect to `/today` with 301-equivalent navigation. "Today" currently renders the date horizon view under the new name until Phase 4.
+
+### 4. Capture FAB & Sheet (`src/app/CaptureFab.tsx`)
+- Sacrosanct sub-3-second inbox capture preserved via autofocused textarea with Enter-to-save.
+- FAB long-press (~500ms with haptic vibration) bypasses the sheet directly into instant inbox capture.
+- Progressive disclosure: buttons for in-development modules (Journal, Drawing, Templates) remain hidden until their respective feature flags are enabled.
+
+### 5. Feature Flags (`src/app/flags.ts`)
+- Master list of 9 flags: `canvas`, `journal`, `graph`, `routines`, `calendarPro`, `insights`, `focusPro`, `habitAnalytics`, `smartInbox`.
+- Persisted in localStorage (`notes_app_feature_flags_v2`), defaulting to OFF in Phase 0.
+- Settings → Labs screen (`/settings/labs`) provides toggle controls and single-line explanations.
+- Navigation items and routes filter dynamically through `useFeatureFlags()` and `useFlag()`.
+
+### 6. Performance Budget & Code-Splitting Baseline
+- All 20 application routes converted to `React.lazy` + `Suspense` with `PageSkeleton` fallbacks.
+- `@tanstack/react-virtual` added to `NotesView`, `InboxView`, and `SearchView` for virtualized rendering.
+- **Performance Budget**: Main entry bundle must stay under ~250 kB gzipped.
+  - **Actual Main Bundle**: `487.43 kB` raw (`150.15 kB` gzipped) — **Well within budget!**
+- **Lazy Feature Chunks (Vite Production Build)**:
+  | Chunk | Raw Size | Gzipped Size | Description |
+  |---|---|---|---|
+  | `dist/assets/index.js` | 487.43 kB | 150.15 kB | Core shell, React runtime, Dexie, navigation |
+  | `dist/assets/index.css` | 99.69 kB | 15.01 kB | Tailwind v4 compiled tokens & theme styles |
+  | `dist/assets/database.js` | 98.90 kB | 31.80 kB | Dexie database schema and repositories |
+  | `dist/assets/NoteEditorView.js` | 31.46 kB | 7.27 kB | Full note editor & attachment drawer |
+  | `dist/assets/SettingsView.js` | 26.20 kB | 6.67 kB | Settings, backups, storage quota |
+  | `dist/assets/HabitsView.js` | 20.20 kB | 4.89 kB | Habits tracker & 30-day dot grid |
+  | `dist/assets/PersonProfileView.js` | 19.80 kB | 4.78 kB | Contact profile & linked entity lists |
+  | `dist/assets/EventEditorModal.js` | 15.19 kB | 3.69 kB | Calendar event editor modal |
+  | `dist/assets/CalendarView.js` | 13.54 kB | 3.56 kB | Month grid & calendar agenda |
+  | `dist/assets/FocusTimerView.js` | 13.17 kB | 3.65 kB | Focus Pomodoro timer & session logs |
+  | `dist/assets/EisenhowerMatrixView.js` | 11.71 kB | 3.49 kB | 2x2 priority matrix view |
+  | `dist/assets/UpcomingView.js` | 11.41 kB | 3.35 kB | Today / Upcoming horizon view |
+  | `dist/assets/PeopleView.js` | 11.18 kB | 2.95 kB | People directory grid |
+  | `dist/assets/NotesView.js` | 8.99 kB | 2.66 kB | Virtualized active notes list |
+  | `dist/assets/TasksView.js` | 8.41 kB | 2.76 kB | Todo/Done tasks list |
+  | `dist/assets/TrashView.js` | 7.50 kB | 1.97 kB | Trash browser & auto-purge |
+  | `dist/assets/MigrateDebugScreen.js` | 7.33 kB | 2.47 kB | Migration dry-run debug tool |
+  | `dist/assets/InboxView.js` | 6.29 kB | 2.05 kB | Virtualized inbox triage view |
+  | `dist/assets/ArchiveView.js` | 4.88 kB | 1.58 kB | Archived notes browser |
+  | `dist/assets/SearchView.js` | 4.83 kB | 1.79 kB | Virtualized instant search view |
+  | `dist/assets/TagsView.js` | 4.69 kB | 1.57 kB | Tag cloud and tag browser |
+  | `dist/assets/SeedDebugScreen.js` | 4.14 kB | 1.77 kB | 500-note benchmark generator |
+  | `dist/assets/LabsScreen.js` | 3.10 kB | 1.22 kB | Feature flags management screen |
+
+### 7. Motion & Accessibility
+- Animations powered by `motion` (`motion/react`).
+- Used strictly with purpose: bottom sheet spring transitions and nav feedback.
+- Global reduced-motion support via `useReducedMotion()`. When active, animations are disabled or rendered with zero-delay opacity transitions.
+
+---
+
+## 6. Future Extension Points
 
 > **Realized Extension Points**:
 > - **Attachments** (Stage 3): Generalized entity-type attachments (`ownerType: 'note' | 'task' | 'event'`).
@@ -567,8 +758,540 @@ this.version(7).stores({
 > - **Eisenhower Matrix** (Stage 10): Reactive 2x2 matrix view over existing tasks with desktop drag-and-drop and mobile long-press quadrant moving.
 > - **Android App Wrapper** (Stage 11): Native Android wrapper with Capacitor 8, API Level 36 target, native splash screen, status bar theme sync, and offline WebView IndexedDB.
 > - **Play Store Prep** (Stage 12): Automated release pipeline (`scripts/build-release.sh`), Data Safety declarations, store listing copy, GitHub Pages privacy policy, and 2-minute smoke test checklist.
+> - **v2.0 Phase 0 Foundation**: Design system tokens, Navigation v2 (5-slot mobile bottom nav + grouped desktop sidebar), Feature Flags (Settings → Labs), Pre-upgrade Backup Gate (JSON + OPFS), Migration Dry-Run (`/debug/migrate`), Virtualized Lists (`@tanstack/react-virtual`), and Route Code-Splitting baseline.
+> - **v2.0 Phase 1: Life Areas & Smart Inbox**: Dexie Schema Version 9, Life Areas taxonomy & picker, Subtasks hierarchy & progress chips, Natural language quick-add (`chrono-node`), Templates engine & picker, and Smart Inbox with analytics header & triage sheet.
 
-1. **Sync**
-   - **Target**: Cross-device synchronization and backups without a centralized custodial backend.
-   - **Design**: Integrated through repository layers with change-vector logging or CRDTs.
+---
 
+## 6. v2.0 Phase 1: Life Areas & Smart Inbox
+
+### 1. Safety Contract & Dexie Schema Version 9
+- **Append-Only Schema Evolution**:
+  - Schema changes adhere strictly to §0 Safety Contract.
+  - Version 9 re-declares all table schemas with **complete index sets**.
+  - New tables:
+    - `lifeAreas: '++id, name, archived, sortOrder, createdAt'`
+    - `templates: '++id, kind, name, usageCount, createdAt'`
+  - Updated tables:
+    - `tasks`: gained `lifeAreaId`, `parentTaskId`, `routineRunId`, `sortOrder`, `estimatedMin`
+    - `notes`: gained `lifeAreaId`
+    - `events`: gained `lifeAreaId`
+- **Complete Version 9 Index Declaration**:
+  ```ts
+  this.version(9).stores({
+    notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, createdAt, updatedAt',
+    attachments: '++id, noteId, ownerType, kind, createdAt',
+    tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+    events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+    people: '++id, name, trashedAt, createdAt, updatedAt',
+    habits: '++id, name, archived, createdAt, updatedAt',
+    habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+    focusSessions: '++id, startedAt, taskId, createdAt',
+    appMeta: 'key',
+    lifeAreas: '++id, name, archived, sortOrder, createdAt',
+    templates: '++id, kind, name, usageCount, createdAt',
+  });
+  ```
+- **Pre-Upgrade Backup Gate (`src/db/backupGate.ts`)**:
+  - `TARGET_VERSION = 9` ensures pre-upgrade auto-backup to JSON download and OPFS before schema mutation executes.
+- **Backup & Restore v9 Envelope (`src/db/exportService.ts` & `src/components/views/SettingsView.tsx`)**:
+  - Export and import routines include `lifeAreas` and `templates` collections with full backward and forward compatibility.
+
+### 2. Life Areas System (Always-On Data Layer)
+- **Data Architecture (`src/types/area.ts`, `src/db/repos/areasRepo.ts`)**:
+  - Seven default areas seeded idempotently on first launch:
+    - Health (`--area-1`)
+    - Work (`--area-2`)
+    - Personal (`--area-3`)
+    - Finance (`--area-4`)
+    - Learning (`--area-5`)
+    - Home (`--area-6`)
+    - Relationships (`--area-7`)
+  - Full CRUD operations with soft-archive, reordering, and color customization.
+- **Life Area Picker (`src/features/areas/LifeAreaPicker.tsx`)**:
+  - Accessible dropdown with colored dot indicators, area names, and clear action.
+  - Integrated across Task Editor (`TaskEditorModal`), Note Editor optional tray (`NoteEditorView`), Calendar Event Editor (`EventEditorModal`), Template Editor, and Triage Sheet.
+- **Areas Screen (`src/features/areas/AreasScreen.tsx`)**:
+  - Route: `/areas` (accessible from Organize sidebar, mobile Library sheet, and Settings).
+  - Manage area names, color palette dots, icon symbols, archive status, and inspect global tag usage counts.
+
+### 3. Task Subtasks & Parent Progress Chip
+- **Data Model**: Subtasks are first-class tasks with `parentTaskId?: number | null`.
+- **Progress Tracking**: Parent tasks compute reactive subtask progress (`x/y` subtasks done) via `getSubtaskProgress` and `useSubtaskProgress`.
+- **UI Integration**:
+  - Main task rows render `SubtaskProgressChip` ("2/5" badge) alongside life area color indicators.
+  - Subtasks are hidden from main task lists to prevent clutter, but appear in Today/Upcoming horizons if they specify their own `dueAt`.
+  - `TaskEditorModal` features an interactive subtask checklist with completion toggles, reordering, and deletions.
+  - Incomplete subtasks warning modal prevents accidental early completion of parent tasks.
+
+### 4. Natural Language Quick-Add Parser (`src/lib/quickAdd.ts`)
+- **Engine**: Powered by `chrono-node` with custom pre- and post-processing refiners.
+- **Extraction Rules**:
+  - `#tag` tokens are extracted into the tags array.
+  - `@Area` tokens are matched case-insensitively against active Life Areas and resolved to `lifeAreaId`.
+  - Natural date and time expressions (e.g. "tomorrow 3pm", "next monday 10:30am", "in 3 days") are converted to `dueAt` and stripped from the task title.
+  - **False Positive Guard**: Plain numbers (e.g., "meeting with 3 people", "buy 2 apples", "chapter 5") are guarded against stray date conversions.
+- **Verification**: 13 unit tests running via `vitest` covering relative offsets, case insensitivity, tag parsing, and false-positive guards.
+
+### 5. Starter Templates Engine (`src/types/template.ts`, `src/db/repos/templatesRepo.ts`)
+- **Templates CRUD**:
+  - Seeded defaults for tasks (e.g. "Weekly Review Checklist", "Bug Triage") and notes (e.g. "Meeting Notes", "1-on-1 Prep").
+  - Tracks usage count with `incrementUsageCount`.
+- **Template Picker Sheet (`src/features/templates/TemplatePickerSheet.tsx`)**:
+  - Bottom sheet modal displaying templates by kind (`task` or `note`).
+  - Integrated into Capture FAB ("From Template" button) and Tasks view.
+- **Templates Screen (`src/features/templates/TemplatesScreen.tsx`)**:
+  - Route: `/settings/templates` (accessible from Settings and Capture flow).
+
+### 6. Smart Inbox Upgrade (Flag: `'smartInbox'`)
+- **Inbox Analytics Header (`src/features/inbox/InboxAnalyticsHeader.tsx`)**:
+  - Collapsible, non-blocking summary strip at the top of the Inbox:
+    `"12 captured · 9 filed this week · avg 4h to file"`
+  - Dynamically computed from notes rows: captures in the last 7 days, filed notes in the last 7 days, and median turnaround time-to-file.
+- **Triage & File-As Bottom Sheet (`src/features/inbox/FileAsSheet.tsx`)**:
+  - Activated when filing or converting an inbox item.
+  - Offers editable title with live NLP detection preview chips.
+  - Life Area assignment via `LifeAreaPicker`.
+  - Expandable Subtasks disclosure for adding task checklist items.
+  - Starter template application.
+  - Clear 1-tap actions:
+    1. **File as Note**: removes inbox flag, applies title, area, and tags.
+    2. **Convert to Task**: creates a task with subtasks, due date, area, and tags, then clears the inbox note.
+    3. **Delete**: moves note to trash with undo toast.
+- **Inline Quick Capture**:
+  - Header search/capture input in Inbox with live NLP feedback chip.
+
+---
+
+## 7. v2.0 Phase 2A: Journal (Feature Flag: 'journal')
+
+### 1. Safety Contract & Dexie Schema Version 10
+- **Append-Only Schema Evolution**:
+  - Schema changes adhere strictly to §0 Safety Contract.
+  - Version 10 re-declares all 11 table schemas with **complete index sets**.
+  - Updated table `notes`: gained `kind` ('note' | 'journal', default 'note', indexed) and `journalDate` ('YYYY-MM-DD', indexed).
+  - Upgrade function iterates existing notes and initializes `kind = 'note'` where undefined.
+- **Complete Version 10 Index Declaration**:
+  ```ts
+  this.version(10).stores({
+    notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+    attachments: '++id, noteId, ownerType, kind, createdAt',
+    tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+    events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+    people: '++id, name, trashedAt, createdAt, updatedAt',
+    habits: '++id, name, archived, createdAt, updatedAt',
+    habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+    focusSessions: '++id, startedAt, taskId, createdAt',
+    appMeta: 'key',
+    lifeAreas: '++id, name, archived, sortOrder, createdAt',
+    templates: '++id, kind, name, usageCount, createdAt',
+  }).upgrade((tx) => {
+    return tx.table('notes').toCollection().modify((note) => {
+      if (!note.kind) {
+        note.kind = 'note';
+      }
+    });
+  });
+  ```
+- **Pre-Upgrade Backup Gate (`src/db/backupGate.ts`)**:
+  - `TARGET_VERSION = 10` ensures pre-upgrade auto-backup to JSON download and OPFS before schema mutation executes.
+- **Backup & Restore v10 Envelope (`src/db/exportService.ts` & `src/components/views/SettingsView.tsx`)**:
+  - Envelope bumped to Version 10, sanitizing and importing `kind`, `journalDate`, and `mood` on notes.
+
+### 2. Timezone Safety Contract (`src/lib/date.ts`)
+- **Local Date Handling**:
+  - `localDateStr(d?: Date)` extracts `getFullYear()`, `getMonth() + 1`, and `getDate()` from the user's local timezone.
+  - Prevents the UTC midnight shift bug where writing an entry at 23:30 local time creates an entry with tomorrow's date.
+  - Tested against simulated UTC offsets and late-night edge cases in `src/lib/date.test.ts`.
+
+### 3. Journal Screen (`src/features/journal/JournalScreen.tsx`)
+- **Navigation & Routing**:
+  - Route `/journal` defaults to today's local date (`/journal/YYYY-MM-DD`).
+  - Supports `/journal/:date` for historical and future date exploration.
+  - Header displays big date + weekday, navigation arrows (`‹` and `›`), calendar date picker jump, and "Today" button.
+- **Mood Tracking (`src/features/journal/MoodRow.tsx`)**:
+  - 5 mood faces: 😫 (1: rough), 🙁 (2: down), 😐 (3: okay), 🙂 (4: good), 😄 (5: great).
+  - Tappable with active focus ring and click-to-clear/toggle behavior.
+- **Distraction-Free Editor**:
+  - Full-bleed writing canvas constrained to readable `max-w-[68ch]`.
+  - Font switch button toggles between modern Sans and bookish Serif typography.
+  - Autosave indicator (debounced 500ms, "Saving…" → "Saved").
+  - Calm empty state placeholder: *"Nothing written yet — that's fine."*
+  - Optional Life Area tagging via `LifeAreaPicker` and tag pills.
+
+### 4. Journal Prompts & Templates Integration
+- **Templates Extension (`src/db/repos/templatesRepo.ts`, `src/features/templates/TemplatesScreen.tsx`)**:
+  - Added `'journal'` kind to templates with reflection prompt array support in `TemplateBody`.
+  - Default "Daily Reflection" template seeded idempotently:
+    1. "What went well today?"
+    2. "What drained my energy?"
+    3. "Tomorrow I will focus on…"
+  - Interactive prompt builder in `TemplatesScreen` to add and remove custom prompts.
+- **Prompt Chips (`src/features/journal/PromptChips.tsx`)**:
+  - Tappable prompt chips rendered beneath the mood row.
+  - Tapping a chip cleanly appends the prompt in bold markdown (`**Prompt text**`) into the editor.
+
+### 5. Historical Flashback & Streak Continuity (`src/lib/journal.ts`)
+- **Streak Engine (`computeJournalStreak`)**:
+  - Pure calculation verifying daily journal consistency.
+  - Tolerant: If today is not yet written, the streak remains intact based on yesterday's entry, avoiding morning discouragement.
+  - Skips empty entries (must have text content or mood logged).
+- **"On This Day" Flashback (`OnThisDayCard.tsx`, `filterOnThisDay`)**:
+  - Surfaces entries from prior calendar years (`year < currentYear`) sharing the same `MM-DD`.
+  - Renders relative year badge (e.g. "1 year ago", "2 years ago"), mood, snippet preview, and direct link.
+
+### 6. Shell & Ecosystem Integration
+- **Global Search (`src/components/views/SearchView.tsx`)**:
+  - Journal entries are excluded from standard Notes list views (`getActiveNotes` and `getArchivedNotes`), preserving note clarity.
+  - Journal entries appear in global search with a prominent `"Journal"` pill badge and navigate to `/journal/${note.journalDate}`.
+- **Capture FAB (`src/app/CaptureFab.tsx`)**:
+  - "Journal Entry" action opens today's journal screen directly.
+- **Today Dashboard Section (`src/features/journal/JournalPromptSection.tsx`)**:
+  - Rendered at the bottom of the Today stream in `UpcomingView.tsx` (gated by `useFlag('journal')`).
+  - Shows current streak 🔥, today's completion status, logged mood, and a direct CTA to write or review today's reflection.
+
+---
+
+## 8. v2.0 Phase 2B: Wikilinks, Backlinks & Knowledge Graph (Feature Flag: 'graph')
+
+### 1. Safety Contract & Dexie Schema Version 11
+- **Append-Only Schema Evolution**:
+  - Schema changes adhere strictly to §0 Safety Contract.
+  - Version 11 adds the `links` table and re-declares all 12 table schemas with **complete index sets**.
+  - New table `links: '++id, sourceId, targetId, targetTitle'`.
+- **Complete Version 11 Index Declaration**:
+  ```ts
+  this.version(11).stores({
+    notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+    attachments: '++id, noteId, ownerType, kind, createdAt',
+    tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+    events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+    people: '++id, name, trashedAt, createdAt, updatedAt',
+    habits: '++id, name, archived, createdAt, updatedAt',
+    habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+    focusSessions: '++id, startedAt, taskId, createdAt',
+    appMeta: 'key',
+    lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+    templates: '++id, kind, name, usageCount, createdAt',
+    links: '++id, sourceId, targetId, targetTitle',
+  }).upgrade(async (tx) => {
+    const meta = tx.table('appMeta');
+    await meta.put({
+      key: 'schemaVersion',
+      value: 11,
+      updatedAt: Date.now(),
+    });
+  });
+  ```
+- **Pre-Upgrade Backup Gate (`src/db/backupGate.ts`)**:
+  - `TARGET_VERSION = 11` ensures auto-backup to JSON and OPFS runs before schema migration.
+- **Backup & Restore v11 Envelope (`src/db/exportService.ts` & `src/components/views/SettingsView.tsx`)**:
+  - Envelope bumped to Version 11, including `links` table in export/import and auto-reindexing on import completion.
+
+### 2. Wikilink Parsing Engine (`src/lib/wikilinks.ts`)
+- **Regular Expression**:
+  `const WIKILINK_RE = /\[\[([^\[\]|#]+)(?:#([^\[\]|]*))?(?:\|([^\[\]]*))?\]\]/g;`
+  - Captures `rawTitle`, optional `#heading` anchor, and optional `|alias` display label.
+- **Title Normalization**:
+  - `normalizeTitle(title)`: Trims, lowercases, and collapses inner whitespace (`\s+` -> `' '`), ensuring resilient cross-note link resolution.
+- **Context Snippet Extraction**:
+  - `extractContextSnippet(content, index, length, 60)` extracts `±60` characters around link matches, normalizing newlines and adding ellipsis indicators.
+
+### 3. Links Repository & Chunked Reindexing (`src/db/repos/linksRepo.ts`)
+- **Single Note Reindex (`reindexNote`)**:
+  - Clears previous outgoing links where `sourceId === noteId`.
+  - Extracts wikilinks, normalizes targets, and matches against existing active notes by title or journalDate.
+  - Generates resolved (`targetId: number`) or unresolved (`targetId: null`) links with surrounding context.
+- **Chunked Database Reindex (`reindexAllLinks`)**:
+  - Processes notes in batches of 50, yielding to the browser event loop with `setTimeout(0)` to prevent UI jank.
+  - Automatically triggered on first launch after Schema v11 upgrade via `appMeta` key `links_reindexed_v11`.
+- **Claim Flow (`claimUnresolvedLinks`)**:
+  - When a note is created or renamed, automatically scans unresolved links matching the new title and resolves them.
+- **Reactive Hooks**:
+  - `useBacklinks(noteId)`: Reactive incoming backlinks with source note entities.
+  - `useUnresolvedBacklinks(title)`: Incoming unlinked mentions eligible for 1-click claiming.
+  - `useOutgoingLinks(noteId)`: Outgoing links with resolution status.
+  - `useAllGraphData()`: Complete dataset of active notes and resolved edges for force-directed visualization.
+
+### 4. Editor Integration (`NoteEditorView.tsx`)
+- **Typing Popup (`src/features/notes/WikilinkAutocomplete.tsx`)**:
+  - Typing `[[` immediately triggers the floating autocomplete popup.
+  - Real-time prefix and substring ranking across existing notes and journal entries, capped at 8 rows.
+  - Full keyboard navigation (ArrowUp, ArrowDown, Enter, Tab, Escape) and touch support.
+  - Affordance to create new target note directly from the autocomplete dropdown.
+- **Debounced Link Reindexing**:
+  - Automatically calls `linksRepo.reindexNote(numericId)` debounced at 800ms after typing stops, decoupled from the 500ms note content save.
+- **Backlinks Panel (`src/features/notes/BacklinksPanel.tsx`)**:
+  - Collapsible section under the editor displaying "Linked in N notes".
+  - Shows source note title, context snippet with bolded target match, and tap-to-navigate.
+  - Shows unclaimed mentions with a "Claim all" button.
+  - Outgoing links chip row with solid chips for resolved notes and dashed chips with "+" affordance for uncreated target notes.
+- **In-Note Local Graph Panel (`src/features/notes/LocalGraphPanel.tsx`)**:
+  - Embedded interactive mini-graph showing depth 1 or depth 2 connections to the current note.
+  - Centered active note with accent halo.
+  - "Expand" button jumps directly to the full-screen `/graph/:noteId` route.
+
+### 5. Knowledge Graph Screen (`/graph` & `/graph/:noteId`)
+- **Simulation Engine (`d3-force`)**:
+  - Standard force simulation:
+    - `forceLink`: distance 60 (or 80 in local view)
+    - `forceManyBody`: strength -120 (or -180 in local view)
+    - `forceCollide`: radius by node degree + 5px padding
+    - `forceCenter`: origin centering
+- **Hardware-Accelerated Canvas 2D (`src/features/graph/components/GraphCanvas.tsx`)**:
+  - High-DPI handling via `devicePixelRatio` scaling.
+  - Node radius: `3 + degree` (scaled for regular vs journal notes).
+  - Node color: resolved dynamically from Life Area palette `--area-1` … `--area-8` (fallback neutral slate).
+  - Accent halos for today's journal entries and focused local nodes.
+  - Pan and pinch-to-zoom (touch + mouse wheel) with cursor-centered scaling.
+  - Node dragging reheats simulation with `alpha(0.3)`.
+  - Tap/click opens inspection tooltip; double-click navigates to note.
+  - Simulation automatically cools down and halts RAF render loop when alpha < 0.005, saving CPU and battery.
+- **Performance Cap & Filters (`src/features/graph/components/GraphFiltersSheet.tsx`)**:
+  - Caps global graph rendering at 500 highest-degree nodes when datasets exceed 500 notes.
+  - Filter by Life Area, by tag, include/exclude journals toggle, and orphan node suppression.
+
+### 6. Performance Gate Verification (`SeedDebugScreen.tsx`)
+- Benchmarking tool generating 1,000 interconnected notes and 2,000 wikilinks.
+- Graph canvas renders smoothly in < 1.5s with 60fps pan/zoom interactions.
+
+---
+
+---
+
+## 9. Phase 3 Architecture: Calendar Pro
+
+Calendar Pro replaces the single-month calendar view with a multi-view time-grid and timeline system, gated behind the `calendarPro` feature flag. When disabled, the legacy Stage 12 month/agenda view remains active.
+
+### 1. Unified Time-Grid Engine (`src/features/calendar/grid/TimeGrid.tsx`)
+- **Single Component Architecture**: `DayView` (1 day), `ThreeDayView` (3 days), and `WeekView` (7 days) are all parameterized instances of the same `TimeGrid` component (`days: Date[]`), eliminating code duplication across multi-day views.
+- **Grid Layout**: 24 hour rows at 60px/hour (`1440px` total vertical body), half-hour hairlines with dashed dividers, left rail hour labels (`00:00` to `23:00`).
+- **All-Day Pinned Band (`AllDayBand.tsx`)**: Fixed above the scrolling time grid, displaying multi-day/all-day events and due-all-day tasks with checkboxes.
+- **Real-Time Now Line (`NowLine.tsx`)**: 2px horizontal accent line with an accent dot indicator (`w-3 h-3`) active only on columns matching today, auto-updating every 30 seconds via interval.
+- **Auto-Scroll Behavior**: On initial mount, smoothly scrolls to the current time (offset by 1 hour), or to `07:00` if current time is early morning or if today is not in view.
+
+### 2. Event Clustering & Overlap Math (`layoutEvents.ts`)
+- **Greedy Column Assignment**: Overlapping events are grouped into clusters and sorted by start time and duration. Non-overlapping columns are assigned iteratively.
+- **Geometry Split**: Column width is dynamically calculated as `100% / totalColumns`, with horizontal offset `columnIndex * columnWidth`.
+- **44px Tap Target Guarantee**: Minimum chip height is clamped to `44px` per design system house rules, even for short 15-minute events, ensuring accessibility.
+- **Day Clamping**: Multi-day events crossing midnight are cleanly clamped to local day bounds (`00:00` - `24:00`).
+
+### 3. Desktop Drag Interactions (`EventChip.tsx`)
+- **Drag-to-Move**: Dragging an event chip body recalculates `startAt` and `endAt` with 15-minute snap intervals (15px steps).
+- **Edge Resize**: Dragging top handle resizes `startAt`; dragging bottom handle resizes `endAt`.
+- **Ghost Preview**: Click-and-drag across empty grid slots creates a dashed ghost selection rectangle and prefills a new event with the selected time range.
+- **Mobile Guard**: Touch pointer events are preserved for scrolling; dragging is restricted to desktop mouse pointers.
+
+### 4. Month View Upgrade (`MonthView.tsx`)
+- Replaces generic colored indicators with Life Area palette dots matching each event's category.
+- Tapping any calendar day immediately transitions to `DayView` for that specific date.
+
+### 5. Unified Timeline View (`TimelineView.tsx`)
+- Merges 4 distinct data streams:
+  1. Events (`eventsRepo`) with time and repeat indicators
+  2. Due Tasks (`tasksRepo`) with priority badges and interactive toggle checkboxes
+  3. Scheduled Notes (`notesRepo`) with snippet previews and tap-to-open navigation
+  4. Active Routines (`routinesRepo` stub interface for Phase 4)
+- **Zero Cross-Table Writes**: Completing a task calls `tasksRepo.toggleTaskStatus`; editing an event calls `eventsRepo`; tapping a note navigates to `/notes/:id`.
+- **Auto-Scrolling Now Divider**: A glowing pulse divider sits between past items and upcoming items for today and auto-scrolls into view on open.
+- Default horizon: Today to +14 days, with expandable 14-day increments.
+
+### 6. Persistence & Safety Contract
+- Active view (`day` | `3day` | `week` | `month` | `timeline`) is stored in `localStorage` under `notes_calendar_view` and remembered across sessions.
+- No Dexie schema modification was required; existing Dexie version 11 indexes remain valid and intact.
+
+---
+
+## 10. Phase 4 Architecture: Routines & Today Dashboard
+
+Phase 4 introduces the unified Today Dashboard and the Routines Materialization Engine, gated behind the `routines` feature flag.
+
+### 1. Database Schema Version 12 (`src/db/database.ts`)
+- **`routines` table**:
+  - `++id, name, timeOfDay, *daysOfWeek, active, createdAt, updatedAt`
+  - Stores recurring daily/weekly routine templates with time-of-day anchors (`morning`, `afternoon`, `evening`, `any`).
+- **`routineRuns` table**:
+  - `++id, &[routineId+date], routineId, date, createdAt`
+  - Stores single-day instances of routines with compound unique index `[routineId+date]` enforcing strict idempotency.
+
+### 2. Materialization Engine (`routinesRepo.materializeRoutinesFor`)
+- **Execution Timing**: Runs on application startup for today (`localDateStr()`), on mount of `TodayScreen`, and on midnight rollover detection (30s interval check).
+- **Idempotency Guarantee**: If a `routineRun` record already exists for the compound key `[routineId+date]`, materialization skips without modifying state or duplicating tasks.
+- **Custom Steps vs. Pointer Items**:
+  - **Custom steps**: Converted into real task rows in `db.tasks` carrying `routineRunId = run.id`, due at the routine's time anchor (Morning: `09:00`, Afternoon: `14:00`, Evening: `19:00`, Anytime: `12:00`). Checking them synchronizes task status and routine item state.
+  - **Pointer items (`habit`, `task`, `journal`, `note`)**: Never duplicated. They are read live from their respective repositories. Toggling a habit pointer logs the habit for today in `db.habitLogs`. Toggling a task pointer updates the source task in `db.tasks`.
+
+### 3. Editing Semantics
+- **Snapshot Isolation**: Editing an existing routine does **NOT** retroactively alter previously created or active runs for today. Each `routineRun` retains an `itemsSnapshot` recorded at creation time.
+- Changes made to routine items or schedule apply strictly to future materializations (starting tomorrow).
+
+### 4. Today Dashboard Architecture (`src/features/today/TodayScreen.tsx`)
+Replacing the legacy `UpcomingView`, the Today Dashboard provides a fixed-hierarchy command center:
+1. **Time-Aware Greeting & Date**: Dynamic greeting ("Good morning", "Good afternoon", "Good evening") with settings shortcut.
+2. **NowNext Card**: Computes the nearest upcoming event or routine block within 3 hours and displays a live countdown timer, or a calm idle message.
+3. **Routine Card**: Renders today's active routine for the current time of day with interactive checkboxes, live pointer resolution, and completion progress.
+4. **Schedule Rail**: Compact timeline of today's calendar events with Life Area color dots.
+5. **Due & Overdue Tasks**: Chronological task list with overdue tasks prioritized at the top with danger styling.
+6. **Habits Row**: Horizontal scroll strip of today's habit circles with completion count (`completed/total`).
+7. **Journal Prompt**: Streak flame and direct jump to today's daily reflection.
+8. **Sticky Quick-Capture Bar**: Pinned bottom capture bar enabling `<3s` text entry directly into the Inbox.
+
+### 5. Calendar & Timeline Integration
+- `routinesRepo.itemsFor(date)` returns materialized routine blocks formatted as `[Routine Name] (completed/total)` for display in the Calendar Pro Timeline view.
+
+### 6. Routine Templates
+- Templates of kind `'routine'` allow exporting custom routines into reusable templates and instantiating new routines from starter presets.
+
+---
+
+## 11. Phase 5 Architecture: Canvas & Ink
+
+Phase 5 introduces freeform pressure-sensitive vector sketching, drawing, and visual notes, gated behind the `canvas` feature flag.
+
+### 1. Engine Boundaries & Vector Model (`src/features/canvas/engine/`)
+- **Framework-Agnostic Design**: Core drawing mathematics, geometry generation, coordinate projection, and history management are implemented in pure TypeScript and HTML5 Canvas2D with zero framework dependencies.
+- **Virtual Document Space**:
+  - Fixed page model: `3000 × 2000` doc space (version 1).
+  - All stroke points are stored in document coordinates: `[x, y, pressure(0..1)]`.
+  - Coordinates are projected to and from screen space via matrix transformation:
+    $$\text{docX} = \frac{\text{screenX} - \text{panX}}{\text{zoom}}, \quad \text{docY} = \frac{\text{screenY} - \text{panY}}{\text{zoom}}$$
+- **Stroke Geometry**:
+  - Powered by approved dependency `perfect-freehand` (MIT). No external whiteboard dependencies.
+  - Outlines are converted to standard SVG bezier paths and filled via `Path2D`.
+  - **Pen**: Crisp pressure-tapered vector stroke (`thinning: 0.6, smoothing: 0.5, streamline: 0.4`).
+  - **Brush**: Softer thinning with deterministic size jitter seeded by stroke ID (`hashString(stroke.id)`).
+  - **Highlighter**: Flat wide stroke ($3\times$ size), `globalAlpha = 0.35`, `globalCompositeOperation = 'multiply'`. Never uses destructive compositing.
+  - **Eraser**: Whole-stroke removal via bounding-box culling and point-to-segment distance testing ($< \text{size}/2 + 4\text{px}$).
+
+### 2. Dual-Layer Canvas Renderer (`renderer.ts`)
+- **Static Layer (Bottom)**: Draws document background, page outline shadow, and all committed strokes. Redrawn only on stroke commit, stroke removal, or viewport pan/zoom.
+- **Active Layer (Top)**: Dedicated high-frequency canvas handling active in-progress pointer events. Redrawn per `pointermove` using `requestAnimationFrame` with browser coalesced events (`getCoalescedEvents`) for zero perceptible latency.
+
+### 3. Structural-Sharing History (`history.ts`)
+- Manages undo and redo stacks with snapshot references (capacity 50).
+- Actions (new stroke, eraser removals, canvas clear) push immutable stroke arrays.
+
+### 4. Transform & Viewport Engine (`transform.ts`)
+- Pan & pinch-zoom (clamped between $0.25\times$ and $4.0\times$) with zoom percentage badge.
+- Focal point zooming preserving the document coordinates under the pointer or touch center.
+- Multi-touch pinch-to-zoom on mobile touch screens with `touch-action: none`.
+
+### 5. UI & Integration (`CanvasEditor.tsx` & `CanvasListScreen.tsx`)
+- **Editor**: Fixed top bar with back navigation, inline editable title, undo/redo, zoom controls, note link button, 2× HD PNG export, and overflow options. Floating ergonomic bottom pill toolbar with tool selectors, Life Area color palette, and 3 stroke sizes.
+- **Autosave Pipeline**: Debounced 1s document save to Dexie table `canvases`. Debounced 3s offscreen 512px thumbnail PNG generation (`thumbBlob`).
+- **Masonry List Screen**: Thumbnail gallery with object URL lifecycle management (explicit `URL.revokeObjectURL` on unmount preventing memory leaks), search by title/tags, Life Area filter chips, trash/restore, and creation FAB.
+- **Note Integration**:
+  - `linkedNoteId` foreign key links drawings to parent notes.
+  - `NoteEditorView` renders linked drawings as thumbnail chips in the optional tray.
+  - "Draw" action in note editor creates a pre-linked drawing.
+  - "Export PNG" (2× offscreen render) downloads or attaches drawing to note attachments via `attachmentsRepo`.
+- **Backup Round-Trip**: Full JSON backup and restore carries canvases including serialized base64 thumbnails (`thumbBase64`).
+
+---
+
+## 12. Phase 6 Architecture: Focus Pro · Habit Analytics · Insights Hub
+
+Phase 6 delivers interval-based focus flow, long-term habit visualization, and a personal productivity insights hub, gated behind feature flags `focusPro`, `habitAnalytics`, and `insights`.
+
+### 1. Database Schema Version 14 (`src/db/database.ts`)
+- **`timerPresets` table**:
+  - Schema: `++id, name, isDefault`
+  - Seeded defaults:
+    - *Classic Pomodoro*: 25m focus, 5m short break, 15m long break, 4 cycles, auto-start breaks, sound chime.
+    - *Deep Work*: 50m focus, 10m short break, 30m long break, 2 cycles, auto-start breaks, sound chime.
+    - *Quick*: 15m focus, 3m short break, 0m long break, 1 cycle, manual break start.
+- **`focusSessions` table**:
+  - Gained `presetId?: number | null` and `kind?: 'focus' | 'break'` to record sessions under explicit presets and kinds.
+  - Complete index list preserved: `++id, startedAt, taskId, createdAt`.
+- **Target Schema Version & Backup Gate**:
+  - Target version bumped to `14` (`TARGET_VERSION = 14` in `src/db/backupGate.ts`).
+  - Full JSON backup envelope version 14 includes `timerPresets`.
+
+### 2. Focus Pro Architecture (`src/features/focus/`)
+- **Timestamp-Anchored Engine (`FocusTimerContext.tsx`)**:
+  - State machine: `mode` (`focus` | `shortBreak` | `longBreak`), `status` (`idle` | `running` | `paused`), `currentCycle`, `preset`, and `remainingSeconds`.
+  - Background resilience: Timer countdown computes remaining duration against an absolute timestamp (`targetEndTime = Date.now() + remainingSeconds * 1000`). Survives tab switching, OS sleep, and browser throttling.
+  - Automatic `visibilitychange` listener recalculates remaining time immediately upon tab focus or device wake.
+- **Cycles & Transitions**:
+  - Focus session completes $\to$ plays synthetic Web Audio sine chime (dual-tone 523.25Hz $\to$ 659.25Hz pleasant sweep) $\to$ browser notification $\to$ logs session to `focusSessions` table.
+  - Cycle tracker increments $\to$ shifts to `shortBreak` or `longBreak` after $N$ cycles $\to$ auto-starts if preset flags dictate.
+- **Presets Management (`PresetsSheet.tsx`)**:
+  - Pick active preset, set default preset, duplicate, customize durations and cycle counts, create new presets, or delete custom presets.
+- **Weekly Analytics Bar Chart (`WeeklyFocusChart.tsx`)**:
+  - Responsive inline SVG bar chart rendering daily focus minutes over the trailing 7 days without external charting libraries.
+
+### 3. Habit Analytics Architecture (`src/features/habits/`)
+- **12-Month Calendar Heatmap (`src/design/ui/Heatmap.tsx`)**:
+  - 52-week horizontal contribution grid (Mon–Sun alignment).
+  - 4-step accent alpha rendered via CSS `color-mix(in oklch, var(--color-accent) X%, transparent)`:
+    - Level 0: Subtle surface border
+    - Level 1: 25% accent alpha
+    - Level 2: 50% accent alpha
+    - Level 3: 75% accent alpha
+    - Level 4: 100% accent
+  - Today ring indicator and tap-to-inspect cell modal displaying date details and allowing completion toggles.
+- **8-Week Trend Sparkline (`HabitTrendSparkline.tsx`)**:
+  - Inline SVG area + stroke chart showing weekly completion percentage against weekly targets.
+- **Habit Detail Screen (`HabitDetailScreen.tsx` at `/habits/:id`)**:
+  - Accessible when `habitAnalytics` flag is enabled.
+  - Four key metric `StatCard`s: 30-day completion rate, current streak, best streak, and total completions.
+- **Pure Streak Engine (`habitsRepo.calculateHabitStreaks`)**:
+  - Reused and unit-tested pure function supporting:
+    - *Daily*: Consecutive calendar days (yesterday grace period for incomplete today, month-boundary safe).
+    - *Weekdays*: Consecutive weekdays (weekends do not break or count towards streaks).
+    - *Weekly Target*: Target days met per calendar week (in-progress week grace period).
+
+### 4. Insights Hub Architecture (`src/features/insights/`)
+- **Pure Computed Selectors (`src/db/repos/insightsRepo.ts`)**:
+  - Computes 6 core productivity metrics with delta comparisons against previous periods:
+    1. *Captures this week*: Notes + tasks created vs last week.
+    2. *Tasks completed this week*: Completed tasks count + breakdown by Life Area.
+    3. *Events this week*: Scheduled calendar events vs last week.
+    4. *Focus minutes this week*: Sum of focus session minutes vs last week.
+    5. *Habit consistency (30d)*: Overall scheduled habit adherence vs prior 30-day window.
+    6. *Journal streak*: Active consecutive daily reflections and total entries.
+- **Day-Keyed Memoization**:
+  - Caches computed insights in `db.appMeta` under `insights_cache_${toLocalDateStr()}` to eliminate re-computation across renders and view switches.
+  - Recomputed only when date changes or when user triggers explicit refresh.
+- **Hub View (`InsightsScreen.tsx` at `/insights`)**:
+  - Interactive metric cards featuring delta badges ($\uparrow, \downarrow, -$ in success/danger/muted tones) with direct navigation shortcuts to each feature module.
+- **Today Integration (`TodayScreen.tsx`)**:
+  - Subtle weekly Insights icon button embedded in the greeting header when the `insights` flag is active.
+
+---
+
+## 13. Phase 7: Hardening, Release & Final Performance Stats
+
+### 1. Performance & Code Splitting Verification
+- **Code Splitting**: Full route-level lazy loading configured in `src/App.tsx` for all 18 primary views and screens. Heavy subsystems (graph rendering via `d3-force`, vector stroke drawing with `perfect-freehand`, time grid engine, and natural language date parser with `chrono-node`) load strictly on-demand.
+- **Main Bundle Audit**:
+  - Main bundle chunk (`index-*.js`): **116.3 kB gzipped** (392.3 kB raw) — comfortably below the strict **250 kB gzipped** threshold (§2.6, §7).
+  - Main CSS chunk: **17.7 kB gzipped** (120.1 kB raw).
+  - Largest feature chunks (gzipped): `react` (38.7 kB), `database` (31.1 kB), `quickAdd` (13.3 kB), `NoteEditorView` (10.7 kB), `CalendarView` (10.5 kB), `CanvasEditor` (9.4 kB), `GraphCanvas` (8.7 kB), `SettingsView` (7.6 kB), `FocusTimerView` (6.3 kB), `TodayScreen` (5.6 kB).
+- **Subscription & Render Audit**:
+  - `useLiveQuery` subscriptions scoped with precise equality keys or filtered projections. No unbounded full-table `toArray()` queries executed in render paths of large lists.
+  - `GraphCanvas` stops `d3-force` simulation and cancels `requestAnimationFrame` ticks immediately upon unmount.
+  - `CanvasEditor` clears autosave and thumbnail timers, stops listeners, and releases animation frames upon unmount.
+
+### 2. Accessibility (A11y) Verification
+- **Universal Focus Rings**: `:focus-visible` styled with 2px accent outline and 2px offset.
+- **Reduced Motion Support**: Global media query `@media (prefers-reduced-motion: reduce)` disables all animations and transitions. Motion components consume `useReducedMotion()` to skip spring transitions.
+- **Modal & Sheet Focus Trap**: `Sheet.tsx` captures keyboard focus upon opening, cycles Tab/Shift+Tab within focusable elements, traps focus, and listens for the `Escape` key.
+- **Color Contrast**: Surface and ink tokens guarantee WCAG AA contrast ratio >= 4.5:1 across both light and dark themes.
+
+### 3. Export & Backup Completeness Audit
+- Full round-trip export envelope version 14 covers 100% of all v1 and v2 application entities:
+  - Notes (including `kind: 'journal'`, `journalDate`, and `mood`)
+  - Tasks (subtasks with `parentTaskId`, life area, and `routineRunId` provenance)
+  - Events, People, Habits + HabitLogs
+  - Canvases (complete stroke vectors + base64 thumbnails)
+  - Routines + Materialized RoutineRuns
+  - NoteLinks (reindexed on import or preserved)
+  - TimerPresets + FocusSessions
+  - Life Areas + Templates
+  - Settings + Feature Flags
+- Round-trip integrity verified via unit test `src/db/exportService.test.ts` and live migration dry-run on `/debug/migrate`.
+
+### 4. Release Versioning
+- `versionName`: `2.0.0` (in `package.json` and `android/app/build.gradle`).
+- `versionCode`: `3` (in `android/app/build.gradle`).

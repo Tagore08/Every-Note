@@ -1,7 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './database';
 import { attachmentsRepo } from './attachmentsRepo';
-import type { Note } from '../types/note';
+import { localDateStr } from '../lib/date';
+import { computeJournalStreak, filterOnThisDay } from '../lib/journal';
+import type { Note, JournalMood } from '../types/note';
 
 /**
  * Repository providing clean, isolated data access for Note entities.
@@ -45,6 +47,10 @@ export const notesRepo = {
       scheduledAt: draft.scheduledAt ?? null,
       reminderAt: draft.reminderAt ?? null,
       personId: draft.personId ?? null,
+      lifeAreaId: draft.lifeAreaId ?? null,
+      kind: draft.kind ?? 'note',
+      journalDate: draft.journalDate ?? null,
+      mood: draft.mood ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -205,7 +211,11 @@ export const notesRepo = {
    */
   async getActiveNotes(tagFilter?: string): Promise<Note[]> {
     let collection = db.notes.filter(
-      (note) => !note.inbox && !note.archived && note.trashedAt === null
+      (note) =>
+        !note.inbox &&
+        !note.archived &&
+        note.trashedAt === null &&
+        (!note.kind || note.kind === 'note')
     );
 
     if (tagFilter && tagFilter.trim()) {
@@ -232,7 +242,12 @@ export const notesRepo = {
    */
   async getArchivedNotes(): Promise<Note[]> {
     const notes = await db.notes
-      .filter((note) => note.archived === true && note.trashedAt === null)
+      .filter(
+        (note) =>
+          note.archived === true &&
+          note.trashedAt === null &&
+          (!note.kind || note.kind === 'note')
+      )
       .toArray();
 
     return notes.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -337,6 +352,11 @@ export const notesRepo = {
         inbox: Boolean(raw.inbox),
         scheduledAt: scheduledAt && !isNaN(scheduledAt.getTime()) ? scheduledAt : null,
         reminderAt: reminderAt && !isNaN(reminderAt.getTime()) ? reminderAt : null,
+        personId: typeof raw.personId === 'number' ? raw.personId : null,
+        lifeAreaId: typeof raw.lifeAreaId === 'number' ? raw.lifeAreaId : null,
+        kind: raw.kind === 'journal' ? 'journal' : 'note',
+        journalDate: typeof raw.journalDate === 'string' ? raw.journalDate : null,
+        mood: typeof raw.mood === 'number' && raw.mood >= 1 && raw.mood <= 5 ? (raw.mood as JournalMood) : null,
         createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
         updatedAt: isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
       };
@@ -413,6 +433,66 @@ export const notesRepo = {
   },
 
   /**
+   * Fetches a journal entry by its localDateStr ('YYYY-MM-DD').
+   */
+  async getJournalEntry(dateStr: string): Promise<Note | undefined> {
+    const note = await db.notes
+      .filter((n) => n.kind === 'journal' && n.journalDate === dateStr && n.trashedAt === null)
+      .first();
+    return note;
+  },
+
+  /**
+   * Retrieves an existing journal entry for a localDateStr, or materializes a new one.
+   */
+  async createOrGetJournalEntry(dateStr: string): Promise<Note> {
+    const existing = await notesRepo.getJournalEntry(dateStr);
+    if (existing) return existing;
+
+    return await notesRepo.createNote({
+      kind: 'journal',
+      journalDate: dateStr,
+      title: '',
+      content: '',
+      tags: [],
+      mood: null,
+      inbox: false,
+      pinned: false,
+      archived: false,
+    });
+  },
+
+  /**
+   * Computes consecutive daily journal streak.
+   * Tolerant: if today is not yet written, streak remains active based on yesterday.
+   */
+  async getJournalStreak(): Promise<number> {
+    const entries = await db.notes
+      .filter((n) => n.kind === 'journal' && n.trashedAt === null && Boolean(n.journalDate))
+      .toArray();
+
+    const filledDates = entries
+      .filter((e) => (e.content && e.content.trim().length > 0) || e.mood != null)
+      .map((e) => e.journalDate!);
+
+    return computeJournalStreak(filledDates, localDateStr());
+  },
+
+  /**
+   * Retrieves historical journal entries matching the same month & day from prior years.
+   */
+  async getOnThisDayEntries(dateStr: string): Promise<Note[]> {
+    const entries = await db.notes
+      .filter((n) => {
+        if (n.kind !== 'journal' || n.trashedAt !== null || !n.journalDate) return false;
+        return (n.content && n.content.trim().length > 0) || n.mood != null;
+      })
+      .toArray();
+
+    return filterOnThisDay(entries, dateStr);
+  },
+
+  /**
    * Danger zone: wipes all notes and attachments permanently.
    */
   async deleteAllNotes(): Promise<void> {
@@ -469,4 +549,19 @@ export function useScheduledNotesForRange(start: Date, end: Date): Note[] | unde
     [s, e]
   );
 }
+
+export function useJournalEntry(dateStr: string): Note | null | undefined {
+  return useLiveQuery(() => notesRepo.getJournalEntry(dateStr), [dateStr]);
+}
+
+export function useJournalStreak(): number {
+  const streak = useLiveQuery(() => notesRepo.getJournalStreak());
+  return streak ?? 0;
+}
+
+export function useOnThisDay(dateStr: string): Note[] {
+  const entries = useLiveQuery(() => notesRepo.getOnThisDayEntries(dateStr), [dateStr]);
+  return entries ?? [];
+}
+
 
