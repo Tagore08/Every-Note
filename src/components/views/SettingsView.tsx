@@ -11,6 +11,7 @@ import { focusRepo } from '../../db/focusRepo';
 import { areasRepo } from '../../db/repos/areasRepo';
 import { templatesRepo } from '../../db/repos/templatesRepo';
 import { linksRepo } from '../../db/repos/linksRepo';
+import { canvasRepo } from '../../db/repos/canvasRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -27,6 +28,7 @@ import type { Habit, HabitLog } from '../../types/habit';
 import type { FocusSession } from '../../types/focus';
 import type { LifeArea } from '../../types/area';
 import type { Template } from '../../types/template';
+import type { CanvasEntity } from '../../types/canvas';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -34,6 +36,10 @@ interface ExportAttachment extends Omit<Attachment, 'data'> {
 
 interface ExportPerson extends Omit<Person, 'photoBlob'> {
   photoBase64?: string;
+}
+
+interface ExportCanvas extends Omit<CanvasEntity, 'thumbBlob'> {
+  thumbBase64?: string;
 }
 
 interface BackupEnvelope {
@@ -50,6 +56,7 @@ interface BackupEnvelope {
   focusSessions?: FocusSession[];
   lifeAreas?: LifeArea[];
   templates?: Template[];
+  canvases?: ExportCanvas[];
   settings?: {
     theme?: string;
   };
@@ -162,6 +169,7 @@ export function SettingsView() {
       const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
       const allLifeAreas = await areasRepo.getAllAreasForExport();
       const allTemplates = await templatesRepo.getAllTemplatesForExport();
+      const allCanvases = await canvasRepo.getAllCanvasesForExport();
 
       // Convert Blobs to base64 strings
       const exportedAttachments: ExportAttachment[] = [];
@@ -211,8 +219,33 @@ export function SettingsView() {
         });
       }
 
+      // Convert Canvas thumbBlobs to base64 strings
+      const exportedCanvases: ExportCanvas[] = [];
+      for (const c of allCanvases) {
+        let thumbBase64: string | undefined = undefined;
+        if (c.thumbBlob) {
+          try {
+            thumbBase64 = await blobToBase64(c.thumbBlob);
+          } catch (err) {
+            console.warn(`Failed to encode canvas thumb ${c.id}:`, err);
+          }
+        }
+        exportedCanvases.push({
+          id: c.id,
+          title: c.title,
+          doc: c.doc,
+          linkedNoteId: c.linkedNoteId,
+          tags: c.tags,
+          lifeAreaId: c.lifeAreaId,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          trashedAt: c.trashedAt,
+          thumbBase64,
+        });
+      }
+
       const payload: BackupEnvelope = {
-        version: 11,
+        version: 13,
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
@@ -225,6 +258,7 @@ export function SettingsView() {
         attachments: exportedAttachments,
         lifeAreas: allLifeAreas,
         templates: allTemplates,
+        canvases: exportedCanvases,
         settings: {
           theme: mode,
         },
@@ -245,7 +279,7 @@ export function SettingsView() {
 
       const formattedFileSize = formatFileSize(blob.size);
       showSnackbar({
-        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allEvents.length} events, ${allPeople.length} people, ${allHabits.length} habits, ${allFocusSessions.length} focus sessions & ${allAttachments.length} attachments (${formattedFileSize}).`,
+        message: `Exported ${allNotes.length} notes, ${allTasks.length} tasks, ${allCanvases.length} canvases & data (${formattedFileSize}).`,
       });
     } catch (err) {
       console.error('Failed to export data:', err);
@@ -287,6 +321,7 @@ export function SettingsView() {
       let focusSessionsArray: FocusSession[] = [];
       let lifeAreasArray: LifeArea[] = [];
       let templatesArray: Template[] = [];
+      let canvasesArray: ExportCanvas[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
 
@@ -321,6 +356,9 @@ export function SettingsView() {
         if ('templates' in parsed && Array.isArray((parsed as BackupEnvelope).templates)) {
           templatesArray = (parsed as BackupEnvelope).templates ?? [];
         }
+        if ('canvases' in parsed && Array.isArray((parsed as BackupEnvelope).canvases)) {
+          canvasesArray = (parsed as BackupEnvelope).canvases ?? [];
+        }
       } else if (Array.isArray(parsed)) {
         notesArray = parsed;
       } else {
@@ -342,6 +380,7 @@ export function SettingsView() {
         focusSessions: focusSessionsArray,
         lifeAreas: lifeAreasArray,
         templates: templatesArray,
+        canvases: canvasesArray,
       });
       setImportStrategy('merge');
     } catch (err) {
@@ -367,6 +406,7 @@ export function SettingsView() {
       const prevHabitLogs = await habitsRepo.getAllHabitLogsForExport();
       const prevFocusSessions = await focusRepo.getAllSessionsForExport();
       const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
+      const prevCanvases = await canvasRepo.getAllCanvasesForExport();
 
       // 1. Import Notes
       const result = await notesRepo.importNotes(importCandidate.notes, importStrategy);
@@ -478,6 +518,31 @@ export function SettingsView() {
         );
       }
 
+      // 10. Import Canvases
+      let importedCanvasesCount = 0;
+      if (importCandidate.canvases && importCandidate.canvases.length > 0) {
+        const restoredCanvases: CanvasEntity[] = [];
+        for (const raw of importCandidate.canvases) {
+          let thumbBlob: Blob | undefined = undefined;
+          if (raw.thumbBase64) {
+            thumbBlob = base64ToBlob(raw.thumbBase64, 'image/png');
+          }
+          restoredCanvases.push({
+            id: typeof raw.id === 'number' ? raw.id : undefined,
+            title: raw.title || 'Untitled drawing',
+            doc: raw.doc,
+            thumbBlob,
+            linkedNoteId: raw.linkedNoteId ?? null,
+            tags: raw.tags || [],
+            lifeAreaId: raw.lifeAreaId ?? null,
+            createdAt: raw.createdAt || Date.now(),
+            updatedAt: raw.updatedAt || Date.now(),
+            trashedAt: raw.trashedAt ?? null,
+          });
+        }
+        importedCanvasesCount = await canvasRepo.importCanvases(restoredCanvases, importStrategy);
+      }
+
       // Re-index all wikilinks after import so the graph & backlinks are fully resolved
       await linksRepo.reindexAllLinks();
 
@@ -485,7 +550,7 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedAreasCount} areas, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedAreasCount} areas, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -509,6 +574,9 @@ export function SettingsView() {
           if (importStrategy === 'replace' && prevAttachments) {
             await attachmentsRepo.importAttachments(prevAttachments, 'replace');
           }
+          if (importStrategy === 'replace' && prevCanvases) {
+            await canvasRepo.importCanvases(prevCanvases, 'replace');
+          }
           await loadStorageEstimate();
         }
       );
@@ -529,10 +597,14 @@ export function SettingsView() {
       await peopleRepo.deleteAllPeople();
       await habitsRepo.deleteAllHabits();
       await focusRepo.deleteAllSessions();
+      const allCanvases = await canvasRepo.getAllCanvasesForExport();
+      for (const c of allCanvases) {
+        if (c.id) await canvasRepo.deleteCanvasPermanently(c.id);
+      }
       setShowDeleteAllModal(false);
       setDeleteConfirmationInput('');
       await loadStorageEstimate();
-      showSnackbar({ message: 'All notes, tasks, events, people, habits, focus sessions, and attachments have been completely deleted.' });
+      showSnackbar({ message: 'All notes, tasks, events, people, habits, focus sessions, canvases, and attachments have been completely deleted.' });
     } catch (err) {
       console.error('Failed to delete all data:', err);
     }

@@ -11,6 +11,7 @@ import type { LifeArea } from '../types/area';
 import type { Template } from '../types/template';
 import type { NoteLink } from '../types/link';
 import type { Routine, RoutineRun } from '../types/routine';
+import type { CanvasEntity } from '../types/canvas';
 
 export interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -18,6 +19,10 @@ export interface ExportAttachment extends Omit<Attachment, 'data'> {
 
 export interface ExportPerson extends Omit<Person, 'photoBlob'> {
   photoBase64?: string;
+}
+
+export interface ExportCanvas extends Omit<CanvasEntity, 'thumbBlob'> {
+  thumbBase64?: string;
 }
 
 export interface BackupEnvelope {
@@ -37,6 +42,7 @@ export interface BackupEnvelope {
   links?: NoteLink[];
   routines?: Routine[];
   routineRuns?: RoutineRun[];
+  canvases?: ExportCanvas[];
   settings?: {
     theme?: string;
     flags?: Record<string, boolean>;
@@ -130,12 +136,37 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   const allLinks = await db.links.toArray();
   const allRoutines = await db.routines.toArray();
   const allRoutineRuns = await db.routineRuns.toArray();
+  const allCanvases = await db.canvases.toArray();
+
+  const exportedCanvases: ExportCanvas[] = [];
+  for (const c of allCanvases) {
+    let thumbBase64: string | undefined = undefined;
+    if (c.thumbBlob) {
+      try {
+        thumbBase64 = await blobToBase64(c.thumbBlob);
+      } catch (err) {
+        console.warn(`Failed to encode thumbBlob for canvas ${c.id}:`, err);
+      }
+    }
+    exportedCanvases.push({
+      id: c.id,
+      title: c.title,
+      doc: c.doc,
+      linkedNoteId: c.linkedNoteId,
+      tags: c.tags,
+      lifeAreaId: c.lifeAreaId,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+      trashedAt: c.trashedAt,
+      thumbBase64,
+    });
+  }
 
   const currentTheme = localStorage.getItem('notes_theme_mode') || 'system';
   const currentFlags = getStoredFlags();
 
   return {
-    version: 12,
+    version: 13,
     app: 'notes-app',
     exportedAt: new Date().toISOString(),
     notes: allNotes,
@@ -151,6 +182,7 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
     links: allLinks,
     routines: allRoutines,
     routineRuns: allRoutineRuns,
+    canvases: exportedCanvases,
     settings: {
       theme: currentTheme,
       flags: currentFlags,

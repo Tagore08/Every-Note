@@ -327,6 +327,39 @@ this.version(7).stores({
 | `context` | `string` | — | Snippet of ±60 characters around link in source note |
 | `createdAt` | `number` | — | Epoch timestamp of link extraction |
 
+#### Table: `routines` (Realized in Phase 4)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `name` | `string` | `name` | Routine template name |
+| `timeOfDay` | `'morning' \| 'afternoon' \| 'evening' \| 'any'` | `timeOfDay` | Daily schedule anchor |
+| `daysOfWeek` | `number[]` | `*daysOfWeek` (multiEntry) | Weekday recurrence (0=Sun, 1=Mon, ..., 6=Sat) |
+| `active` | `boolean` | `active` | Enabled flag |
+| `createdAt` | `number` | — | Creation timestamp |
+| `updatedAt` | `number` | — | Modification timestamp |
+
+#### Table: `routineRuns` (Realized in Phase 4)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `routineId` | `number` | `routineId` | Routine template reference |
+| `date` | `string` | `date` | Local date string (`YYYY-MM-DD`) |
+| `[routineId+date]` | `[number, string]` | `&[routineId+date]` (unique) | Compound unique key enforcing single materialization per day |
+| `createdAt` | `number` | — | Materialization timestamp |
+
+#### Table: `canvases` (Realized in Phase 5)
+| Field | Type | Dexie Index Key | Description |
+|---|---|---|---|
+| `id` | `number` (optional) | `++id` (Primary Key) | Auto-incrementing primary key |
+| `title` | `string` | `title` | Drawing / canvas title |
+| `doc` | `CanvasDoc` | — | Fixed virtual page doc (`3000x2000`, `bg`, `strokes[]`) |
+| `thumbBlob` | `Blob` (optional) | — | 512px preview PNG generated debounced (3s) |
+| `linkedNoteId` | `number \| null` (optional) | `linkedNoteId` | Optional parent note reference |
+| `tags` | `string[]` | `*tags` (multiEntry) | Multi-entry tags index |
+| `lifeAreaId` | `number \| null` (optional) | `lifeAreaId` | Categorization life area index |
+| `trashedAt` | `number \| null` (optional) | `trashedAt` | Soft-delete timestamp index |
+| `updatedAt` | `number` | `updatedAt` | Recency ordering index |
+
 > **CRITICAL Data-Model Rule**: An event's `startAt`/`endAt` represents a fixed scheduled time block. It is completely separate from a task's `dueAt`. These date fields are never merged or conflated.
 
 ### Versioning & Migrations Policy
@@ -1111,12 +1144,56 @@ Replacing the legacy `UpcomingView`, the Today Dashboard provides a fixed-hierar
 
 ---
 
-## 11. Future Extension Points
+## 11. Phase 5 Architecture: Canvas & Ink
 
-1. **Phase 5: Canvas & Ink**
-   - Pressure-sensitive vector canvas, tool palettes (pen, brush, highlighter, eraser), export to note, and thumbnail generation.
-2. **Phase 6: Focus Pro & Analytics**
+Phase 5 introduces freeform pressure-sensitive vector sketching, drawing, and visual notes, gated behind the `canvas` feature flag.
+
+### 1. Engine Boundaries & Vector Model (`src/features/canvas/engine/`)
+- **Framework-Agnostic Design**: Core drawing mathematics, geometry generation, coordinate projection, and history management are implemented in pure TypeScript and HTML5 Canvas2D with zero framework dependencies.
+- **Virtual Document Space**:
+  - Fixed page model: `3000 × 2000` doc space (version 1).
+  - All stroke points are stored in document coordinates: `[x, y, pressure(0..1)]`.
+  - Coordinates are projected to and from screen space via matrix transformation:
+    $$\text{docX} = \frac{\text{screenX} - \text{panX}}{\text{zoom}}, \quad \text{docY} = \frac{\text{screenY} - \text{panY}}{\text{zoom}}$$
+- **Stroke Geometry**:
+  - Powered by approved dependency `perfect-freehand` (MIT). No external whiteboard dependencies.
+  - Outlines are converted to standard SVG bezier paths and filled via `Path2D`.
+  - **Pen**: Crisp pressure-tapered vector stroke (`thinning: 0.6, smoothing: 0.5, streamline: 0.4`).
+  - **Brush**: Softer thinning with deterministic size jitter seeded by stroke ID (`hashString(stroke.id)`).
+  - **Highlighter**: Flat wide stroke ($3\times$ size), `globalAlpha = 0.35`, `globalCompositeOperation = 'multiply'`. Never uses destructive compositing.
+  - **Eraser**: Whole-stroke removal via bounding-box culling and point-to-segment distance testing ($< \text{size}/2 + 4\text{px}$).
+
+### 2. Dual-Layer Canvas Renderer (`renderer.ts`)
+- **Static Layer (Bottom)**: Draws document background, page outline shadow, and all committed strokes. Redrawn only on stroke commit, stroke removal, or viewport pan/zoom.
+- **Active Layer (Top)**: Dedicated high-frequency canvas handling active in-progress pointer events. Redrawn per `pointermove` using `requestAnimationFrame` with browser coalesced events (`getCoalescedEvents`) for zero perceptible latency.
+
+### 3. Structural-Sharing History (`history.ts`)
+- Manages undo and redo stacks with snapshot references (capacity 50).
+- Actions (new stroke, eraser removals, canvas clear) push immutable stroke arrays.
+
+### 4. Transform & Viewport Engine (`transform.ts`)
+- Pan & pinch-zoom (clamped between $0.25\times$ and $4.0\times$) with zoom percentage badge.
+- Focal point zooming preserving the document coordinates under the pointer or touch center.
+- Multi-touch pinch-to-zoom on mobile touch screens with `touch-action: none`.
+
+### 5. UI & Integration (`CanvasEditor.tsx` & `CanvasListScreen.tsx`)
+- **Editor**: Fixed top bar with back navigation, inline editable title, undo/redo, zoom controls, note link button, 2× HD PNG export, and overflow options. Floating ergonomic bottom pill toolbar with tool selectors, Life Area color palette, and 3 stroke sizes.
+- **Autosave Pipeline**: Debounced 1s document save to Dexie table `canvases`. Debounced 3s offscreen 512px thumbnail PNG generation (`thumbBlob`).
+- **Masonry List Screen**: Thumbnail gallery with object URL lifecycle management (explicit `URL.revokeObjectURL` on unmount preventing memory leaks), search by title/tags, Life Area filter chips, trash/restore, and creation FAB.
+- **Note Integration**:
+  - `linkedNoteId` foreign key links drawings to parent notes.
+  - `NoteEditorView` renders linked drawings as thumbnail chips in the optional tray.
+  - "Draw" action in note editor creates a pre-linked drawing.
+  - "Export PNG" (2× offscreen render) downloads or attaches drawing to note attachments via `attachmentsRepo`.
+- **Backup Round-Trip**: Full JSON backup and restore carries canvases including serialized base64 thumbnails (`thumbBase64`).
+
+---
+
+## 12. Future Extension Points
+
+1. **Phase 6: Focus Pro & Analytics**
    - Customizable Pomodoro timer presets, 12-month habit heatmap, and local personal productivity insights hub.
+
 
 
 

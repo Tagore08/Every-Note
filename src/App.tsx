@@ -23,6 +23,12 @@ const NotesView = lazy(() =>
 const NoteEditorView = lazy(() =>
   import('./components/views/NoteEditorView').then((m) => ({ default: m.NoteEditorView }))
 );
+const CanvasListScreen = lazy(() =>
+  import('./features/canvas/CanvasListScreen').then((m) => ({ default: m.CanvasListScreen }))
+);
+const CanvasEditor = lazy(() =>
+  import('./features/canvas/CanvasEditor').then((m) => ({ default: m.CanvasEditor }))
+);
 const GraphScreen = lazy(() =>
   import('./features/graph/GraphScreen').then((m) => ({ default: m.GraphScreen }))
 );
@@ -115,6 +121,8 @@ export function App() {
             <Route path="journal/:date" element={<JournalScreen />} />
             <Route path="notes" element={<NotesView />} />
             <Route path="notes/:id" element={<NoteEditorView />} />
+            <Route path="canvas" element={<CanvasListScreen />} />
+            <Route path="canvas/:id" element={<CanvasEditor />} />
             <Route path="graph" element={<GraphScreen />} />
             <Route path="graph/:noteId" element={<GraphScreen />} />
             <Route path="tasks" element={<TasksView />} />

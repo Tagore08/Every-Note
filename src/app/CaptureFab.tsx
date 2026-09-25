@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { notesRepo } from '../db/notesRepo';
 import { tasksRepo } from '../db/tasksRepo';
+import { canvasRepo } from '../db/repos/canvasRepo';
 import { useFlag } from './flags';
 import { Sheet } from '../design/ui/Sheet';
 import { FAB } from '../design/ui/FAB';
@@ -113,9 +114,14 @@ export function CaptureFab({
     navigate('/journal');
   };
 
-  const handleCanvas = () => {
+  const handleCanvas = async () => {
     setOpen(false);
-    navigate('/canvas');
+    try {
+      const created = await canvasRepo.createCanvas({ title: 'Untitled drawing' });
+      navigate(`/canvas/${created.id}`);
+    } catch {
+      navigate('/canvas');
+    }
   };
 
   const handleApplyTemplate = async (template: Template) => {
