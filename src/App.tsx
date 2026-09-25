@@ -13,9 +13,6 @@ import { FocusTimerProvider } from './features/focus/FocusTimerContext';
 const TodayView = lazy(() =>
   import('./features/today/TodayScreen').then((m) => ({ default: m.TodayScreen }))
 );
-const InsightsScreen = lazy(() =>
-  import('./features/insights/InsightsScreen').then((m) => ({ default: m.InsightsScreen }))
-);
 const RoutinesScreen = lazy(() =>
   import('./features/routines/RoutinesScreen').then((m) => ({ default: m.RoutinesScreen }))
 );
@@ -134,7 +131,7 @@ export function App() {
               <Route path="focus" element={<FocusTimerView />} />
               <Route path="habits" element={<HabitsView />} />
               <Route path="habits/:id" element={<HabitDetailScreen />} />
-              <Route path="insights" element={<InsightsScreen />} />
+              <Route path="insights" element={<Navigate to="/today" replace />} />
               <Route path="people" element={<PeopleView />} />
               <Route path="people/:id" element={<PersonProfileView />} />
               <Route path="search" element={<SearchView />} />

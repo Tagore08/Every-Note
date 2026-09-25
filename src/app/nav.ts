@@ -31,15 +31,6 @@ export const NAV_ITEMS: NavItemConfig[] = [
     group: 'today',
     iconName: 'Home',
   },
-  {
-    id: 'insights',
-    label: 'Insights',
-    route: '/insights',
-    group: 'today',
-    iconName: 'Sparkles',
-    flag: 'insights',
-    inLibrarySheet: true,
-  },
 
   // CAPTURE
   {

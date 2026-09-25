@@ -11,7 +11,6 @@ import { ScheduleRail } from './sections/ScheduleRail';
 import { DueTasksSection } from './sections/DueTasksSection';
 import { HabitsRow } from './sections/HabitsRow';
 import { TodayCaptureBar } from './sections/TodayCaptureBar';
-import { TodayInsightsWidget } from './sections/TodayInsightsWidget';
 import { JournalPromptSection } from '../journal/JournalPromptSection';
 import { EventEditorModal } from '../../components/calendar/EventEditorModal';
 import { TaskEditorModal } from '../../components/tasks/TaskEditorModal';
@@ -23,7 +22,6 @@ export function TodayScreen() {
   const navigate = useNavigate();
   const isRoutinesEnabled = useFlag('routines');
   const isJournalEnabled = useFlag('journal');
-  const isInsightsEnabled = useFlag('insights');
 
   // Trigger materialization on mount and date change
   const [currentDateStr, setCurrentDateStr] = useState(() => localDateStr());
@@ -141,22 +139,6 @@ export function TodayScreen() {
         </div>
 
         <div className="flex items-center gap-2">
-          {isInsightsEnabled && (
-            <button
-              type="button"
-              onClick={() => navigate('/insights')}
-              className="p-2.5 rounded-xl border border-border bg-surface hover:bg-surface-2 text-ink-muted hover:text-accent transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
-              title="Personal Insights"
-              aria-label="Personal Insights"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={() => navigate('/settings')}
@@ -219,12 +201,6 @@ export function TodayScreen() {
 
       {/* 3f. Journal Prompt Section */}
       {isJournalEnabled && <JournalPromptSection />}
-
-      {/* 4. Bottom: Lightweight Insights (Streaks, Focus time) */}
-      <TodayInsightsWidget
-        isCollapsed={Boolean(collapsedSections.insights)}
-        onToggleCollapse={() => toggleSection('insights')}
-      />
 
       {/* Event Editor Modal */}
       <EventEditorModal
