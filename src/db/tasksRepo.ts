@@ -308,6 +308,26 @@ export const tasksRepo = {
   },
 
   /**
+   * Search tasks by title, description, or tags.
+   */
+  async searchTasks(rawQuery: string): Promise<Task[]> {
+    const query = rawQuery.trim().toLowerCase();
+    if (!query) return [];
+
+    const tasks = await db.tasks
+      .filter((task) => {
+        if (task.trashedAt !== null) return false;
+        const titleMatch = (task.title || '').toLowerCase().includes(query);
+        const descMatch = (task.description || '').toLowerCase().includes(query);
+        const tagsMatch = (task.tags || []).some((tag) => tag.toLowerCase().includes(query));
+        return titleMatch || descMatch || tagsMatch;
+      })
+      .toArray();
+
+    return tasks.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  },
+
+  /**
    * Danger zone wipe: clears all tasks.
    */
   async deleteAllTasks(): Promise<void> {
@@ -362,5 +382,9 @@ export function useTasksDueForRange(start: Date, end: Date): Task[] | undefined 
     () => tasksRepo.getTasksDueForRange(new Date(s), new Date(e)),
     [s, e]
   );
+}
+
+export function useSearchTasks(query: string): Task[] | undefined {
+  return useLiveQuery(() => tasksRepo.searchTasks(query), [query]);
 }
 

@@ -19,6 +19,8 @@ import { WikilinkAutocomplete } from '../../features/notes/WikilinkAutocomplete'
 import { WikilinkRenderer } from '../../features/notes/WikilinkRenderer';
 import { BacklinksPanel } from '../../features/notes/BacklinksPanel';
 import { LocalGraphPanel } from '../../features/notes/LocalGraphPanel';
+import { useSnippetAutocomplete } from '../../features/snippets/useSnippetAutocomplete';
+import { SnippetSuggestPill } from '../../features/snippets/SnippetSuggestPill';
 
 function LinkedCanvasChip({ canvas, onOpen }: { canvas: CanvasEntity; onOpen: () => void }) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
@@ -121,6 +123,21 @@ export function NoteEditorView() {
   const [isAutocompleteOpen, setIsAutocompleteOpen] = useState(false);
   const [wikilinkQuery, setWikilinkQuery] = useState('');
   const [wikilinkStartIndex, setWikilinkStartIndex] = useState<number | null>(null);
+
+  // Text expansion snippets autocomplete
+  const {
+    hasMatches: hasSnippetMatches,
+    matchingSnippets,
+    applySnippet,
+    handleKeyDown: handleSnippetKeyDown,
+  } = useSnippetAutocomplete({
+    value: content,
+    onChange: (val) => {
+      setContent(val);
+      triggerAutoSave(title, val, tags, isPinned, isArchived);
+    },
+    inputRef: textareaRef,
+  });
 
   // If navigating to /notes/new, instantly create a note and redirect to /notes/:id
   useEffect(() => {
@@ -948,13 +965,22 @@ export function NoteEditorView() {
             </div>
           ) : (
             <>
+              {hasSnippetMatches && (
+                <div className="mb-2">
+                  <SnippetSuggestPill
+                    snippets={matchingSnippets}
+                    onSelect={applySnippet}
+                  />
+                </div>
+              )}
               <textarea
                 ref={textareaRef}
                 value={content}
                 onChange={(e) => handleContentChange(e.target.value, e.target.selectionStart)}
+                onKeyDown={handleSnippetKeyDown}
                 onKeyUp={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
                 onClick={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
-                placeholder="Start writing... (type [[ to link another note, paste images with Ctrl+V, drag & drop files)"
+                placeholder="Start writing... (type [[ to link another note, #snippet for text expansion, paste images with Ctrl+V, drag & drop files)"
                 className="flex-1 w-full bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-700 text-base leading-relaxed resize-none focus:outline-none min-h-[300px]"
               />
 

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { notesRepo } from '../../db/notesRepo';
+import { useSnippetAutocomplete } from '../../features/snippets/useSnippetAutocomplete';
+import { SnippetSuggestPill } from '../../features/snippets/SnippetSuggestPill';
 
 interface CaptureModalProps {
   isOpen: boolean;
@@ -10,6 +12,17 @@ export function CaptureModal({ isOpen, onClose }: CaptureModalProps) {
   const [content, setContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const {
+    hasMatches: hasSnippetMatches,
+    matchingSnippets,
+    applySnippet,
+    handleKeyDown: handleSnippetKeyDown,
+  } = useSnippetAutocomplete({
+    value: content,
+    onChange: setContent,
+    inputRef: textareaRef,
+  });
 
   // Autofocus when modal opens
   useEffect(() => {
@@ -57,6 +70,10 @@ export function CaptureModal({ isOpen, onClose }: CaptureModalProps) {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (hasSnippetMatches && e.key === 'Tab') {
+      handleSnippetKeyDown(e);
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSave();
@@ -102,12 +119,20 @@ export function CaptureModal({ isOpen, onClose }: CaptureModalProps) {
 
         {/* Capture Body */}
         <div className="p-4">
+          {hasSnippetMatches && (
+            <div className="mb-2">
+              <SnippetSuggestPill
+                snippets={matchingSnippets}
+                onSelect={applySnippet}
+              />
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="What's on your mind?..."
+            placeholder="What's on your mind?... (#snippet for text expansion)"
             rows={4}
             className="w-full resize-none bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 text-base sm:text-lg focus:outline-none leading-relaxed"
           />

@@ -44,6 +44,7 @@ import { CaptureFab } from './CaptureFab';
 import { Sheet } from '../design/ui/Sheet';
 import { BackupGateModal } from '../components/layout/BackupGateModal';
 import { runPreUpgradeBackupGate } from '../db/backupGate';
+import { CommandPalette } from '../components/layout/CommandPalette';
 
 const ICON_MAP: Record<string, ReactNode> = {
   Home: <Home className="w-5 h-5" strokeWidth={1.75} />,
@@ -81,6 +82,7 @@ export function AppShell() {
   const todoCount = useTodoCount();
 
   const [isCaptureOpen, setIsCaptureOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -184,12 +186,12 @@ export function AppShell() {
     notesRepo.purgeOldTrash(30).catch((err) => console.warn('Auto-purge failed:', err));
   }, []);
 
-  // Global capture shortcut ('n' outside inputs, Cmd+K)
+  // Global shortcuts ('n' outside inputs for Capture, Cmd+K / Ctrl+K for Command Palette)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setIsCaptureOpen(true);
+        setIsCommandPaletteOpen((prev) => !prev);
         return;
       }
 
@@ -270,6 +272,21 @@ export function AppShell() {
             </div>
             <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 text-accent-ink font-mono">
               N
+            </kbd>
+          </button>
+
+          {/* Quick Search & Command Palette Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium text-ink-muted hover:text-ink bg-surface-2/60 hover:bg-surface-2 border border-border transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <Search className="w-3.5 h-3.5" />
+              <span>Quick Search...</span>
+            </div>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-surface text-ink-muted font-mono border border-border">
+              ⌘K
             </kbd>
           </button>
 
@@ -378,14 +395,18 @@ export function AppShell() {
         </Link>
 
         <div className="flex items-center gap-1">
-          <Link
-            to="/search"
-            className="p-2 rounded-lg text-ink-muted hover:bg-surface-2 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-            title="Search"
-            aria-label="Search"
+          <button
+            type="button"
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="p-2 rounded-lg text-ink-muted hover:bg-surface-2 hover:text-ink transition-colors min-h-[44px] min-w-[44px] flex items-center gap-1.5 cursor-pointer"
+            title="Search & Commands (⌘K)"
+            aria-label="Search and Commands"
           >
             <Search className="w-4 h-4" />
-          </Link>
+            <kbd className="hidden lg:inline-block px-1.5 py-0.5 rounded-sm bg-surface-2 text-[10px] font-mono text-ink-muted border border-border">
+              ⌘K
+            </kbd>
+          </button>
 
           <button
             onClick={toggleTheme}
@@ -412,6 +433,13 @@ export function AppShell() {
         isOpen={isCaptureOpen}
         onOpenChange={setIsCaptureOpen}
         showFAB={true}
+      />
+
+      {/* Global Command Palette */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onOpenCapture={() => setIsCaptureOpen(true)}
       />
 
       {/* Mobile 5-Slot Bottom Navigation with Prominent Center FAB */}

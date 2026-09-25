@@ -6,6 +6,7 @@ import { PageSkeleton } from './design/ui/Skeleton';
 import { templatesRepo } from './db/repos/templatesRepo';
 import { linksRepo } from './db/repos/linksRepo';
 import { timerPresetsRepo } from './db/repos/timerPresetsRepo';
+import { snippetsRepo } from './db/repos/snippetsRepo';
 import { FocusTimerProvider } from './features/focus/FocusTimerContext';
 
 // Code-split all feature views using React.lazy per EXPANSION_PLAN §6 & §7
@@ -96,9 +97,10 @@ const SeedDebugScreen = lazy(() =>
 
 export function App() {
   useEffect(() => {
-    // Seed defaults for Templates and Timer Presets idempotently on first load
+    // Seed defaults for Templates, Timer Presets, and Snippets idempotently on first load
     templatesRepo.seedDefaults().catch((err) => console.error('Failed to seed templates:', err));
     timerPresetsRepo.seedDefaults().catch((err) => console.error('Failed to seed timer presets:', err));
+    snippetsRepo.seedDefaults().catch((err) => console.error('Failed to seed snippets:', err));
     linksRepo.ensureInitialReindex().catch((err) => console.error('Failed to ensure links reindex:', err));
   }, []);
 

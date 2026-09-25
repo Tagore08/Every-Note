@@ -12,6 +12,8 @@ import { TaskEditorModal } from '../tasks/TaskEditorModal';
 import { QuickRescheduleModal } from '../tasks/QuickRescheduleModal';
 import { TemplatePickerSheet } from '../../features/templates/TemplatePickerSheet';
 import { EisenhowerMatrixView } from './EisenhowerMatrixView';
+import { useSnippetAutocomplete } from '../../features/snippets/useSnippetAutocomplete';
+import { SnippetSuggestPill } from '../../features/snippets/SnippetSuggestPill';
 
 export type TaskViewType = 'today' | 'upcoming' | 'all' | 'matrix';
 export type GroupByType = 'none' | 'tag' | 'priority' | 'date';
@@ -192,11 +194,32 @@ export function TasksView() {
   const touchStartY = useRef<number | null>(null);
   const swipedTaskId = useRef<number | null>(null);
 
+  // Quick Add input ref & Snippet expansion
+  const quickInputRef = useRef<HTMLInputElement>(null);
+  const {
+    hasMatches: hasSnippetMatches,
+    matchingSnippets,
+    applySnippet,
+    handleKeyDown: handleSnippetKeyDown,
+  } = useSnippetAutocomplete({
+    value: quickTitle,
+    onChange: setQuickTitle,
+    inputRef: quickInputRef,
+  });
+
   // NLP preview calculation
   const parsedPreview = useMemo(() => {
     if (!quickTitle.trim()) return null;
     return parseQuickAdd(quickTitle);
   }, [quickTitle]);
+
+  const handleKeyDownQuickAdd = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (hasSnippetMatches && e.key === 'Tab') {
+      handleSnippetKeyDown(e);
+      return;
+    }
+    handleQuickAdd(e);
+  };
 
   const handleQuickAdd = async (e?: KeyboardEvent<HTMLInputElement>) => {
     if (e && e.key !== 'Enter') return;
@@ -556,14 +579,21 @@ interface TaskGroup {
       {/* 2. Quick-Add Bar with NLP & Priority Selector */}
       {view !== 'all' || segment === 'todo' ? (
         <div className="space-y-2">
+          {hasSnippetMatches && (
+            <SnippetSuggestPill
+              snippets={matchingSnippets}
+              onSelect={applySnippet}
+            />
+          )}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="relative flex-1">
               <input
+                ref={quickInputRef}
                 type="text"
                 value={quickTitle}
                 onChange={(e) => setQuickTitle(e.target.value)}
-                onKeyDown={handleQuickAdd}
-                placeholder="+ Add task... e.g. Buy milk tomorrow 5pm #shopping p1"
+                onKeyDown={handleKeyDownQuickAdd}
+                placeholder="+ Add task... e.g. Buy milk tomorrow 5pm #shopping p1 (#snippet)"
                 className="w-full px-4 py-3 rounded-2xl border border-border bg-surface text-ink placeholder:text-ink-muted text-sm shadow-card focus:outline-none focus:border-accent"
               />
               {quickTitle.trim() && (

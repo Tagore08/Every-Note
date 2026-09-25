@@ -5,6 +5,8 @@ import { tasksRepo } from '../../../db/tasksRepo';
 import { attachmentsRepo } from '../../../db/attachmentsRepo';
 import { canvasRepo } from '../../../db/repos/canvasRepo';
 import { useSnackbar } from '../../../context/SnackbarContext';
+import { useSnippetAutocomplete } from '../../snippets/useSnippetAutocomplete';
+import { SnippetSuggestPill } from '../../snippets/SnippetSuggestPill';
 
 interface TodayCaptureBarProps {
   className?: string;
@@ -21,7 +23,19 @@ export function TodayCaptureBar({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
+  const textInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const {
+    hasMatches: hasSnippetMatches,
+    matchingSnippets,
+    applySnippet,
+    handleKeyDown: handleSnippetKeyDown,
+  } = useSnippetAutocomplete({
+    value: content,
+    onChange: setContent,
+    inputRef: textInputRef,
+  });
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -262,22 +276,31 @@ export function TodayCaptureBar({
         </div>
       ) : (
         /* Standard Quick-Capture Strip with 5 Toggles */
-        <form onSubmit={handleCaptureText} className="flex flex-col sm:flex-row items-center gap-2">
-          <div className="flex items-center gap-2 w-full flex-1">
-            <div className="w-7 h-7 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] flex items-center justify-center shrink-0 text-sm font-bold">
-              ＋
-            </div>
-
-            <input
-              type="text"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Capture anything to Inbox…"
-              className="flex-1 px-1 py-1.5 text-xs sm:text-sm bg-transparent text-[var(--color-ink)] placeholder:text-[var(--color-ink-muted)] focus:outline-none"
+        <form onSubmit={handleCaptureText} className="flex flex-col items-stretch gap-1.5">
+          {hasSnippetMatches && (
+            <SnippetSuggestPill
+              snippets={matchingSnippets}
+              onSelect={applySnippet}
             />
+          )}
+          <div className="flex flex-col sm:flex-row items-center gap-2">
+            <div className="flex items-center gap-2 w-full flex-1">
+              <div className="w-7 h-7 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)] flex items-center justify-center shrink-0 text-sm font-bold">
+                ＋
+              </div>
 
-            {content.trim() && (
-              <button
+              <input
+                ref={textInputRef}
+                type="text"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onKeyDown={handleSnippetKeyDown}
+                placeholder="Capture anything to Inbox… (#snippet for text expansion)"
+                className="flex-1 px-1 py-1.5 text-xs sm:text-sm bg-transparent text-[var(--color-ink)] placeholder:text-[var(--color-ink-muted)] focus:outline-none"
+              />
+
+              {content.trim() && (
+                <button
                 type="submit"
                 disabled={isSubmitting}
                 className="px-3.5 py-1.5 rounded-pill bg-[var(--color-accent)] text-[var(--color-accent-ink)] text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shrink-0 min-h-[36px]"
@@ -346,7 +369,8 @@ export function TodayCaptureBar({
               </svg>
             </button>
           </div>
-        </form>
+        </div>
+      </form>
       )}
     </div>
   );

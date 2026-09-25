@@ -20,6 +20,7 @@ import {
   getNotificationPermission,
   requestNotificationPermission,
 } from '../../services/reminderService';
+import { SnippetsSettingsSection } from '../../features/snippets/SnippetsSettingsSection';
 
 import type { Note } from '../../types/note';
 import type { Attachment } from '../../types/attachment';
@@ -867,6 +868,11 @@ export function SettingsView() {
             <strong>Why enable?</strong> Reminders send you timely alerts when events are starting or when scheduled notes require your attention. In offline installable PWAs, reminders trigger locally whenever the app is open or running on your device.
           </p>
         </div>
+      </section>
+
+      {/* Snippets / Text Expansion Section */}
+      <section className="space-y-4">
+        <SnippetsSettingsSection />
       </section>
 
       {/* 3. Browser Storage & Quota Estimation */}

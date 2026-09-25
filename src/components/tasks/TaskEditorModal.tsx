@@ -6,6 +6,8 @@ import { isOverdue, formatDueDate } from '../../utils/format';
 import { normalizePriority } from '../../features/tasks/priority';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
+import { useSnippetAutocomplete } from '../../features/snippets/useSnippetAutocomplete';
+import { SnippetSuggestPill } from '../../features/snippets/SnippetSuggestPill';
 
 interface TaskEditorModalProps {
   task: Task | null;
@@ -47,6 +49,17 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
   const [showSubtaskWarning, setShowSubtaskWarning] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
+
+  const {
+    hasMatches: hasSnippetMatches,
+    matchingSnippets,
+    applySnippet,
+    handleKeyDown: handleSnippetKeyDown,
+  } = useSnippetAutocomplete({
+    value: title,
+    onChange: setTitle,
+    inputRef: titleInputRef,
+  });
 
   // Sync state when task changes or modal opens
   useEffect(() => {
@@ -263,12 +276,21 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
 
         {/* Task Title */}
         <div>
+          {hasSnippetMatches && (
+            <div className="mb-2">
+              <SnippetSuggestPill
+                snippets={matchingSnippets}
+                onSelect={applySnippet}
+              />
+            </div>
+          )}
           <input
             ref={titleInputRef}
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Task title..."
+            onKeyDown={handleSnippetKeyDown}
+            placeholder="Task title... (#snippet for text expansion)"
             className="w-full text-lg sm:text-xl font-bold text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 bg-transparent focus:outline-none tracking-tight"
           />
         </div>
