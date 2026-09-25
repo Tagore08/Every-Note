@@ -124,14 +124,6 @@ export const NAV_ITEMS: NavItemConfig[] = [
     inLibrarySheet: true,
   },
   {
-    id: 'matrix',
-    label: 'Eisenhower',
-    route: '/matrix',
-    group: 'plan',
-    iconName: 'LayoutGrid',
-    inLibrarySheet: true,
-  },
-  {
     id: 'routines',
     label: 'Routines',
     route: '/routines',

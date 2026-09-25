@@ -39,11 +39,6 @@ const GraphScreen = lazy(() =>
 const TasksView = lazy(() =>
   import('./components/views/TasksView').then((m) => ({ default: m.TasksView }))
 );
-const EisenhowerMatrixView = lazy(() =>
-  import('./components/views/EisenhowerMatrixView').then((m) => ({
-    default: m.EisenhowerMatrixView,
-  }))
-);
 const CalendarView = lazy(() =>
   import('./components/views/CalendarView').then((m) => ({ default: m.CalendarView }))
 );
@@ -131,7 +126,7 @@ export function App() {
               <Route path="graph" element={<GraphScreen />} />
               <Route path="graph/:noteId" element={<GraphScreen />} />
               <Route path="tasks" element={<TasksView />} />
-              <Route path="matrix" element={<EisenhowerMatrixView />} />
+              <Route path="matrix" element={<Navigate to="/tasks?view=matrix" replace />} />
               <Route path="calendar" element={<CalendarView />} />
               <Route path="routines" element={<RoutinesScreen />} />
               <Route path="focus" element={<FocusTimerView />} />

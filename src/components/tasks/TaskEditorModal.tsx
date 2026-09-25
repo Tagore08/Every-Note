@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Task, TaskPriority, TaskStatus } from '../../types/task';
 import { tasksRepo, useSubtasks } from '../../db/tasksRepo';
 import { isOverdue, formatDueDate } from '../../utils/format';
+import { normalizePriority } from '../../features/tasks/priority';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
 
@@ -351,25 +352,26 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
             <div className="grid grid-cols-4 gap-2">
               {(
                 [
-                  { key: 'none', label: 'None', color: 'text-slate-600 dark:text-slate-400' },
-                  { key: 'low', label: 'Low', color: 'text-blue-600 dark:text-blue-400' },
-                  { key: 'medium', label: 'Med', color: 'text-amber-600 dark:text-amber-400' },
-                  { key: 'high', label: 'High', color: 'text-red-600 dark:text-red-400' },
+                  { key: 'p1', label: 'P1', name: 'Urgent', color: 'text-rose-600 dark:text-rose-400', activeBg: 'bg-rose-500/15 border-rose-500 text-rose-600' },
+                  { key: 'p2', label: 'P2', name: 'High', color: 'text-amber-600 dark:text-amber-400', activeBg: 'bg-amber-500/15 border-amber-500 text-amber-600' },
+                  { key: 'p3', label: 'P3', name: 'Med', color: 'text-blue-600 dark:text-blue-400', activeBg: 'bg-blue-500/15 border-blue-500 text-blue-600' },
+                  { key: 'p4', label: 'P4', name: 'None', color: 'text-ink-muted', activeBg: 'bg-surface-2 border-border text-ink' },
                 ] as const
               ).map((p) => {
-                const isSelected = priority === p.key;
+                const isSelected = normalizePriority(priority) === p.key;
                 return (
                   <button
                     key={p.key}
                     type="button"
                     onClick={() => setPriority(p.key)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                    className={`px-2 py-2 rounded-xl text-xs font-bold transition-all border flex flex-col items-center gap-0.5 cursor-pointer ${
                       isSelected
-                        ? 'border-blue-600 bg-blue-50/70 text-blue-700 dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-300 shadow-xs'
-                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400'
+                        ? p.activeBg + ' shadow-xs ring-1 ring-accent/30'
+                        : 'border-border bg-surface-2/40 hover:bg-surface-2 text-ink-muted'
                     }`}
                   >
                     <span className={p.color}>{p.label}</span>
+                    <span className="text-[10px] font-normal text-ink-muted">{p.name}</span>
                   </button>
                 );
               })}

@@ -87,4 +87,31 @@ describe('parseQuickAdd', () => {
     expect(res.dueAt).toBeUndefined();
     expect(res.tags).toEqual([]);
   });
+
+  it('parses "Buy milk tomorrow 5pm #shopping" setting date, time, and tag', () => {
+    const res = parseQuickAdd('Buy milk tomorrow 5pm #shopping', refDate);
+    expect(res.title).toBe('Buy milk');
+    expect(res.tags).toEqual(['shopping']);
+    expect(res.dueAt).toBeDefined();
+    expect(res.rawMatchedDateText).toBe('tomorrow 5pm');
+    expect(res.previewLabel).toContain('tomorrow 5pm');
+    expect(res.previewLabel).toContain('#shopping');
+  });
+
+  it('parses priority tokens p1, p2, p3, p4 and !1', () => {
+    const res1 = parseQuickAdd('Finish slides tomorrow p1 #work', refDate);
+    expect(res1.title).toBe('Finish slides');
+    expect(res1.priority).toBe('p1');
+    expect(res1.tags).toEqual(['work']);
+    expect(res1.dueAt).toBeDefined();
+    expect(res1.previewLabel).toContain('P1');
+
+    const res2 = parseQuickAdd('Check mail !2', refDate);
+    expect(res2.title).toBe('Check mail');
+    expect(res2.priority).toBe('p2');
+
+    const res3 = parseQuickAdd('Call bank priority:3', refDate);
+    expect(res3.title).toBe('Call bank');
+    expect(res3.priority).toBe('p3');
+  });
 });
