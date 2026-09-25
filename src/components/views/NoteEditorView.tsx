@@ -14,7 +14,9 @@ import { canvasRepo } from '../../db/repos/canvasRepo';
 import { useFlag } from '../../app/flags';
 import type { CanvasEntity } from '../../types/canvas';
 import { linksRepo } from '../../db/repos/linksRepo';
+import { useFolders } from '../../db/repos/foldersRepo';
 import { WikilinkAutocomplete } from '../../features/notes/WikilinkAutocomplete';
+import { WikilinkRenderer } from '../../features/notes/WikilinkRenderer';
 import { BacklinksPanel } from '../../features/notes/BacklinksPanel';
 import { LocalGraphPanel } from '../../features/notes/LocalGraphPanel';
 
@@ -97,6 +99,9 @@ export function NoteEditorView() {
   const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
+  const [folderId, setFolderId] = useState<number | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const availableFolders = useFolders();
 
 
   // Attachment modal & drag states
@@ -140,6 +145,7 @@ export function NoteEditorView() {
       setTags(note.tags || []);
       setIsPinned(note.pinned || false);
       setIsArchived(note.archived || false);
+      setFolderId(note.folderId ?? null);
       if (note.scheduledAt) {
         setScheduledAtStr(formatDateKey(new Date(note.scheduledAt)));
       }
@@ -164,7 +170,8 @@ export function NoteEditorView() {
       archivedState: boolean,
       schedStr?: string,
       remTimeStr?: string,
-      pId?: number | null
+      pId?: number | null,
+      fId?: number | null
     ) => {
       if (!numericId) return;
       setSaveStatus('saving');
@@ -178,6 +185,7 @@ export function NoteEditorView() {
           const finalSched = schedStr !== undefined ? schedStr : scheduledAtStr;
           const finalRem = remTimeStr !== undefined ? remTimeStr : reminderTimeStr;
           const finalPersonId = pId !== undefined ? pId : personId;
+          const finalFolderId = fId !== undefined ? fId : folderId;
 
           let schedDate: Date | null = null;
           let remDate: Date | null = null;
@@ -200,6 +208,7 @@ export function NoteEditorView() {
             scheduledAt: schedDate,
             reminderAt: remDate,
             personId: finalPersonId,
+            folderId: finalFolderId,
           });
           setSaveStatus('saved');
         } catch (err) {
@@ -223,7 +232,7 @@ export function NoteEditorView() {
         }
       }, 800);
     },
-    [numericId, scheduledAtStr, reminderTimeStr, personId]
+    [numericId, scheduledAtStr, reminderTimeStr, personId, folderId]
   );
 
   // Flush any pending save on unmount
@@ -595,6 +604,36 @@ export function NoteEditorView() {
 
         {/* Note tools & attachments */}
         <div className="flex items-center gap-1.5">
+          {/* View/Edit Mode Toggle for Wikilinks */}
+          <button
+            type="button"
+            onClick={() => setIsPreviewMode(!isPreviewMode)}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              isPreviewMode
+                ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)] font-semibold'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+            title={isPreviewMode ? 'Switch to Edit mode' : 'Switch to Reading / View mode'}
+          >
+            {isPreviewMode ? (
+              <>
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+                <span>Edit</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <span>Preview</span>
+              </>
+            )}
+          </button>
+
           {/* Attach file action */}
           <input
             ref={fileInputRef}
@@ -872,27 +911,62 @@ export function NoteEditorView() {
             placeholder={tags.length === 0 ? '+ Add tag (Enter or comma)...' : '+ tag...'}
             className="text-xs bg-transparent text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none px-2 py-0.5 rounded border border-transparent focus:border-slate-300 dark:focus:border-slate-700 w-44"
           />
+
+          {/* Folder Selector Dropdown */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            <svg className="w-3.5 h-3.5 text-amber-500/80" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+            </svg>
+            <select
+              value={folderId ?? ''}
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : null;
+                setFolderId(val);
+                triggerAutoSave(title, content, tags, isPinned, isArchived, undefined, undefined, undefined, val);
+              }}
+              className="text-xs bg-[var(--color-surface-2)] text-[var(--color-ink)] border border-[var(--color-border)] rounded-lg px-2 py-1 focus:outline-none focus:border-[var(--color-accent)] cursor-pointer"
+            >
+              <option value="">No folder (Root)</option>
+              {availableFolders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Content Textarea & Wikilink Autocomplete */}
+        {/* Content Textarea & Wikilink Autocomplete OR Preview Mode with Wikilink Chips */}
         <div className="relative flex-1 flex flex-col">
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={(e) => handleContentChange(e.target.value, e.target.selectionStart)}
-            onKeyUp={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
-            onClick={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
-            placeholder="Start writing... (type [[ to link another note, paste images with Ctrl+V, drag & drop files)"
-            className="flex-1 w-full bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-700 text-base leading-relaxed resize-none focus:outline-none min-h-[300px]"
-          />
+          {isPreviewMode ? (
+            <div className="min-h-[300px] p-4 rounded-2xl bg-[var(--color-surface-2)]/40 border border-[var(--color-border)] text-base text-[var(--color-ink)] leading-relaxed">
+              {content.trim() ? (
+                <WikilinkRenderer content={content} />
+              ) : (
+                <span className="text-[var(--color-ink-muted)] italic">No content written yet. Switch to Edit to write.</span>
+              )}
+            </div>
+          ) : (
+            <>
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={(e) => handleContentChange(e.target.value, e.target.selectionStart)}
+                onKeyUp={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
+                onClick={(e) => checkWikilinkTrigger(content, e.currentTarget.selectionStart)}
+                placeholder="Start writing... (type [[ to link another note, paste images with Ctrl+V, drag & drop files)"
+                className="flex-1 w-full bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-700 text-base leading-relaxed resize-none focus:outline-none min-h-[300px]"
+              />
 
-          <WikilinkAutocomplete
-            query={wikilinkQuery}
-            isOpen={isAutocompleteOpen}
-            onSelect={handleSelectWikilink}
-            onClose={() => setIsAutocompleteOpen(false)}
-            currentNoteId={numericId}
-          />
+              <WikilinkAutocomplete
+                query={wikilinkQuery}
+                isOpen={isAutocompleteOpen}
+                onSelect={handleSelectWikilink}
+                onClose={() => setIsAutocompleteOpen(false)}
+                currentNoteId={numericId}
+              />
+            </>
+          )}
         </div>
 
         {/* Linked Drawings */}

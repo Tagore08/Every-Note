@@ -8,6 +8,7 @@ import { Sheet } from '../design/ui/Sheet';
 import { FAB } from '../design/ui/FAB';
 import { TaskEditorModal } from '../components/tasks/TaskEditorModal';
 import { TemplatePickerSheet } from '../features/templates/TemplatePickerSheet';
+import { ScratchpadModal } from '../features/scratchpad/ScratchpadModal';
 import { useSnackbar } from '../context/SnackbarContext';
 import { localDateStr } from '../lib/date';
 import type { Template } from '../types/template';
@@ -29,6 +30,7 @@ export function CaptureFab({
   const [isDirectInbox, setIsDirectInbox] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
+  const [isScratchpadOpen, setIsScratchpadOpen] = useState(false);
   const { showSnackbar } = useSnackbar();
 
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalOpen;
@@ -333,11 +335,33 @@ export function CaptureFab({
                     <span>From Template</span>
                   </button>
                 )}
+
+                {/* Quick Scratchpad */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setIsScratchpadOpen(true);
+                  }}
+                  className="flex items-center gap-2.5 p-3 rounded-card bg-surface-2 hover:bg-surface border border-border text-ink text-sm font-medium transition-colors text-left cursor-pointer min-h-[44px]"
+                >
+                  <svg className="w-5 h-5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </svg>
+                  <span>Quick Scratchpad</span>
+                </button>
               </div>
             </div>
           )}
         </div>
       </Sheet>
+
+      {/* Quick Scratchpad Modal */}
+      <ScratchpadModal
+        isOpen={isScratchpadOpen}
+        onClose={() => setIsScratchpadOpen(false)}
+      />
 
       {/* Template Picker Sheet */}
       <TemplatePickerSheet

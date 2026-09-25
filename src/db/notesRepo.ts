@@ -40,6 +40,8 @@ export const notesRepo = {
       title: draft.title?.trim() ?? '',
       content: draft.content ?? '',
       tags: draft.tags ?? [],
+      folderId: draft.folderId !== undefined ? draft.folderId : null,
+      isScratchpad: draft.isScratchpad ?? false,
       pinned: draft.pinned ?? false,
       archived: draft.archived ?? false,
       trashedAt: null,
@@ -55,6 +57,25 @@ export const notesRepo = {
     };
     const id = await db.notes.add(newNote);
     return { ...newNote, id: id as number };
+  },
+
+  /**
+   * Fast scratchpad retrieval or creation.
+   */
+  async getOrCreateScratchpad(): Promise<Note> {
+    const existing = await db.notes
+      .filter((n) => n.isScratchpad === true && n.trashedAt === null)
+      .first();
+
+    if (existing) return existing;
+
+    return await notesRepo.createNote({
+      title: 'Quick Scratchpad',
+      content: '',
+      isScratchpad: true,
+      folderId: null,
+      inbox: false,
+    });
   },
 
   /**
@@ -213,6 +234,7 @@ export const notesRepo = {
       (note) =>
         !note.inbox &&
         !note.archived &&
+        !note.isScratchpad &&
         note.trashedAt === null &&
         (!note.kind || note.kind === 'note')
     );
@@ -560,6 +582,12 @@ export function useJournalStreak(): number {
 export function useOnThisDay(dateStr: string): Note[] {
   const entries = useLiveQuery(() => notesRepo.getOnThisDayEntries(dateStr), [dateStr]);
   return entries ?? [];
+}
+
+export function useScratchpadNote(): Note | null | undefined {
+  return useLiveQuery(async () => {
+    return (await db.notes.filter((n) => n.isScratchpad === true && n.trashedAt === null).first()) ?? null;
+  });
 }
 
 

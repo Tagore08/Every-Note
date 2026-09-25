@@ -89,10 +89,19 @@ describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () =>
 
     // Construct full BackupEnvelope
     const envelope: BackupEnvelope = {
-      version: 15,
+      version: 16,
       app: 'notes-app',
       exportedAt: new Date().toISOString(),
       notes: [sampleNote],
+      folders: [
+        {
+          id: 1,
+          name: 'Projects',
+          parentId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
       tasks: [sampleTask],
       events: [],
       people: [],
@@ -126,8 +135,10 @@ describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () =>
     const serialized = JSON.stringify(envelope);
     const parsed: BackupEnvelope = JSON.parse(serialized);
 
-    expect(parsed.version).toBe(15);
+    expect(parsed.version).toBe(16);
     expect(parsed.app).toBe('notes-app');
+    expect(parsed.folders).toHaveLength(1);
+    expect(parsed.folders![0].name).toBe('Projects');
     expect(parsed.notes).toHaveLength(1);
     expect(parsed.notes[0].kind).toBe('journal');
     expect(parsed.notes[0].journalDate).toBe('2026-09-25');

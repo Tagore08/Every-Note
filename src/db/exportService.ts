@@ -11,6 +11,7 @@ import type { Template } from '../types/template';
 import type { NoteLink } from '../types/link';
 import type { Routine, RoutineRun } from '../types/routine';
 import type { CanvasEntity } from '../types/canvas';
+import type { Folder } from '../types/folder';
 
 export interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -29,6 +30,7 @@ export interface BackupEnvelope {
   app: string;
   exportedAt: string;
   notes: Note[];
+  folders?: Folder[];
   tasks?: Task[];
   events?: CalendarEvent[];
   people?: ExportPerson[];
@@ -161,14 +163,16 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
     });
   }
 
+  const allFolders = await db.folders.toArray();
   const currentTheme = localStorage.getItem('notes_theme_mode') || 'system';
   const currentFlags = getStoredFlags();
 
   return {
-    version: 15,
+    version: 16,
     app: 'notes-app',
     exportedAt: new Date().toISOString(),
     notes: allNotes,
+    folders: allFolders,
     tasks: allTasks,
     events: allEvents,
     people: exportedPeople,

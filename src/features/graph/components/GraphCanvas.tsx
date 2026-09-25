@@ -302,6 +302,9 @@ export function GraphCanvas({
     const clientY = e.clientY - rect.top;
     const hit = getNodeAt(clientX, clientY);
     setSelectedNode(hit);
+    if (hit && onOpenNote) {
+      onOpenNote(hit);
+    }
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {

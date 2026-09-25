@@ -13,6 +13,7 @@ import { linksRepo } from '../../db/repos/linksRepo';
 import { canvasRepo } from '../../db/repos/canvasRepo';
 import { timerPresetsRepo } from '../../db/repos/timerPresetsRepo';
 import { routinesRepo } from '../../db/repos/routinesRepo';
+import { foldersRepo } from '../../db/repos/foldersRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -30,6 +31,7 @@ import type { FocusSession, TimerPreset } from '../../types/focus';
 import type { Template } from '../../types/template';
 import type { CanvasEntity } from '../../types/canvas';
 import type { Routine, RoutineRun } from '../../types/routine';
+import type { Folder } from '../../types/folder';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -48,6 +50,7 @@ interface BackupEnvelope {
   app: string;
   exportedAt: string;
   notes: Note[];
+  folders?: Folder[];
   tasks?: Task[];
   events?: CalendarEvent[];
   people?: ExportPerson[];
@@ -578,6 +581,15 @@ export function SettingsView() {
         importedRoutinesCount = rResult.routinesCount;
       }
 
+      // 13. Import Folders
+      let importedFoldersCount = 0;
+      if (importCandidate.folders && importCandidate.folders.length > 0) {
+        importedFoldersCount = await foldersRepo.importFolders(
+          importCandidate.folders,
+          importStrategy
+        );
+      }
+
       // Re-index all wikilinks after import so the graph & backlinks are fully resolved
       await linksRepo.reindexAllLinks();
 
@@ -585,7 +597,7 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedRoutinesCount} routines, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedFoldersCount} folders, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedRoutinesCount} routines, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');

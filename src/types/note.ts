@@ -6,6 +6,8 @@ export interface Note {
   title: string;
   content: string;
   tags: string[];
+  folderId?: number | null;
+  isScratchpad?: boolean;
   pinned: boolean;
   archived: boolean;
   trashedAt: Date | null;
@@ -19,4 +21,5 @@ export interface Note {
   createdAt: Date;
   updatedAt: Date;
 }
+
 

@@ -174,7 +174,7 @@ export function BacklinksPanel({ note }: BacklinksPanelProps) {
             className="w-full flex items-center justify-between py-2 text-left text-sm font-semibold text-[var(--color-ink)] hover:opacity-80 transition-opacity"
           >
             <div className="flex items-center gap-2">
-              <span>Linked in {totalIncoming} note{totalIncoming === 1 ? '' : 's'}</span>
+              <span>Linked Mentions ({totalIncoming})</span>
             </div>
             <span className="text-xs text-[var(--color-ink-muted)] font-normal">
               {isExpanded ? 'Hide' : 'Show'}

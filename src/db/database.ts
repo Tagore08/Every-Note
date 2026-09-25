@@ -11,9 +11,11 @@ import type { Template } from '../types/template';
 import type { NoteLink } from '../types/link';
 import type { Routine, RoutineRun } from '../types/routine';
 import type { CanvasEntity } from '../types/canvas';
+import type { Folder } from '../types/folder';
 
 export class AppDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
+  folders!: EntityTable<Folder, 'id'>;
   attachments!: EntityTable<Attachment, 'id'>;
   tasks!: EntityTable<Task, 'id'>;
   events!: EntityTable<CalendarEvent, 'id'>;
@@ -384,6 +386,34 @@ export class AppDatabase extends Dexie {
       await meta.put({
         key: 'schemaVersion',
         value: 15,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 16 (Phase 1: Knowledge System - Folders & Scratchpad)
+    this.version(16).stores({
+      notes: '++id, title, *tags, folderId, isScratchpad, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, kind, journalDate, createdAt, updatedAt',
+      folders: '++id, name, parentId, sortOrder, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, presetId, kind, createdAt',
+      appMeta: 'key',
+      lifeAreas: null,
+      templates: '++id, kind, name, usageCount, createdAt',
+      links: '++id, sourceId, targetId, targetTitle',
+      routines: '++id, name, timeOfDay, *daysOfWeek, active, createdAt, updatedAt',
+      routineRuns: '++id, &[routineId+date], routineId, date, createdAt',
+      canvases: '++id, title, *tags, linkedNoteId, trashedAt, updatedAt',
+      timerPresets: '++id, name, isDefault',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 16,
         updatedAt: Date.now(),
       });
     });
