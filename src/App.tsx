@@ -6,10 +6,15 @@ import { PageSkeleton } from './design/ui/Skeleton';
 import { areasRepo } from './db/repos/areasRepo';
 import { templatesRepo } from './db/repos/templatesRepo';
 import { linksRepo } from './db/repos/linksRepo';
+import { timerPresetsRepo } from './db/repos/timerPresetsRepo';
+import { FocusTimerProvider } from './features/focus/FocusTimerContext';
 
 // Code-split all feature views using React.lazy per EXPANSION_PLAN §6 & §7
 const TodayView = lazy(() =>
   import('./features/today/TodayScreen').then((m) => ({ default: m.TodayScreen }))
+);
+const InsightsScreen = lazy(() =>
+  import('./features/insights/InsightsScreen').then((m) => ({ default: m.InsightsScreen }))
 );
 const RoutinesScreen = lazy(() =>
   import('./features/routines/RoutinesScreen').then((m) => ({ default: m.RoutinesScreen }))
@@ -48,6 +53,9 @@ const FocusTimerView = lazy(() =>
 );
 const HabitsView = lazy(() =>
   import('./components/views/HabitsView').then((m) => ({ default: m.HabitsView }))
+);
+const HabitDetailScreen = lazy(() =>
+  import('./features/habits/HabitDetailScreen').then((m) => ({ default: m.HabitDetailScreen }))
 );
 const PeopleView = lazy(() =>
   import('./components/views/PeopleView').then((m) => ({ default: m.PeopleView }))
@@ -97,60 +105,65 @@ const SeedDebugScreen = lazy(() =>
 
 export function App() {
   useEffect(() => {
-    // Seed defaults for Life Areas and Templates idempotently on first load
+    // Seed defaults for Life Areas, Templates, and Timer Presets idempotently on first load
     areasRepo.seedDefaults().catch((err) => console.error('Failed to seed areas:', err));
     templatesRepo.seedDefaults().catch((err) => console.error('Failed to seed templates:', err));
+    timerPresetsRepo.seedDefaults().catch((err) => console.error('Failed to seed timer presets:', err));
     linksRepo.ensureInitialReindex().catch((err) => console.error('Failed to ensure links reindex:', err));
   }, []);
 
   return (
     <SnackbarProvider>
-      <Suspense fallback={<PageSkeleton />}>
-        <Routes>
-          <Route element={<AppShell />}>
-            {/* New primary home: /today */}
-            <Route index element={<Navigate to="/today" replace />} />
-            <Route path="today" element={<TodayView />} />
+      <FocusTimerProvider>
+        <Suspense fallback={<PageSkeleton />}>
+          <Routes>
+            <Route element={<AppShell />}>
+              {/* New primary home: /today */}
+              <Route index element={<Navigate to="/today" replace />} />
+              <Route path="today" element={<TodayView />} />
 
-            {/* Old route redirection per EXPANSION_PLAN §3.2 */}
-            <Route path="upcoming" element={<Navigate to="/today" replace />} />
+              {/* Old route redirection per EXPANSION_PLAN §3.2 */}
+              <Route path="upcoming" element={<Navigate to="/today" replace />} />
 
-            {/* Primary features */}
-            <Route path="inbox" element={<InboxView />} />
-            <Route path="journal" element={<JournalScreen />} />
-            <Route path="journal/:date" element={<JournalScreen />} />
-            <Route path="notes" element={<NotesView />} />
-            <Route path="notes/:id" element={<NoteEditorView />} />
-            <Route path="canvas" element={<CanvasListScreen />} />
-            <Route path="canvas/:id" element={<CanvasEditor />} />
-            <Route path="graph" element={<GraphScreen />} />
-            <Route path="graph/:noteId" element={<GraphScreen />} />
-            <Route path="tasks" element={<TasksView />} />
-            <Route path="matrix" element={<EisenhowerMatrixView />} />
-            <Route path="calendar" element={<CalendarView />} />
-            <Route path="routines" element={<RoutinesScreen />} />
-            <Route path="focus" element={<FocusTimerView />} />
-            <Route path="habits" element={<HabitsView />} />
-            <Route path="people" element={<PeopleView />} />
-            <Route path="people/:id" element={<PersonProfileView />} />
-            <Route path="search" element={<SearchView />} />
-            <Route path="tags" element={<TagsView />} />
-            <Route path="areas" element={<AreasScreen />} />
-            <Route path="archive" element={<ArchiveView />} />
-            <Route path="trash" element={<TrashView />} />
-            <Route path="settings" element={<SettingsView />} />
-            <Route path="settings/labs" element={<LabsScreen />} />
-            <Route path="settings/templates" element={<TemplatesScreen />} />
+              {/* Primary features */}
+              <Route path="inbox" element={<InboxView />} />
+              <Route path="journal" element={<JournalScreen />} />
+              <Route path="journal/:date" element={<JournalScreen />} />
+              <Route path="notes" element={<NotesView />} />
+              <Route path="notes/:id" element={<NoteEditorView />} />
+              <Route path="canvas" element={<CanvasListScreen />} />
+              <Route path="canvas/:id" element={<CanvasEditor />} />
+              <Route path="graph" element={<GraphScreen />} />
+              <Route path="graph/:noteId" element={<GraphScreen />} />
+              <Route path="tasks" element={<TasksView />} />
+              <Route path="matrix" element={<EisenhowerMatrixView />} />
+              <Route path="calendar" element={<CalendarView />} />
+              <Route path="routines" element={<RoutinesScreen />} />
+              <Route path="focus" element={<FocusTimerView />} />
+              <Route path="habits" element={<HabitsView />} />
+              <Route path="habits/:id" element={<HabitDetailScreen />} />
+              <Route path="insights" element={<InsightsScreen />} />
+              <Route path="people" element={<PeopleView />} />
+              <Route path="people/:id" element={<PersonProfileView />} />
+              <Route path="search" element={<SearchView />} />
+              <Route path="tags" element={<TagsView />} />
+              <Route path="areas" element={<AreasScreen />} />
+              <Route path="archive" element={<ArchiveView />} />
+              <Route path="trash" element={<TrashView />} />
+              <Route path="settings" element={<SettingsView />} />
+              <Route path="settings/labs" element={<LabsScreen />} />
+              <Route path="settings/templates" element={<TemplatesScreen />} />
 
-            {/* Debug & developer tools */}
-            <Route path="debug/migrate" element={<MigrateDebugScreen />} />
-            <Route path="debug/seed" element={<SeedDebugScreen />} />
+              {/* Debug & developer tools */}
+              <Route path="debug/migrate" element={<MigrateDebugScreen />} />
+              <Route path="debug/seed" element={<SeedDebugScreen />} />
 
-            {/* Catch-all redirect to /today */}
-            <Route path="*" element={<Navigate to="/today" replace />} />
-          </Route>
-        </Routes>
-      </Suspense>
+              {/* Catch-all redirect to /today */}
+              <Route path="*" element={<Navigate to="/today" replace />} />
+            </Route>
+          </Routes>
+        </Suspense>
+      </FocusTimerProvider>
     </SnackbarProvider>
   );
 }

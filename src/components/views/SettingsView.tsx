@@ -12,6 +12,7 @@ import { areasRepo } from '../../db/repos/areasRepo';
 import { templatesRepo } from '../../db/repos/templatesRepo';
 import { linksRepo } from '../../db/repos/linksRepo';
 import { canvasRepo } from '../../db/repos/canvasRepo';
+import { timerPresetsRepo } from '../../db/repos/timerPresetsRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -25,7 +26,7 @@ import type { Task } from '../../types/task';
 import type { CalendarEvent } from '../../types/event';
 import type { Person } from '../../types/person';
 import type { Habit, HabitLog } from '../../types/habit';
-import type { FocusSession } from '../../types/focus';
+import type { FocusSession, TimerPreset } from '../../types/focus';
 import type { LifeArea } from '../../types/area';
 import type { Template } from '../../types/template';
 import type { CanvasEntity } from '../../types/canvas';
@@ -57,6 +58,7 @@ interface BackupEnvelope {
   lifeAreas?: LifeArea[];
   templates?: Template[];
   canvases?: ExportCanvas[];
+  timerPresets?: TimerPreset[];
   settings?: {
     theme?: string;
   };
@@ -170,6 +172,7 @@ export function SettingsView() {
       const allLifeAreas = await areasRepo.getAllAreasForExport();
       const allTemplates = await templatesRepo.getAllTemplatesForExport();
       const allCanvases = await canvasRepo.getAllCanvasesForExport();
+      const allTimerPresets = await timerPresetsRepo.getAllPresetsForExport();
 
       // Convert Blobs to base64 strings
       const exportedAttachments: ExportAttachment[] = [];
@@ -245,7 +248,7 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 13,
+        version: 14,
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
@@ -259,6 +262,7 @@ export function SettingsView() {
         lifeAreas: allLifeAreas,
         templates: allTemplates,
         canvases: exportedCanvases,
+        timerPresets: allTimerPresets,
         settings: {
           theme: mode,
         },
@@ -322,6 +326,7 @@ export function SettingsView() {
       let lifeAreasArray: LifeArea[] = [];
       let templatesArray: Template[] = [];
       let canvasesArray: ExportCanvas[] = [];
+      let timerPresetsArray: TimerPreset[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
 
@@ -359,6 +364,9 @@ export function SettingsView() {
         if ('canvases' in parsed && Array.isArray((parsed as BackupEnvelope).canvases)) {
           canvasesArray = (parsed as BackupEnvelope).canvases ?? [];
         }
+        if ('timerPresets' in parsed && Array.isArray((parsed as BackupEnvelope).timerPresets)) {
+          timerPresetsArray = (parsed as BackupEnvelope).timerPresets ?? [];
+        }
       } else if (Array.isArray(parsed)) {
         notesArray = parsed;
       } else {
@@ -381,6 +389,7 @@ export function SettingsView() {
         lifeAreas: lifeAreasArray,
         templates: templatesArray,
         canvases: canvasesArray,
+        timerPresets: timerPresetsArray,
       });
       setImportStrategy('merge');
     } catch (err) {
@@ -407,6 +416,7 @@ export function SettingsView() {
       const prevFocusSessions = await focusRepo.getAllSessionsForExport();
       const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
       const prevCanvases = await canvasRepo.getAllCanvasesForExport();
+      const prevTimerPresets = await timerPresetsRepo.getAllPresetsForExport();
 
       // 1. Import Notes
       const result = await notesRepo.importNotes(importCandidate.notes, importStrategy);
@@ -543,6 +553,15 @@ export function SettingsView() {
         importedCanvasesCount = await canvasRepo.importCanvases(restoredCanvases, importStrategy);
       }
 
+      // 11. Import Timer Presets
+      let importedPresetsCount = 0;
+      if (importCandidate.timerPresets && importCandidate.timerPresets.length > 0) {
+        importedPresetsCount = await timerPresetsRepo.importPresets(
+          importCandidate.timerPresets,
+          importStrategy
+        );
+      }
+
       // Re-index all wikilinks after import so the graph & backlinks are fully resolved
       await linksRepo.reindexAllLinks();
 
@@ -550,7 +569,7 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedAreasCount} areas, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedAreasCount} areas, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -577,6 +596,9 @@ export function SettingsView() {
           if (importStrategy === 'replace' && prevCanvases) {
             await canvasRepo.importCanvases(prevCanvases, 'replace');
           }
+          if (importStrategy === 'replace' && prevTimerPresets) {
+            await timerPresetsRepo.importPresets(prevTimerPresets, 'replace');
+          }
           await loadStorageEstimate();
         }
       );
@@ -597,6 +619,7 @@ export function SettingsView() {
       await peopleRepo.deleteAllPeople();
       await habitsRepo.deleteAllHabits();
       await focusRepo.deleteAllSessions();
+      await timerPresetsRepo.deleteAllAndReseed();
       const allCanvases = await canvasRepo.getAllCanvasesForExport();
       for (const c of allCanvases) {
         if (c.id) await canvasRepo.deleteCanvasPermanently(c.id);

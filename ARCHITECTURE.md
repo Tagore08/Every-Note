@@ -1189,10 +1189,81 @@ Phase 5 introduces freeform pressure-sensitive vector sketching, drawing, and vi
 
 ---
 
-## 12. Future Extension Points
+## 12. Phase 6 Architecture: Focus Pro · Habit Analytics · Insights Hub
 
-1. **Phase 6: Focus Pro & Analytics**
-   - Customizable Pomodoro timer presets, 12-month habit heatmap, and local personal productivity insights hub.
+Phase 6 delivers interval-based focus flow, long-term habit visualization, and a personal productivity insights hub, gated behind feature flags `focusPro`, `habitAnalytics`, and `insights`.
+
+### 1. Database Schema Version 14 (`src/db/database.ts`)
+- **`timerPresets` table**:
+  - Schema: `++id, name, isDefault`
+  - Seeded defaults:
+    - *Classic Pomodoro*: 25m focus, 5m short break, 15m long break, 4 cycles, auto-start breaks, sound chime.
+    - *Deep Work*: 50m focus, 10m short break, 30m long break, 2 cycles, auto-start breaks, sound chime.
+    - *Quick*: 15m focus, 3m short break, 0m long break, 1 cycle, manual break start.
+- **`focusSessions` table**:
+  - Gained `presetId?: number | null` and `kind?: 'focus' | 'break'` to record sessions under explicit presets and kinds.
+  - Complete index list preserved: `++id, startedAt, taskId, createdAt`.
+- **Target Schema Version & Backup Gate**:
+  - Target version bumped to `14` (`TARGET_VERSION = 14` in `src/db/backupGate.ts`).
+  - Full JSON backup envelope version 14 includes `timerPresets`.
+
+### 2. Focus Pro Architecture (`src/features/focus/`)
+- **Timestamp-Anchored Engine (`FocusTimerContext.tsx`)**:
+  - State machine: `mode` (`focus` | `shortBreak` | `longBreak`), `status` (`idle` | `running` | `paused`), `currentCycle`, `preset`, and `remainingSeconds`.
+  - Background resilience: Timer countdown computes remaining duration against an absolute timestamp (`targetEndTime = Date.now() + remainingSeconds * 1000`). Survives tab switching, OS sleep, and browser throttling.
+  - Automatic `visibilitychange` listener recalculates remaining time immediately upon tab focus or device wake.
+- **Cycles & Transitions**:
+  - Focus session completes $\to$ plays synthetic Web Audio sine chime (dual-tone 523.25Hz $\to$ 659.25Hz pleasant sweep) $\to$ browser notification $\to$ logs session to `focusSessions` table.
+  - Cycle tracker increments $\to$ shifts to `shortBreak` or `longBreak` after $N$ cycles $\to$ auto-starts if preset flags dictate.
+- **Presets Management (`PresetsSheet.tsx`)**:
+  - Pick active preset, set default preset, duplicate, customize durations and cycle counts, create new presets, or delete custom presets.
+- **Weekly Analytics Bar Chart (`WeeklyFocusChart.tsx`)**:
+  - Responsive inline SVG bar chart rendering daily focus minutes over the trailing 7 days without external charting libraries.
+
+### 3. Habit Analytics Architecture (`src/features/habits/`)
+- **12-Month Calendar Heatmap (`src/design/ui/Heatmap.tsx`)**:
+  - 52-week horizontal contribution grid (Mon–Sun alignment).
+  - 4-step accent alpha rendered via CSS `color-mix(in oklch, var(--color-accent) X%, transparent)`:
+    - Level 0: Subtle surface border
+    - Level 1: 25% accent alpha
+    - Level 2: 50% accent alpha
+    - Level 3: 75% accent alpha
+    - Level 4: 100% accent
+  - Today ring indicator and tap-to-inspect cell modal displaying date details and allowing completion toggles.
+- **8-Week Trend Sparkline (`HabitTrendSparkline.tsx`)**:
+  - Inline SVG area + stroke chart showing weekly completion percentage against weekly targets.
+- **Habit Detail Screen (`HabitDetailScreen.tsx` at `/habits/:id`)**:
+  - Accessible when `habitAnalytics` flag is enabled.
+  - Four key metric `StatCard`s: 30-day completion rate, current streak, best streak, and total completions.
+- **Pure Streak Engine (`habitsRepo.calculateHabitStreaks`)**:
+  - Reused and unit-tested pure function supporting:
+    - *Daily*: Consecutive calendar days (yesterday grace period for incomplete today, month-boundary safe).
+    - *Weekdays*: Consecutive weekdays (weekends do not break or count towards streaks).
+    - *Weekly Target*: Target days met per calendar week (in-progress week grace period).
+
+### 4. Insights Hub Architecture (`src/features/insights/`)
+- **Pure Computed Selectors (`src/db/repos/insightsRepo.ts`)**:
+  - Computes 6 core productivity metrics with delta comparisons against previous periods:
+    1. *Captures this week*: Notes + tasks created vs last week.
+    2. *Tasks completed this week*: Completed tasks count + breakdown by Life Area.
+    3. *Events this week*: Scheduled calendar events vs last week.
+    4. *Focus minutes this week*: Sum of focus session minutes vs last week.
+    5. *Habit consistency (30d)*: Overall scheduled habit adherence vs prior 30-day window.
+    6. *Journal streak*: Active consecutive daily reflections and total entries.
+- **Day-Keyed Memoization**:
+  - Caches computed insights in `db.appMeta` under `insights_cache_${toLocalDateStr()}` to eliminate re-computation across renders and view switches.
+  - Recomputed only when date changes or when user triggers explicit refresh.
+- **Hub View (`InsightsScreen.tsx` at `/insights`)**:
+  - Interactive metric cards featuring delta badges ($\uparrow, \downarrow, -$ in success/danger/muted tones) with direct navigation shortcuts to each feature module.
+- **Today Integration (`TodayScreen.tsx`)**:
+  - Subtle weekly Insights icon button embedded in the greeting header when the `insights` flag is active.
+
+---
+
+## 13. Future Extension Points
+
+1. **Phase 7: Hardening & v2.0 Release**
+   - Performance pass (bundle audit $\le$ 250kB gz, live query optimization), accessibility audit, extended smoke regression, and Play Store release prep.
 
 
 

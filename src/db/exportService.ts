@@ -6,7 +6,7 @@ import type { Task } from '../types/task';
 import type { CalendarEvent } from '../types/event';
 import type { Person } from '../types/person';
 import type { Habit, HabitLog } from '../types/habit';
-import type { FocusSession } from '../types/focus';
+import type { FocusSession, TimerPreset } from '../types/focus';
 import type { LifeArea } from '../types/area';
 import type { Template } from '../types/template';
 import type { NoteLink } from '../types/link';
@@ -43,6 +43,7 @@ export interface BackupEnvelope {
   routines?: Routine[];
   routineRuns?: RoutineRun[];
   canvases?: ExportCanvas[];
+  timerPresets?: TimerPreset[];
   settings?: {
     theme?: string;
     flags?: Record<string, boolean>;
@@ -137,6 +138,7 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   const allRoutines = await db.routines.toArray();
   const allRoutineRuns = await db.routineRuns.toArray();
   const allCanvases = await db.canvases.toArray();
+  const allTimerPresets = await db.timerPresets.toArray();
 
   const exportedCanvases: ExportCanvas[] = [];
   for (const c of allCanvases) {
@@ -166,7 +168,7 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   const currentFlags = getStoredFlags();
 
   return {
-    version: 13,
+    version: 14,
     app: 'notes-app',
     exportedAt: new Date().toISOString(),
     notes: allNotes,
@@ -183,6 +185,7 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
     routines: allRoutines,
     routineRuns: allRoutineRuns,
     canvases: exportedCanvases,
+    timerPresets: allTimerPresets,
     settings: {
       theme: currentTheme,
       flags: currentFlags,

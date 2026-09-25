@@ -5,7 +5,7 @@ import type { Task } from '../types/task';
 import type { CalendarEvent } from '../types/event';
 import type { Person } from '../types/person';
 import type { Habit, HabitLog } from '../types/habit';
-import type { FocusSession } from '../types/focus';
+import type { FocusSession, TimerPreset } from '../types/focus';
 import type { AppMeta } from '../types/meta';
 import type { LifeArea } from '../types/area';
 import type { Template } from '../types/template';
@@ -29,6 +29,7 @@ export class AppDatabase extends Dexie {
   routines!: EntityTable<Routine, 'id'>;
   routineRuns!: EntityTable<RoutineRun, 'id'>;
   canvases!: EntityTable<CanvasEntity, 'id'>;
+  timerPresets!: EntityTable<TimerPreset, 'id'>;
 
   constructor(dbName = 'NotesAppDatabase') {
     super(dbName);
@@ -257,6 +258,34 @@ export class AppDatabase extends Dexie {
       await meta.put({
         key: 'schemaVersion',
         value: 13,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 14 (v2 Phase 6: Focus Pro & Analytics - timerPresets table + focusSessions presetId/kind)
+    // All tables re-declared with complete index lists per safety contract §0
+    this.version(14).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, lifeAreaId, kind, journalDate, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, lifeAreaId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, lifeAreaId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, presetId, kind, createdAt',
+      appMeta: 'key',
+      lifeAreas: '++id, name, color, sortOrder, archived, createdAt',
+      templates: '++id, kind, name, usageCount, createdAt',
+      links: '++id, sourceId, targetId, targetTitle',
+      routines: '++id, name, timeOfDay, *daysOfWeek, active, createdAt, updatedAt',
+      routineRuns: '++id, &[routineId+date], routineId, date, createdAt',
+      canvases: '++id, title, *tags, lifeAreaId, linkedNoteId, trashedAt, updatedAt',
+      timerPresets: '++id, name, isDefault',
+    }).upgrade(async (tx) => {
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 14,
         updatedAt: Date.now(),
       });
     });

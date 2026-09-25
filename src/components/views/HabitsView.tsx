@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useFlag } from '../../app/flags';
 import {
   useHabitsWithStats,
   habitsRepo,
@@ -9,6 +11,8 @@ import { HabitEditorModal } from '../habits/HabitEditorModal';
 import type { Habit, HabitWithStats, HabitFrequency } from '../../types/habit';
 
 export function HabitsView() {
+  const navigate = useNavigate();
+  const isHabitAnalytics = useFlag('habitAnalytics');
   const { showUndo, showSnackbar } = useSnackbar();
   const {
     activeHabits,
@@ -218,14 +222,28 @@ export function HabitsView() {
                     </button>
 
                     {/* Habit Name & Frequency / Reminder Info */}
-                    <div className="min-w-0">
+                    <div
+                      className={`min-w-0 ${isHabitAnalytics ? 'cursor-pointer group/title' : ''}`}
+                      onClick={() => {
+                        if (isHabitAnalytics && habit.id) {
+                          navigate(`/habits/${habit.id}`);
+                        }
+                      }}
+                    >
                       <div className="flex items-center gap-2">
-                        <h2 className="text-base font-bold text-slate-900 dark:text-white truncate">
+                        <h2 className={`text-base font-bold text-slate-900 dark:text-white truncate ${
+                          isHabitAnalytics ? 'group-hover/title:text-accent transition-colors' : ''
+                        }`}>
                           {habit.name}
                         </h2>
                         {isDone && (
                           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0">
                             Done
+                          </span>
+                        )}
+                        {isHabitAnalytics && (
+                          <span className="text-[10px] text-ink-muted opacity-0 group-hover/title:opacity-100 transition-opacity">
+                            View analytics →
                           </span>
                         )}
                       </div>
@@ -244,9 +262,16 @@ export function HabitsView() {
                     </div>
                   </div>
 
-                  {/* Right Side: Streaks & Edit */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="text-right hidden sm:block">
+                  {/* Right Side: Streaks, Analytics & Edit */}
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                    <div
+                      className={`text-right hidden sm:block ${isHabitAnalytics ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      onClick={() => {
+                        if (isHabitAnalytics && habit.id) {
+                          navigate(`/habits/${habit.id}`);
+                        }
+                      }}
+                    >
                       <div className="flex items-center gap-1 justify-end font-bold text-sm text-amber-600 dark:text-amber-400">
                         <span>🔥</span>
                         <span>{habit.currentStreak} {unitLabel}</span>
@@ -255,6 +280,22 @@ export function HabitsView() {
                         Best: {habit.bestStreak} {unitLabel}
                       </div>
                     </div>
+
+                    {isHabitAnalytics && habit.id && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/habits/${habit.id}`)}
+                        className="p-2 rounded-xl text-ink-muted hover:text-accent hover:bg-surface-elevated transition-colors cursor-pointer"
+                        title="View Analytics"
+                        aria-label="View Analytics"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="18" y1="20" x2="18" y2="10" />
+                          <line x1="12" y1="20" x2="12" y2="4" />
+                          <line x1="6" y1="20" x2="6" y2="14" />
+                        </svg>
+                      </button>
+                    )}
 
                     <button
                       type="button"
