@@ -4,7 +4,6 @@ export interface TemplateBody {
   title?: string;
   content?: string;
   subtasks?: string[];
-  lifeAreaId?: number | null;
   priority?: string;
   dueOffsetDays?: number;
   prompts?: string[];

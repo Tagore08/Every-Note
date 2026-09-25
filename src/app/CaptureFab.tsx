@@ -133,7 +133,6 @@ export function CaptureFab({
       const task = await tasksRepo.createTask({
         title: template.body.title || template.name,
         priority: (template.body.priority as any) || 'none',
-        lifeAreaId: template.body.lifeAreaId ?? null,
         dueAt,
       });
 
@@ -151,7 +150,6 @@ export function CaptureFab({
       const note = await notesRepo.createNote({
         title: template.body.title || template.name,
         content: template.body.content || '',
-        lifeAreaId: template.body.lifeAreaId ?? null,
       });
 
       showSnackbar({ message: `Created note from "${template.name}"` });
@@ -188,7 +186,7 @@ export function CaptureFab({
   return (
     <>
       {showFAB && (
-        <div className="fixed bottom-20 right-4 z-40 md:hidden">
+        <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-40 md:hidden pointer-events-auto">
           <FAB
             onClick={() => {
               setIsDirectInbox(false);
@@ -202,6 +200,7 @@ export function CaptureFab({
               </svg>
             }
             ariaLabel="Quick Capture (hold for instant inbox note)"
+            className="w-13 h-13 min-w-[52px] min-h-[52px] -translate-y-2 shadow-pop ring-4 ring-surface"
           />
         </div>
       )}

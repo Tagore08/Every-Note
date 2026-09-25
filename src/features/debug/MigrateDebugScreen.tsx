@@ -57,7 +57,6 @@ export function MigrateDebugScreen() {
       const liveHabitLogs = await db.habitLogs.toArray();
       const liveFocus = await db.focusSessions.toArray();
       const liveAttachments = await db.attachments.toArray();
-      const liveAreas = await db.lifeAreas.toArray();
       const liveTemplates = await db.templates.toArray();
       const liveLinks = await db.links.toArray();
       const liveRoutines = await db.routines.toArray();
@@ -74,7 +73,6 @@ export function MigrateDebugScreen() {
         habitLogs: liveHabitLogs.length,
         focusSessions: liveFocus.length,
         attachments: liveAttachments.length,
-        lifeAreas: liveAreas.length,
         templates: liveTemplates.length,
         links: liveLinks.length,
         routines: liveRoutines.length,
@@ -98,7 +96,6 @@ export function MigrateDebugScreen() {
       if (liveHabitLogs.length) await testDb.habitLogs.bulkAdd(liveHabitLogs);
       if (liveFocus.length) await testDb.focusSessions.bulkAdd(liveFocus);
       if (liveAttachments.length) await testDb.attachments.bulkAdd(liveAttachments);
-      if (liveAreas.length) await testDb.lifeAreas.bulkAdd(liveAreas);
       if (liveTemplates.length) await testDb.templates.bulkAdd(liveTemplates);
       if (liveLinks.length) await testDb.links.bulkAdd(liveLinks);
       if (liveRoutines.length) await testDb.routines.bulkAdd(liveRoutines);
@@ -116,7 +113,6 @@ export function MigrateDebugScreen() {
       const afterHabitLogs = await testDb.habitLogs.count();
       const afterFocus = await testDb.focusSessions.count();
       const afterAttachments = await testDb.attachments.count();
-      const afterAreas = await testDb.lifeAreas.count();
       const afterTemplates = await testDb.templates.count();
       const afterLinks = await testDb.links.count();
       const afterRoutines = await testDb.routines.count();
@@ -134,7 +130,6 @@ export function MigrateDebugScreen() {
         habitLogs: afterHabitLogs,
         focusSessions: afterFocus,
         attachments: afterAttachments,
-        lifeAreas: afterAreas,
         templates: afterTemplates,
         links: afterLinks,
         routines: afterRoutines,
@@ -153,7 +148,6 @@ export function MigrateDebugScreen() {
         'habitLogs',
         'focusSessions',
         'attachments',
-        'lifeAreas',
         'templates',
         'links',
         'routines',

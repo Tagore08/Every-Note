@@ -3,13 +3,11 @@ import { TimeGrid } from '../grid/TimeGrid';
 import { getWeekDays } from '../lib/calendarDate';
 import type { EventOccurrence } from '../../../types/event';
 import type { Task } from '../../../types/task';
-import type { LifeArea } from '../../../types/area';
 
 interface WeekViewProps {
   currentDate: Date;
   occurrences: EventOccurrence[];
   tasksDue: Task[];
-  areasMap?: Map<number, LifeArea>;
   onSlotClick: (targetDate: Date, startTimeStr: string, endTimeStr: string) => void;
   onEventClick: (occ: EventOccurrence) => void;
   onRescheduleEvent?: (
@@ -24,7 +22,6 @@ export function WeekView({
   currentDate,
   occurrences,
   tasksDue,
-  areasMap,
   onSlotClick,
   onEventClick,
   onRescheduleEvent,
@@ -38,7 +35,6 @@ export function WeekView({
         days={days}
         occurrences={occurrences}
         tasksDue={tasksDue}
-        areasMap={areasMap}
         onSlotClick={onSlotClick}
         onEventClick={onEventClick}
         onRescheduleEvent={onRescheduleEvent}

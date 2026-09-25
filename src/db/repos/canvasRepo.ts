@@ -21,7 +21,6 @@ export const canvasRepo = {
       thumbBlob: data.thumbBlob,
       linkedNoteId: data.linkedNoteId ?? null,
       tags: data.tags ?? [],
-      lifeAreaId: data.lifeAreaId ?? null,
       createdAt: data.createdAt ?? now,
       updatedAt: data.updatedAt ?? now,
       trashedAt: null,
@@ -48,7 +47,7 @@ export const canvasRepo = {
 
   async updateCanvasMetadata(
     id: number,
-    data: Partial<Pick<CanvasEntity, 'title' | 'tags' | 'lifeAreaId' | 'linkedNoteId'>>
+    data: Partial<Pick<CanvasEntity, 'title' | 'tags' | 'linkedNoteId'>>
   ): Promise<void> {
     await db.canvases.update(id, {
       ...data,

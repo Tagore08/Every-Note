@@ -5,7 +5,6 @@ import { localDateStr, addDays, formatJournalDateHeader } from '../../lib/date';
 import { MoodRow } from './MoodRow';
 import { PromptChips } from './PromptChips';
 import { OnThisDayCard } from './OnThisDayCard';
-import { LifeAreaPicker } from '../areas/LifeAreaPicker';
 import type { JournalMood } from '../../types/note';
 
 export function JournalScreen() {
@@ -29,7 +28,6 @@ export function JournalScreen() {
   // Local editor states
   const [content, setContent] = useState('');
   const [mood, setMood] = useState<JournalMood | null>(null);
-  const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
@@ -71,12 +69,10 @@ export function JournalScreen() {
     if (entry) {
       setContent(entry.content || '');
       setMood(entry.mood ?? null);
-      setLifeAreaId(entry.lifeAreaId ?? null);
       setTags(entry.tags || []);
     } else {
       setContent('');
       setMood(null);
-      setLifeAreaId(null);
       setTags([]);
     }
     setSaveStatus('saved');
@@ -84,7 +80,7 @@ export function JournalScreen() {
 
   // Autosave implementation with 500ms debounce
   const debouncedSave = useCallback(
-    (newContent: string, newMood: JournalMood | null, newAreaId: number | null, newTags: string[]) => {
+    (newContent: string, newMood: JournalMood | null, newTags: string[]) => {
       setSaveStatus('saving');
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
@@ -99,7 +95,6 @@ export function JournalScreen() {
             await notesRepo.updateNote(existingId, {
               content: newContent,
               mood: newMood,
-              lifeAreaId: newAreaId,
               tags: newTags,
             });
           } else {
@@ -110,7 +105,6 @@ export function JournalScreen() {
               title: `Journal — ${targetDate}`,
               content: newContent,
               mood: newMood,
-              lifeAreaId: newAreaId,
               tags: newTags,
               inbox: false,
               pinned: false,
@@ -132,19 +126,13 @@ export function JournalScreen() {
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setContent(val);
-    debouncedSave(val, mood, lifeAreaId, tags);
+    debouncedSave(val, mood, tags);
   };
 
   // Mood change handler
   const handleMoodChange = (newMood: JournalMood | null) => {
     setMood(newMood);
-    debouncedSave(content, newMood, lifeAreaId, tags);
-  };
-
-  // Life Area change handler
-  const handleLifeAreaChange = (newAreaId: number | null) => {
-    setLifeAreaId(newAreaId);
-    debouncedSave(content, mood, newAreaId, tags);
+    debouncedSave(content, newMood, tags);
   };
 
   // Add tag
@@ -154,14 +142,14 @@ export function JournalScreen() {
       const nextTags = [...tags, trimmed];
       setTags(nextTags);
       setTagInput('');
-      debouncedSave(content, mood, lifeAreaId, nextTags);
+      debouncedSave(content, mood, nextTags);
     }
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
     const nextTags = tags.filter((t) => t !== tagToRemove);
     setTags(nextTags);
-    debouncedSave(content, mood, lifeAreaId, nextTags);
+    debouncedSave(content, mood, nextTags);
   };
 
   // Prompt insertion handler
@@ -169,7 +157,7 @@ export function JournalScreen() {
     const prefix = content.trim().length > 0 ? '\n\n' : '';
     const newContent = `${content.trimEnd()}${prefix}**${promptText}**\n\n`;
     setContent(newContent);
-    debouncedSave(newContent, mood, lifeAreaId, tags);
+    debouncedSave(newContent, mood, tags);
 
     // Focus textarea
     setTimeout(() => {
@@ -356,24 +344,17 @@ export function JournalScreen() {
         {/* Prompt Chips */}
         <PromptChips onSelectPrompt={handleInsertPrompt} />
 
-        {/* Life Area & Tags Optional Tray */}
+        {/* Tags & Streak Tray */}
         <div className="p-4 rounded-card border border-border bg-surface space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">
-                Life Area:
-              </span>
-              <LifeAreaPicker value={lifeAreaId} onChange={handleLifeAreaChange} />
-            </div>
-
-            {/* Streak Indicator */}
-            {streak > 0 && (
+          {streak > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Streak</span>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                 <span>🔥</span>
                 <span>{streak} day streak</span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Tags */}
           <div className="space-y-1.5 pt-2 border-t border-border">

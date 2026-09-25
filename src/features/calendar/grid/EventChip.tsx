@@ -1,12 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 import type { PositionedEvent } from '../lib/layoutEvents';
-import type { LifeArea } from '../../../types/area';
 import { formatEventTime } from '../../../utils/format';
 import { HOUR_HEIGHT } from '../lib/layoutEvents';
 
 interface EventChipProps {
   positioned: PositionedEvent;
-  areasMap?: Map<number, LifeArea>;
   onClick: (occ: PositionedEvent['occurrence']) => void;
   onReschedule?: (
     occ: PositionedEvent['occurrence'],
@@ -19,7 +17,6 @@ type DragMode = 'move' | 'resize-top' | 'resize-bottom' | null;
 
 export function EventChip({
   positioned,
-  areasMap,
   onClick,
   onReschedule,
 }: EventChipProps) {
@@ -35,11 +32,7 @@ export function EventChip({
   const initialHeightRef = useRef(height);
   const isDraggingRef = useRef(false);
 
-  // Life Area color
-  const lifeArea = occurrence.originalEvent.lifeAreaId
-    ? areasMap?.get(occurrence.originalEvent.lifeAreaId)
-    : undefined;
-  const chipColor = lifeArea ? lifeArea.color : 'var(--color-accent)';
+  const chipColor = 'var(--color-accent)';
 
   // Helper to handle mouse drag start on desktop only
   const handlePointerDown = useCallback(

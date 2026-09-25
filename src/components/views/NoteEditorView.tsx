@@ -9,7 +9,6 @@ import { AttachmentGallery } from '../attachments/AttachmentGallery';
 import { AddLinkModal } from '../attachments/AddLinkModal';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
-import { LifeAreaPicker } from '../../features/areas/LifeAreaPicker';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { canvasRepo } from '../../db/repos/canvasRepo';
 import { useFlag } from '../../app/flags';
@@ -79,7 +78,6 @@ export function NoteEditorView() {
       const canvas = await canvasRepo.createCanvas({
         linkedNoteId: numericId,
         title: `Sketch for ${title || 'Note'}`,
-        lifeAreaId: note?.lifeAreaId ?? null,
       });
       navigate(`/canvas/${canvas.id}`);
     } catch (err) {
@@ -96,7 +94,6 @@ export function NoteEditorView() {
   const [reminderTimeStr, setReminderTimeStr] = useState('');
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [personId, setPersonId] = useState<number | null>(null);
-  const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
@@ -153,7 +150,6 @@ export function NoteEditorView() {
         );
       }
       setPersonId(note.personId ?? null);
-      setLifeAreaId(note.lifeAreaId ?? null);
       initialLoadDone.current = true;
     }
   }, [note]);
@@ -168,8 +164,7 @@ export function NoteEditorView() {
       archivedState: boolean,
       schedStr?: string,
       remTimeStr?: string,
-      pId?: number | null,
-      areaId?: number | null
+      pId?: number | null
     ) => {
       if (!numericId) return;
       setSaveStatus('saving');
@@ -183,7 +178,6 @@ export function NoteEditorView() {
           const finalSched = schedStr !== undefined ? schedStr : scheduledAtStr;
           const finalRem = remTimeStr !== undefined ? remTimeStr : reminderTimeStr;
           const finalPersonId = pId !== undefined ? pId : personId;
-          const finalLifeAreaId = areaId !== undefined ? areaId : lifeAreaId;
 
           let schedDate: Date | null = null;
           let remDate: Date | null = null;
@@ -206,7 +200,6 @@ export function NoteEditorView() {
             scheduledAt: schedDate,
             reminderAt: remDate,
             personId: finalPersonId,
-            lifeAreaId: finalLifeAreaId,
           });
           setSaveStatus('saved');
         } catch (err) {
@@ -230,7 +223,7 @@ export function NoteEditorView() {
         }
       }, 800);
     },
-    [numericId, scheduledAtStr, reminderTimeStr, personId, lifeAreaId]
+    [numericId, scheduledAtStr, reminderTimeStr, personId]
   );
 
   // Flush any pending save on unmount
@@ -393,11 +386,6 @@ export function NoteEditorView() {
     setScheduledAtStr('');
     setReminderTimeStr('');
     triggerAutoSave(title, content, tags, isPinned, isArchived, '', '');
-  };
-
-  const handleSetLifeArea = (areaId: number | null) => {
-    setLifeAreaId(areaId);
-    triggerAutoSave(title, content, tags, isPinned, isArchived, scheduledAtStr, reminderTimeStr, personId, areaId);
   };
 
 
@@ -716,13 +704,6 @@ export function NoteEditorView() {
             </svg>
             <span className="hidden sm:inline">Person</span>
           </button>
-
-          {/* Life Area Picker */}
-          <LifeAreaPicker
-            selectedAreaId={lifeAreaId}
-            onSelect={handleSetLifeArea}
-            compact
-          />
 
           <span className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
 

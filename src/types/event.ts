@@ -20,7 +20,6 @@ export interface CalendarEvent {
   recurrence: EventRecurrence;
   reminderAt?: Date | null;
   personId?: number | null;
-  lifeAreaId?: number | null;
   relatedTaskId?: number | null;
   tags: string[];
   createdAt: Date;

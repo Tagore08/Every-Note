@@ -28,13 +28,13 @@ export function Chip({
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={`inline-flex items-center gap-1.5 rounded-pill font-medium transition-all select-none ${
-        size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-xs sm:text-sm'
+        size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-xs sm:text-sm'
       } ${
-        onClick ? 'cursor-pointer active:scale-95 min-h-[44px]' : ''
+        onClick ? 'cursor-pointer active:scale-95 min-h-[38px] sm:min-h-[42px]' : ''
       } ${
         active
-          ? 'bg-accent text-accent-ink shadow-xs'
-          : 'bg-surface-2 text-ink border border-border hover:bg-surface'
+          ? 'bg-accent text-accent-ink shadow-card font-semibold'
+          : 'bg-surface-2 text-ink border border-border/70 hover:bg-surface-3 hover:border-border'
       } ${className}`}
       style={color && !active ? { borderColor: color, color } : undefined}
     >

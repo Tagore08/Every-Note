@@ -74,7 +74,7 @@ export const FLAG_INFO: Record<Flag, FlagInfo> = {
   smartInbox: {
     id: 'smartInbox',
     label: 'Smart Inbox & Tasks',
-    description: 'Life areas classification, task subtasks, NLP quick-add & templates',
+    description: 'Tag classification, task subtasks, NLP quick-add & templates',
     phase: 'Phase 1',
   },
 };

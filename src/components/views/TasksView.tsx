@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import type { Task } from '../../types/task';
 import type { Template } from '../../types/template';
 import { useTodoTasks, useDoneTasks, tasksRepo, useSubtaskProgress } from '../../db/tasksRepo';
-import { useActiveAreas, useArea } from '../../db/repos/areasRepo';
 import { parseQuickAdd } from '../../lib/quickAdd';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatDueDate, isOverdue, formatRelativeTime } from '../../utils/format';
@@ -23,23 +22,6 @@ function SubtaskProgressChip({ parentTaskId }: { parentTaskId?: number }) {
   );
 }
 
-function TaskAreaDot({ areaId }: { areaId?: number | null }) {
-  const area = useArea(areaId);
-  if (!area) return null;
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-[10px] font-medium text-ink-muted shrink-0"
-      title={`Area: ${area.name}`}
-    >
-      <span
-        className="w-2 h-2 rounded-full shrink-0"
-        style={{ backgroundColor: area.color }}
-      />
-      <span>{area.name}</span>
-    </span>
-  );
-}
-
 export function TasksView() {
   const [segment, setSegment] = useState<'todo' | 'done'>('todo');
   const [quickTitle, setQuickTitle] = useState('');
@@ -50,7 +32,6 @@ export function TasksView() {
 
   const todoTasks = useTodoTasks();
   const doneTasks = useDoneTasks();
-  const activeAreas = useActiveAreas();
   const { showUndo } = useSnackbar();
 
   // Swipe detection for mobile
@@ -59,7 +40,7 @@ export function TasksView() {
   const swipedTaskId = useRef<number | null>(null);
 
   // NLP preview calculation
-  const parsedPreview = quickTitle.trim() ? parseQuickAdd(quickTitle, activeAreas) : null;
+  const parsedPreview = quickTitle.trim() ? parseQuickAdd(quickTitle) : null;
 
   const handleQuickAdd = async (e?: KeyboardEvent<HTMLInputElement>) => {
     if (e && e.key !== 'Enter') return;
@@ -67,13 +48,12 @@ export function TasksView() {
     const clean = quickTitle.trim();
     if (!clean) return;
 
-    const parsed = parseQuickAdd(clean, activeAreas);
+    const parsed = parseQuickAdd(clean);
     try {
       await tasksRepo.createTask({
         title: parsed.title || clean,
         dueAt: parsed.dueAt,
         tags: parsed.tags,
-        lifeAreaId: parsed.lifeAreaId,
       });
       setQuickTitle('');
     } catch (err) {
@@ -131,7 +111,6 @@ export function TasksView() {
     const task = await tasksRepo.createTask({
       title: template.body.title || template.name,
       priority: (template.body.priority as any) || 'none',
-      lifeAreaId: template.body.lifeAreaId ?? null,
       dueAt,
     });
 
@@ -390,11 +369,8 @@ export function TasksView() {
                     )}
                   </div>
 
-                  {/* Optional Metadata Row: Life Area, tags, priority, source note */}
+                  {/* Optional Metadata Row: tags, priority, source note */}
                   <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-ink-muted">
-                    {/* Life Area Dot */}
-                    {task.lifeAreaId && <TaskAreaDot areaId={task.lifeAreaId} />}
-
                     {/* Priority Badge */}
                     {task.priority && task.priority !== 'none' && (
                       <span

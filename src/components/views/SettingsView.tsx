@@ -8,7 +8,6 @@ import { eventsRepo } from '../../db/eventsRepo';
 import { peopleRepo } from '../../db/peopleRepo';
 import { habitsRepo } from '../../db/habitsRepo';
 import { focusRepo } from '../../db/focusRepo';
-import { areasRepo } from '../../db/repos/areasRepo';
 import { templatesRepo } from '../../db/repos/templatesRepo';
 import { linksRepo } from '../../db/repos/linksRepo';
 import { canvasRepo } from '../../db/repos/canvasRepo';
@@ -28,7 +27,6 @@ import type { CalendarEvent } from '../../types/event';
 import type { Person } from '../../types/person';
 import type { Habit, HabitLog } from '../../types/habit';
 import type { FocusSession, TimerPreset } from '../../types/focus';
-import type { LifeArea } from '../../types/area';
 import type { Template } from '../../types/template';
 import type { CanvasEntity } from '../../types/canvas';
 import type { Routine, RoutineRun } from '../../types/routine';
@@ -57,7 +55,7 @@ interface BackupEnvelope {
   habits?: Habit[];
   habitLogs?: HabitLog[];
   focusSessions?: FocusSession[];
-  lifeAreas?: LifeArea[];
+  lifeAreas?: any[];
   templates?: Template[];
   canvases?: ExportCanvas[];
   timerPresets?: TimerPreset[];
@@ -173,7 +171,6 @@ export function SettingsView() {
       const allHabitLogs = await habitsRepo.getAllHabitLogsForExport();
       const allFocusSessions = await focusRepo.getAllSessionsForExport();
       const allAttachments = await attachmentsRepo.getAllAttachmentsForExport();
-      const allLifeAreas = await areasRepo.getAllAreasForExport();
       const allTemplates = await templatesRepo.getAllTemplatesForExport();
       const allCanvases = await canvasRepo.getAllCanvasesForExport();
       const allTimerPresets = await timerPresetsRepo.getAllPresetsForExport();
@@ -245,7 +242,6 @@ export function SettingsView() {
           doc: c.doc,
           linkedNoteId: c.linkedNoteId,
           tags: c.tags,
-          lifeAreaId: c.lifeAreaId,
           createdAt: c.createdAt,
           updatedAt: c.updatedAt,
           trashedAt: c.trashedAt,
@@ -254,7 +250,7 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 14,
+        version: 15,
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
@@ -265,7 +261,6 @@ export function SettingsView() {
         habitLogs: allHabitLogs,
         focusSessions: allFocusSessions,
         attachments: exportedAttachments,
-        lifeAreas: allLifeAreas,
         templates: allTemplates,
         canvases: exportedCanvases,
         timerPresets: allTimerPresets,
@@ -331,7 +326,7 @@ export function SettingsView() {
       let habitsArray: Habit[] = [];
       let habitLogsArray: HabitLog[] = [];
       let focusSessionsArray: FocusSession[] = [];
-      let lifeAreasArray: LifeArea[] = [];
+      let lifeAreasArray: any[] = [];
       let templatesArray: Template[] = [];
       let canvasesArray: ExportCanvas[] = [];
       let timerPresetsArray: TimerPreset[] = [];
@@ -530,16 +525,7 @@ export function SettingsView() {
         );
       }
 
-      // 8. Import Life Areas
-      let importedAreasCount = 0;
-      if (importCandidate.lifeAreas && importCandidate.lifeAreas.length > 0) {
-        importedAreasCount = await areasRepo.importAreas(
-          importCandidate.lifeAreas,
-          importStrategy
-        );
-      }
-
-      // 9. Import Templates
+      // 8. Import Templates
       let importedTemplatesCount = 0;
       if (importCandidate.templates && importCandidate.templates.length > 0) {
         importedTemplatesCount = await templatesRepo.importTemplates(
@@ -548,7 +534,7 @@ export function SettingsView() {
         );
       }
 
-      // 10. Import Canvases
+      // 9. Import Canvases
       let importedCanvasesCount = 0;
       if (importCandidate.canvases && importCandidate.canvases.length > 0) {
         const restoredCanvases: CanvasEntity[] = [];
@@ -564,7 +550,6 @@ export function SettingsView() {
             thumbBlob,
             linkedNoteId: raw.linkedNoteId ?? null,
             tags: raw.tags || [],
-            lifeAreaId: raw.lifeAreaId ?? null,
             createdAt: raw.createdAt || Date.now(),
             updatedAt: raw.updatedAt || Date.now(),
             trashedAt: raw.trashedAt ?? null,
@@ -600,7 +585,7 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedRoutinesCount} routines, ${importedAreasCount} areas, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedRoutinesCount} routines, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -707,22 +692,6 @@ export function SettingsView() {
         </Link>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Link
-            to="/areas"
-            className="flex items-center justify-between p-4 rounded-card border border-border bg-surface hover:border-accent/40 shadow-card transition-colors min-h-[44px]"
-          >
-            <div className="flex items-center gap-2.5">
-              <svg className="w-4 h-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-              </svg>
-              <div>
-                <div className="text-sm font-medium text-ink">Life Areas</div>
-                <div className="text-[11px] text-ink-muted">Health, Work, Personal & more</div>
-              </div>
-            </div>
-            <span className="text-accent text-xs font-semibold">Manage →</span>
-          </Link>
 
           <Link
             to="/settings/templates"

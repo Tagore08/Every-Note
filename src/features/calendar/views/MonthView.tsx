@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import type { EventOccurrence } from '../../../types/event';
 import type { Task } from '../../../types/task';
 import type { Note } from '../../../types/note';
-import type { LifeArea } from '../../../types/area';
 import { formatDateKey, isSameDay } from '../../../utils/format';
 
 interface MonthViewProps {
@@ -10,8 +9,6 @@ interface MonthViewProps {
   occurrences: EventOccurrence[];
   tasksDue: Task[];
   scheduledNotes: Note[];
-  areas: LifeArea[];
-  areasMap?: Map<number, LifeArea>;
   onSelectDay: (date: Date) => void;
 }
 
@@ -22,8 +19,6 @@ export function MonthView({
   occurrences,
   tasksDue,
   scheduledNotes,
-  areas,
-  areasMap,
   onSelectDay,
 }: MonthViewProps) {
   const currentYear = currentDate.getFullYear();
@@ -134,24 +129,16 @@ export function MonthView({
                 {date.getDate()}
               </span>
 
-              {/* Indicator Dots colored by Life Area */}
+              {/* Indicator Dots */}
               <div className="flex flex-wrap items-center justify-center gap-1 max-w-[80%] min-h-[10px]">
-                {/* Event dots colored by Life Area */}
-                {dayEvents.slice(0, 4).map((ev, i) => {
-                  const area = ev.originalEvent.lifeAreaId
-                    ? areasMap?.get(ev.originalEvent.lifeAreaId)
-                    : undefined;
-                  const dotColor = area ? area.color : 'var(--color-accent)';
-
-                  return (
-                    <span
-                      key={`ev-dot-${ev.eventId}-${i}`}
-                      style={{ backgroundColor: dotColor }}
-                      className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ring-1 ring-surface shrink-0"
-                      title={ev.title}
-                    />
-                  );
-                })}
+                {/* Event dots */}
+                {dayEvents.slice(0, 4).map((ev, i) => (
+                  <span
+                    key={`ev-dot-${ev.eventId}-${i}`}
+                    className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-accent ring-1 ring-surface shrink-0"
+                    title={ev.title}
+                  />
+                ))}
 
                 {/* Due task dot */}
                 {dayTasks.length > 0 && (
@@ -174,17 +161,12 @@ export function MonthView({
         })}
       </div>
 
-      {/* Life Areas & Type Dots Legend */}
+      {/* Type Dots Legend */}
       <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 pt-3 border-t border-border text-[11px] text-ink-muted">
-        {areas.map((area) => (
-          <div key={`legend-area-${area.id}`} className="flex items-center gap-1.5">
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: area.color }}
-            />
-            <span>{area.name}</span>
-          </div>
-        ))}
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
+          <span>Events</span>
+        </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-warning shrink-0" />
           <span>Due Tasks</span>

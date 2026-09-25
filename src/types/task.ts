@@ -17,7 +17,6 @@ export interface Task {
   trashedAt?: Date | null;
   sourceNoteId?: number | null; // Informational backlink to source note
   personId?: number | null;
-  lifeAreaId?: number | null;
   parentTaskId?: number | null;
   routineRunId?: number | null;
   sortOrder?: number;

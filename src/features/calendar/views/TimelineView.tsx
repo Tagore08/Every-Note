@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import type { EventOccurrence } from '../../../types/event';
 import type { Task } from '../../../types/task';
 import type { Note } from '../../../types/note';
-import type { LifeArea } from '../../../types/area';
 import {
   formatDateKey,
   formatEventTime,
@@ -18,7 +17,6 @@ interface TimelineViewProps {
   occurrences: EventOccurrence[];
   tasksDue: Task[];
   scheduledNotes: Note[];
-  areasMap?: Map<number, LifeArea>;
   onEventClick: (occ: EventOccurrence) => void;
   onToggleTask?: (task: Task) => void;
 }
@@ -40,7 +38,6 @@ export function TimelineView({
   occurrences,
   tasksDue,
   scheduledNotes,
-  areasMap,
   onEventClick,
   onToggleTask,
 }: TimelineViewProps) {
@@ -277,22 +274,6 @@ export function TimelineView({
                               <p className="text-xs text-ink-muted line-clamp-1 mt-0.5">
                                 {item.eventData.description}
                               </p>
-                            )}
-
-                            {item.eventData.originalEvent.lifeAreaId && (
-                              <div className="mt-1 flex items-center gap-1.5">
-                                <span
-                                  className="w-2 h-2 rounded-full"
-                                  style={{
-                                    backgroundColor:
-                                      areasMap?.get(item.eventData.originalEvent.lifeAreaId)?.color ||
-                                      'var(--color-accent)',
-                                  }}
-                                />
-                                <span className="text-[10px] text-ink-muted font-medium">
-                                  {areasMap?.get(item.eventData.originalEvent.lifeAreaId)?.name}
-                                </span>
-                              </div>
                             )}
                           </div>
                         </div>

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useTemplates, templatesRepo } from '../../db/repos/templatesRepo';
-import { LifeAreaPicker } from '../areas/LifeAreaPicker';
 import { SectionHeader } from '../../design/ui/SectionHeader';
 import { EmptyState } from '../../design/ui/EmptyState';
 import { Segmented } from '../../design/ui/Segmented';
@@ -22,7 +21,6 @@ export function TemplatesScreen() {
   const [content, setContent] = useState('');
   const [priority, setPriority] = useState<string>('none');
   const [dueOffsetDays, setDueOffsetDays] = useState<number>(0);
-  const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [subtasks, setSubtasks] = useState<string[]>([]);
   const [subtaskInput, setSubtaskInput] = useState('');
   const [prompts, setPrompts] = useState<string[]>([]);
@@ -36,7 +34,6 @@ export function TemplatesScreen() {
     setContent('');
     setPriority('none');
     setDueOffsetDays(0);
-    setLifeAreaId(null);
     setSubtasks([]);
     setSubtaskInput('');
     setPrompts([]);
@@ -52,7 +49,6 @@ export function TemplatesScreen() {
     setContent(t.body.content || '');
     setPriority(t.body.priority || 'none');
     setDueOffsetDays(t.body.dueOffsetDays ?? 0);
-    setLifeAreaId(t.body.lifeAreaId ?? null);
     setSubtasks(t.body.subtasks ? [...t.body.subtasks] : []);
     setSubtaskInput('');
     setPrompts(t.body.prompts ? [...t.body.prompts] : []);
@@ -89,7 +85,6 @@ export function TemplatesScreen() {
 
     const body: TemplateBody = {
       title: title.trim() || undefined,
-      lifeAreaId: lifeAreaId,
     };
 
     if (kind === 'task') {
@@ -331,19 +326,6 @@ export function TemplatesScreen() {
                   placeholder={kind === 'task' ? 'Default task title...' : 'e.g. Meeting: '}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                 />
-              </div>
-
-              {/* Life Area Picker */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-ink-muted">
-                  Life Area (optional)
-                </label>
-                <div>
-                  <LifeAreaPicker
-                    selectedAreaId={lifeAreaId}
-                    onSelect={(id) => setLifeAreaId(id)}
-                  />
-                </div>
               </div>
 
               {/* Task-specific fields */}

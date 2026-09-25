@@ -13,7 +13,6 @@ export interface Note {
   scheduledAt?: Date | null;
   reminderAt?: Date | null;
   personId?: number | null;
-  lifeAreaId?: number | null;
   kind?: NoteKind;
   journalDate?: string | null; // 'YYYY-MM-DD' in local timezone
   mood?: JournalMood | null;

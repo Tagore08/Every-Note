@@ -1,5 +1,4 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { areasRepo } from '../../../db/repos/areasRepo';
 import { notesRepo } from '../../../db/notesRepo';
 import { Sheet } from '../../../design/ui/Sheet';
 import type { GraphFilterOptions } from '../lib/graphData';
@@ -21,7 +20,6 @@ export function GraphFiltersSheet({
   totalNodes,
   isCapped,
 }: GraphFiltersSheetProps) {
-  const areas = useLiveQuery(() => areasRepo.getActiveAreas()) || [];
   const tagsWithCounts = useLiveQuery(() => notesRepo.getAllTagsWithCounts()) || [];
 
   return (
@@ -61,40 +59,6 @@ export function GraphFiltersSheet({
               className="w-5 h-5 rounded-md accent-[var(--color-accent)] cursor-pointer"
             />
           </label>
-        </div>
-
-        {/* Life Area Filter */}
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-muted)] mb-2">
-            Filter by Life Area
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => onChange({ ...filters, lifeAreaId: null })}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                filters.lifeAreaId === null || filters.lifeAreaId === undefined
-                  ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)]'
-                  : 'bg-[var(--color-surface-2)] text-[var(--color-ink)] hover:opacity-80'
-              }`}
-            >
-              All Areas
-            </button>
-            {areas.map((area) => (
-              <button
-                key={area.id}
-                type="button"
-                onClick={() => onChange({ ...filters, lifeAreaId: area.id })}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-colors ${
-                  filters.lifeAreaId === area.id
-                    ? 'bg-[var(--color-accent)] text-[var(--color-accent-ink)]'
-                    : 'bg-[var(--color-surface-2)] text-[var(--color-ink)] hover:opacity-80'
-                }`}
-              >
-                <span>{area.name}</span>
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Tags Filter */}

@@ -3,7 +3,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { SnackbarProvider } from './context/SnackbarContext';
 import { AppShell } from './app/AppShell';
 import { PageSkeleton } from './design/ui/Skeleton';
-import { areasRepo } from './db/repos/areasRepo';
 import { templatesRepo } from './db/repos/templatesRepo';
 import { linksRepo } from './db/repos/linksRepo';
 import { timerPresetsRepo } from './db/repos/timerPresetsRepo';
@@ -71,9 +70,6 @@ const SearchView = lazy(() =>
 const TagsView = lazy(() =>
   import('./components/views/TagsView').then((m) => ({ default: m.TagsView }))
 );
-const AreasScreen = lazy(() =>
-  import('./features/areas/AreasScreen').then((m) => ({ default: m.AreasScreen }))
-);
 const TemplatesScreen = lazy(() =>
   import('./features/templates/TemplatesScreen').then((m) => ({ default: m.TemplatesScreen }))
 );
@@ -105,8 +101,7 @@ const SeedDebugScreen = lazy(() =>
 
 export function App() {
   useEffect(() => {
-    // Seed defaults for Life Areas, Templates, and Timer Presets idempotently on first load
-    areasRepo.seedDefaults().catch((err) => console.error('Failed to seed areas:', err));
+    // Seed defaults for Templates and Timer Presets idempotently on first load
     templatesRepo.seedDefaults().catch((err) => console.error('Failed to seed templates:', err));
     timerPresetsRepo.seedDefaults().catch((err) => console.error('Failed to seed timer presets:', err));
     linksRepo.ensureInitialReindex().catch((err) => console.error('Failed to ensure links reindex:', err));
@@ -147,7 +142,7 @@ export function App() {
               <Route path="people/:id" element={<PersonProfileView />} />
               <Route path="search" element={<SearchView />} />
               <Route path="tags" element={<TagsView />} />
-              <Route path="areas" element={<AreasScreen />} />
+              <Route path="areas" element={<Navigate to="/tags" replace />} />
               <Route path="archive" element={<ArchiveView />} />
               <Route path="trash" element={<TrashView />} />
               <Route path="settings" element={<SettingsView />} />

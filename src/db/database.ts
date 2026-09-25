@@ -7,7 +7,6 @@ import type { Person } from '../types/person';
 import type { Habit, HabitLog } from '../types/habit';
 import type { FocusSession, TimerPreset } from '../types/focus';
 import type { AppMeta } from '../types/meta';
-import type { LifeArea } from '../types/area';
 import type { Template } from '../types/template';
 import type { NoteLink } from '../types/link';
 import type { Routine, RoutineRun } from '../types/routine';
@@ -23,7 +22,6 @@ export class AppDatabase extends Dexie {
   habitLogs!: EntityTable<HabitLog, 'id'>;
   focusSessions!: EntityTable<FocusSession, 'id'>;
   appMeta!: EntityTable<AppMeta, 'key'>;
-  lifeAreas!: EntityTable<LifeArea, 'id'>;
   templates!: EntityTable<Template, 'id'>;
   links!: EntityTable<NoteLink, 'id'>;
   routines!: EntityTable<Routine, 'id'>;
@@ -286,6 +284,106 @@ export class AppDatabase extends Dexie {
       await meta.put({
         key: 'schemaVersion',
         value: 14,
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Schema Version 15 (vNext Phase 0: Hard delete of Life Areas, map to tags)
+    // All tables re-declared with complete index lists; lifeAreaId dropped from indexes and lifeAreas dropped.
+    this.version(15).stores({
+      notes: '++id, title, *tags, pinned, archived, trashedAt, inbox, scheduledAt, reminderAt, personId, kind, journalDate, createdAt, updatedAt',
+      attachments: '++id, noteId, ownerType, kind, createdAt',
+      tasks: '++id, status, priority, dueAt, completedAt, createdAt, updatedAt, importance, urgency, *tags, trashedAt, sourceNoteId, personId, parentTaskId, routineRunId, sortOrder',
+      events: '++id, startAt, endAt, recurrence, reminderAt, relatedTaskId, personId, *tags, trashedAt, createdAt',
+      people: '++id, name, trashedAt, createdAt, updatedAt',
+      habits: '++id, name, archived, createdAt, updatedAt',
+      habitLogs: '++id, habitId, date, done, [habitId+date], createdAt',
+      focusSessions: '++id, startedAt, taskId, presetId, kind, createdAt',
+      appMeta: 'key',
+      lifeAreas: null,
+      templates: '++id, kind, name, usageCount, createdAt',
+      links: '++id, sourceId, targetId, targetTitle',
+      routines: '++id, name, timeOfDay, *daysOfWeek, active, createdAt, updatedAt',
+      routineRuns: '++id, &[routineId+date], routineId, date, createdAt',
+      canvases: '++id, title, *tags, linkedNoteId, trashedAt, updatedAt',
+      timerPresets: '++id, name, isDefault',
+    }).upgrade(async (tx) => {
+      const areaNameMap = new Map<number, string>([
+        [1, 'health'],
+        [2, 'work'],
+        [3, 'personal'],
+        [4, 'finance'],
+        [5, 'learning'],
+        [6, 'home'],
+        [7, 'relationships'],
+        [8, 'other'],
+      ]);
+
+      try {
+        const areaTable = tx.table('lifeAreas');
+        if (areaTable) {
+          const areas = await areaTable.toArray();
+          for (const area of areas) {
+            if (area?.id && area?.name) {
+              const sanitized = area.name.trim().toLowerCase().replace(/\s+/g, '-');
+              if (sanitized) areaNameMap.set(area.id, sanitized);
+            }
+          }
+        }
+      } catch (err) {
+        console.debug('lifeAreas table not directly queryable in upgrade; using defaults:', err);
+      }
+
+      const appendAreaTag = (record: any) => {
+        if (record && record.lifeAreaId != null) {
+          const tagName = areaNameMap.get(record.lifeAreaId) || `area-${record.lifeAreaId}`;
+          const tags: string[] = Array.isArray(record.tags) ? [...record.tags] : [];
+          if (!tags.includes(tagName)) {
+            tags.push(tagName);
+          }
+          record.tags = tags;
+          delete record.lifeAreaId;
+        }
+      };
+
+      // 1. Migrate notes
+      await tx.table('notes').toCollection().modify((note: any) => {
+        appendAreaTag(note);
+      });
+
+      // 2. Migrate tasks
+      await tx.table('tasks').toCollection().modify((task: any) => {
+        appendAreaTag(task);
+      });
+
+      // 3. Migrate events
+      await tx.table('events').toCollection().modify((event: any) => {
+        appendAreaTag(event);
+      });
+
+      // 4. Migrate canvases
+      await tx.table('canvases').toCollection().modify((canvas: any) => {
+        appendAreaTag(canvas);
+      });
+
+      // 5. Migrate templates
+      await tx.table('templates').toCollection().modify((tpl: any) => {
+        if (tpl?.body && tpl.body.lifeAreaId != null) {
+          const tagName = areaNameMap.get(tpl.body.lifeAreaId) || `area-${tpl.body.lifeAreaId}`;
+          const tags: string[] = Array.isArray(tpl.body.tags) ? [...tpl.body.tags] : [];
+          if (!tags.includes(tagName)) {
+            tags.push(tagName);
+          }
+          tpl.body.tags = tags;
+          delete tpl.body.lifeAreaId;
+        }
+      });
+
+      // 6. Update schemaVersion
+      const meta = tx.table('appMeta');
+      await meta.put({
+        key: 'schemaVersion',
+        value: 15,
         updatedAt: Date.now(),
       });
     });

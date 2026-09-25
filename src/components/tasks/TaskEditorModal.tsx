@@ -5,7 +5,6 @@ import { tasksRepo, useSubtasks } from '../../db/tasksRepo';
 import { isOverdue, formatDueDate } from '../../utils/format';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
-import { LifeAreaPicker } from '../../features/areas/LifeAreaPicker';
 
 interface TaskEditorModalProps {
   task: Task | null;
@@ -39,7 +38,6 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [personId, setPersonId] = useState<number | null>(null);
-  const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
 
   // Subtasks
@@ -61,7 +59,6 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
       setUrgency(Boolean(task.urgency));
       setTags(task.tags ? [...task.tags] : []);
       setPersonId(task.personId ?? null);
-      setLifeAreaId(task.lifeAreaId ?? null);
       setTagInput('');
       setSubtaskInput('');
       setShowSubtaskWarning(false);
@@ -109,7 +106,6 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
       urgency,
       tags,
       personId,
-      lifeAreaId,
     });
     onClose();
   };
@@ -483,20 +479,7 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
             </div>
           </div>
 
-          {/* 7. Life Area Picker */}
-          <div className="space-y-1.5 pt-1">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Life Area
-            </label>
-            <div>
-              <LifeAreaPicker
-                selectedAreaId={lifeAreaId}
-                onSelect={(id) => setLifeAreaId(id)}
-              />
-            </div>
-          </div>
-
-          {/* 8. Subtasks Checklist */}
+          {/* Subtasks Checklist */}
           <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">

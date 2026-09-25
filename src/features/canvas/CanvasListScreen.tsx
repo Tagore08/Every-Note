@@ -1,12 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { canvasRepo } from '../../db/repos/canvasRepo';
-import { areasRepo } from '../../db/repos/areasRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { FAB } from '../../design/ui/FAB';
 import { EmptyState } from '../../design/ui/EmptyState';
 import type { CanvasEntity } from '../../types/canvas';
-import type { LifeArea } from '../../types/area';
 
 export function CanvasListScreen() {
   const navigate = useNavigate();
@@ -14,8 +12,6 @@ export function CanvasListScreen() {
 
   const [canvases, setCanvases] = useState<CanvasEntity[]>([]);
   const [trashedCanvases, setTrashedCanvases] = useState<CanvasEntity[]>([]);
-  const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
-  const [activeAreaId, setActiveAreaId] = useState<number | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTrash, setShowTrash] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,14 +23,12 @@ export function CanvasListScreen() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [active, trashed, areas] = await Promise.all([
+      const [active, trashed] = await Promise.all([
         canvasRepo.getAllCanvases(false),
         canvasRepo.getTrashedCanvases(),
-        areasRepo.getAllAreas(),
       ]);
       setCanvases(active);
       setTrashedCanvases(trashed);
-      setLifeAreas(areas);
     } catch (err) {
       console.error('Failed to load canvases:', err);
     } finally {
@@ -89,7 +83,6 @@ export function CanvasListScreen() {
     try {
       const created = await canvasRepo.createCanvas({
         title: 'Untitled drawing',
-        lifeAreaId: typeof activeAreaId === 'number' ? activeAreaId : null,
       });
       navigate(`/canvas/${created.id}`);
     } catch (err) {
@@ -138,10 +131,6 @@ export function CanvasListScreen() {
   const displayedCanvases = useMemo(() => {
     const list = showTrash ? trashedCanvases : canvases;
     return list.filter((c) => {
-      // Area filter
-      if (activeAreaId !== 'all' && c.lifeAreaId !== activeAreaId) {
-        return false;
-      }
       // Query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -151,7 +140,7 @@ export function CanvasListScreen() {
       }
       return true;
     });
-  }, [canvases, trashedCanvases, showTrash, activeAreaId, searchQuery]);
+  }, [canvases, trashedCanvases, showTrash, searchQuery]);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6 pb-24">
@@ -207,7 +196,7 @@ export function CanvasListScreen() {
         </div>
       </div>
 
-      {/* Filter Row: Search & Life Area Chips */}
+      {/* Filter Row: Search */}
       <div className="space-y-3">
         {/* Search */}
         <div className="relative">
@@ -224,43 +213,6 @@ export function CanvasListScreen() {
           />
         </div>
 
-        {/* Life Area Chips */}
-        {lifeAreas.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            <button
-              type="button"
-              onClick={() => setActiveAreaId('all')}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer shrink-0 ${
-                activeAreaId === 'all'
-                  ? 'bg-ink text-surface'
-                  : 'bg-surface-2 text-ink-muted hover:text-ink border border-border'
-              }`}
-            >
-              All Areas
-            </button>
-            {lifeAreas.map((area) => {
-              const isSelected = activeAreaId === area.id;
-              return (
-                <button
-                  key={area.id}
-                  type="button"
-                  onClick={() => setActiveAreaId(isSelected ? 'all' : area.id!)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 border ${
-                    isSelected
-                      ? 'bg-accent/15 border-accent text-accent'
-                      : 'bg-surface-2 text-ink-muted hover:text-ink border-border'
-                  }`}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: area.color }}
-                  />
-                  <span>{area.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Grid of Canvases */}
@@ -291,7 +243,6 @@ export function CanvasListScreen() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {displayedCanvases.map((c) => {
             const thumbUrl = c.id ? thumbUrlMap.get(c.id) : undefined;
-            const area = lifeAreas.find((a) => a.id === c.lifeAreaId);
 
             return (
               <div
@@ -335,13 +286,6 @@ export function CanvasListScreen() {
                 <div className="p-3.5 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      {area && (
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: area.color }}
-                          title={area.name}
-                        />
-                      )}
                       <h3 className="font-semibold text-sm text-ink truncate group-hover:text-accent transition-colors">
                         {c.title || 'Untitled drawing'}
                       </h3>

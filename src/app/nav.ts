@@ -89,14 +89,6 @@ export const NAV_ITEMS: NavItemConfig[] = [
     inLibrarySheet: true,
   },
   {
-    id: 'areas',
-    label: 'Life Areas',
-    route: '/areas',
-    group: 'organize',
-    iconName: 'Compass',
-    inLibrarySheet: true,
-  },
-  {
     id: 'people',
     label: 'People',
     route: '/people',
@@ -203,9 +195,10 @@ export const NAV_ITEMS: NavItemConfig[] = [
 ];
 
 export const MOBILE_BOTTOM_SLOTS = [
-  { id: 'today', label: 'Today', route: '/today', iconName: 'Home' },
-  { id: 'search', label: 'Search', route: '/search', iconName: 'Search' },
+  { id: 'dashboard', label: 'Dashboard', route: '/today', iconName: 'Home' },
+  { id: 'knowledge', label: 'Knowledge', route: '/notes', iconName: 'BookOpen' },
   { id: 'fab', label: 'Capture', route: '#capture', iconName: 'Plus' },
-  { id: 'calendar', label: 'Calendar', route: '/calendar', iconName: 'Calendar' },
+  { id: 'tasks', label: 'Tasks', route: '/tasks', iconName: 'CheckSquare', badgeKey: 'tasks' as const },
+  { id: 'habits', label: 'Habits', route: '/habits', iconName: 'Target' },
   { id: 'library', label: 'Library', route: '#library', iconName: 'Library' },
 ];

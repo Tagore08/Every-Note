@@ -7,7 +7,6 @@ import type { CalendarEvent } from '../types/event';
 import type { Person } from '../types/person';
 import type { Habit, HabitLog } from '../types/habit';
 import type { FocusSession, TimerPreset } from '../types/focus';
-import type { LifeArea } from '../types/area';
 import type { Template } from '../types/template';
 import type { NoteLink } from '../types/link';
 import type { Routine, RoutineRun } from '../types/routine';
@@ -37,7 +36,6 @@ export interface BackupEnvelope {
   habits?: Habit[];
   habitLogs?: HabitLog[];
   focusSessions?: FocusSession[];
-  lifeAreas?: LifeArea[];
   templates?: Template[];
   links?: NoteLink[];
   routines?: Routine[];
@@ -48,6 +46,7 @@ export interface BackupEnvelope {
     theme?: string;
     flags?: Record<string, boolean>;
   };
+  lifeAreas?: any[]; // optional for backward compatibility with old exports
 }
 
 export function blobToBase64(blob: Blob): Promise<string> {
@@ -85,7 +84,6 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   const allHabitLogs = await db.habitLogs.toArray();
   const allFocusSessions = await db.focusSessions.toArray();
   const allAttachments = await db.attachments.toArray();
-  const allLifeAreas = await db.lifeAreas.toArray();
   const allTemplates = await db.templates.toArray();
 
   const exportedAttachments: ExportAttachment[] = [];
@@ -156,7 +154,6 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
       doc: c.doc,
       linkedNoteId: c.linkedNoteId,
       tags: c.tags,
-      lifeAreaId: c.lifeAreaId,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       trashedAt: c.trashedAt,
@@ -168,7 +165,7 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   const currentFlags = getStoredFlags();
 
   return {
-    version: 14,
+    version: 15,
     app: 'notes-app',
     exportedAt: new Date().toISOString(),
     notes: allNotes,
@@ -179,7 +176,6 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
     habitLogs: allHabitLogs,
     focusSessions: allFocusSessions,
     attachments: exportedAttachments,
-    lifeAreas: allLifeAreas,
     templates: allTemplates,
     links: allLinks,
     routines: allRoutines,

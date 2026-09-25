@@ -5,7 +5,6 @@ import { useSnackbar } from '../../context/SnackbarContext';
 import { formatDateKey, parseDateKey } from '../../utils/format';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
-import { LifeAreaPicker } from '../../features/areas/LifeAreaPicker';
 
 interface EventEditorModalProps {
   isOpen: boolean;
@@ -44,7 +43,6 @@ export function EventEditorModal({
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [personId, setPersonId] = useState<number | null>(null);
-  const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [isPersonPickerOpen, setIsPersonPickerOpen] = useState(false);
 
   // Mode for recurring updates: 'occurrence' | 'series'
@@ -80,7 +78,6 @@ export function EventEditorModal({
       setRecurrence(occurrence.originalEvent.recurrence);
       setTags([...occurrence.tags]);
       setPersonId(occurrence.originalEvent.personId ?? null);
-      setLifeAreaId(occurrence.originalEvent.lifeAreaId ?? null);
       setEditScope('occurrence');
 
       // Compute preset if reminderAt matches
@@ -113,7 +110,6 @@ export function EventEditorModal({
       setReminderPreset('none');
       setTags([]);
       setPersonId(null);
-      setLifeAreaId(null);
       setEditScope('series');
     }
 
@@ -209,7 +205,6 @@ export function EventEditorModal({
             reminderAt,
             tags,
             personId,
-            lifeAreaId,
           });
           showSnackbar({ message: isRecurring ? 'Updated event series' : 'Updated event' });
         }
@@ -225,7 +220,6 @@ export function EventEditorModal({
           reminderAt,
           tags,
           personId,
-          lifeAreaId,
           relatedTaskId: null,
         });
         showSnackbar({ message: 'Event scheduled' });
@@ -532,19 +526,6 @@ export function EventEditorModal({
                   <span>+ With person</span>
                 </button>
               )}
-            </div>
-          </div>
-
-          {/* Life Area */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-              Life Area (optional)
-            </label>
-            <div>
-              <LifeAreaPicker
-                selectedAreaId={lifeAreaId}
-                onSelect={(id) => setLifeAreaId(id)}
-              />
             </div>
           </div>
         </div>

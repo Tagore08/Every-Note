@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Sheet } from '../../design/ui/Sheet';
-import { LifeAreaPicker } from '../areas/LifeAreaPicker';
 import { TemplatePickerSheet } from '../templates/TemplatePickerSheet';
-import { useActiveAreas } from '../../db/repos/areasRepo';
 import { parseQuickAdd } from '../../lib/quickAdd';
 import { notesRepo } from '../../db/notesRepo';
 import { tasksRepo } from '../../db/tasksRepo';
@@ -18,12 +16,10 @@ export interface FileAsSheetProps {
 }
 
 export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps) {
-  const areas = useActiveAreas();
   const { showUndo } = useSnackbar();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [lifeAreaId, setLifeAreaId] = useState<number | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [subtasks, setSubtasks] = useState<string[]>([]);
@@ -40,7 +36,6 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
         (note.content ? note.content.split('\n')[0].replace(/^#+\s*/, '').trim() : '');
       setTitle(initialTitle);
       setContent(note.content || '');
-      setLifeAreaId(note.lifeAreaId ?? null);
       setTags(note.tags ?? []);
       setSubtasks([]);
       setIsSubtasksOpen(false);
@@ -49,8 +44,8 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
 
   // Real-time NLP parsing
   const nlp = useMemo(() => {
-    return parseQuickAdd(title, areas);
-  }, [title, areas]);
+    return parseQuickAdd(title);
+  }, [title]);
 
   if (!note) return null;
 
@@ -101,9 +96,6 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
     if (tmpl.body.tags && tmpl.body.tags.length > 0) {
       setTags((prev) => Array.from(new Set([...prev, ...tmpl.body.tags!])));
     }
-    if (tmpl.body.lifeAreaId && !lifeAreaId) {
-      setLifeAreaId(tmpl.body.lifeAreaId);
-    }
   };
 
   // 1. File as Note
@@ -112,13 +104,11 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
     try {
       setIsSubmitting(true);
       const finalTitle = (nlp.title || title || 'Untitled Note').trim();
-      const finalAreaId = lifeAreaId ?? nlp.lifeAreaId ?? null;
       const finalTags = Array.from(new Set([...tags, ...nlp.tags]));
 
       await notesRepo.updateNote(note.id, {
         title: finalTitle,
         content,
-        lifeAreaId: finalAreaId,
         tags: finalTags,
         inbox: false,
       });
@@ -143,14 +133,12 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
     try {
       setIsSubmitting(true);
       const finalTitle = (nlp.title || title || 'New Task').trim();
-      const finalAreaId = lifeAreaId ?? nlp.lifeAreaId ?? null;
       const finalTags = Array.from(new Set([...tags, ...nlp.tags]));
 
       const newTask = await tasksRepo.createTask({
         title: finalTitle,
         description: content,
         dueAt: nlp.dueAt ?? null,
-        lifeAreaId: finalAreaId,
         tags: finalTags,
         priority: 'medium',
       });
@@ -207,7 +195,7 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
         isOpen={isOpen}
         onClose={onClose}
         title="Triage Inbox Item"
-        description="Classify with Life Areas, subtasks, or convert to a task."
+        description="Organize with tags, subtasks, or convert to a task."
       >
         <div className="space-y-4">
           {/* Title Field */}
@@ -233,16 +221,8 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
             )}
           </div>
 
-          {/* Area & Template Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-ink-muted">Area:</span>
-              <LifeAreaPicker
-                value={lifeAreaId ?? nlp.lifeAreaId ?? undefined}
-                onChange={(id) => setLifeAreaId(id ?? null)}
-              />
-            </div>
-
+          {/* Template Bar */}
+          <div className="flex items-center justify-end pt-1">
             <button
               type="button"
               onClick={() => setIsTemplateSheetOpen(true)}

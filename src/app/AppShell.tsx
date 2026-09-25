@@ -14,7 +14,7 @@ import {
   Palette,
   FileText,
   Network,
-  Compass,
+  Lock,
   Users,
   Tag,
   CheckSquare,
@@ -55,7 +55,7 @@ const ICON_MAP: Record<string, ReactNode> = {
   Palette: <Palette className="w-5 h-5" strokeWidth={1.75} />,
   FileText: <FileText className="w-5 h-5" strokeWidth={1.75} />,
   Network: <Network className="w-5 h-5" strokeWidth={1.75} />,
-  Compass: <Compass className="w-5 h-5" strokeWidth={1.75} />,
+  Lock: <Lock className="w-5 h-5" strokeWidth={1.75} />,
   Users: <Users className="w-5 h-5" strokeWidth={1.75} />,
   Tag: <Tag className="w-5 h-5" strokeWidth={1.75} />,
   CheckSquare: <CheckSquare className="w-5 h-5" strokeWidth={1.75} />,
@@ -414,13 +414,13 @@ export function AppShell() {
         showFAB={true}
       />
 
-      {/* Mobile 5-Slot Bottom Navigation per EXPANSION_PLAN §3.1 */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface/90 backdrop-blur-lg border-t border-border z-30 px-2 py-1 flex items-center justify-around">
-        {/* 1. Today */}
+      {/* Mobile 5-Slot Bottom Navigation with Prominent Center FAB */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-surface/90 backdrop-blur-lg border-t border-border z-30 px-1 py-1 flex items-center justify-around">
+        {/* 1. Dashboard */}
         <NavLink
           to="/today"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center py-1.5 px-3 rounded-lg text-[11px] font-medium transition-colors min-h-[44px] ${
+            `flex flex-col items-center justify-center py-1 px-1.5 rounded-lg text-[10px] font-medium transition-colors min-h-[44px] flex-1 ${
               isActive
                 ? 'text-accent font-semibold'
                 : 'text-ink-muted hover:text-ink'
@@ -428,66 +428,175 @@ export function AppShell() {
           }
         >
           <Home className="w-5 h-5" strokeWidth={1.75} />
-          <span className="mt-1">Today</span>
+          <span className="mt-0.5">Dashboard</span>
         </NavLink>
 
-        {/* 2. Search */}
+        {/* 2. Knowledge (Notes + Folders + Graph) */}
         <NavLink
-          to="/search"
+          to="/notes"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center py-1.5 px-3 rounded-lg text-[11px] font-medium transition-colors min-h-[44px] ${
+            `flex flex-col items-center justify-center py-1 px-1.5 rounded-lg text-[10px] font-medium transition-colors min-h-[44px] flex-1 ${
               isActive
                 ? 'text-accent font-semibold'
                 : 'text-ink-muted hover:text-ink'
             }`
           }
         >
-          <Search className="w-5 h-5" strokeWidth={1.75} />
-          <span className="mt-1">Search</span>
+          <BookOpen className="w-5 h-5" strokeWidth={1.75} />
+          <span className="mt-0.5">Knowledge</span>
         </NavLink>
 
-        {/* 3. Empty slot spacer for center FAB */}
-        <div className="w-12 h-10 flex items-center justify-center">
-          {/* FAB floats above */}
+        {/* Center slot spacer for prominent Capture FAB */}
+        <div className="w-14 h-11 flex items-center justify-center shrink-0">
+          {/* FAB floats above in center */}
         </div>
 
-        {/* 4. Calendar */}
+        {/* 3. Tasks */}
         <NavLink
-          to="/calendar"
+          to="/tasks"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center py-1.5 px-3 rounded-lg text-[11px] font-medium transition-colors min-h-[44px] ${
+            `flex flex-col items-center justify-center py-1 px-1.5 rounded-lg text-[10px] font-medium transition-colors min-h-[44px] flex-1 relative ${
               isActive
                 ? 'text-accent font-semibold'
                 : 'text-ink-muted hover:text-ink'
             }`
           }
         >
-          <Calendar className="w-5 h-5" strokeWidth={1.75} />
-          <span className="mt-1">Calendar</span>
+          <div className="relative">
+            <CheckSquare className="w-5 h-5" strokeWidth={1.75} />
+            {todoCount > 0 && (
+              <span className="absolute -top-1 -right-2 px-1 rounded-full text-[9px] font-bold bg-accent text-accent-ink">
+                {todoCount}
+              </span>
+            )}
+          </div>
+          <span className="mt-0.5">Tasks</span>
+        </NavLink>
+
+        {/* 4. Habits */}
+        <NavLink
+          to="/habits"
+          className={({ isActive }) =>
+            `flex flex-col items-center justify-center py-1 px-1.5 rounded-lg text-[10px] font-medium transition-colors min-h-[44px] flex-1 ${
+              isActive
+                ? 'text-accent font-semibold'
+                : 'text-ink-muted hover:text-ink'
+            }`
+          }
+        >
+          <Target className="w-5 h-5" strokeWidth={1.75} />
+          <span className="mt-0.5">Habits</span>
         </NavLink>
 
         {/* 5. Library Sheet Trigger */}
         <button
           type="button"
           onClick={() => setIsLibraryOpen(true)}
-          className="flex flex-col items-center justify-center py-1.5 px-3 rounded-lg text-[11px] font-medium text-ink-muted hover:text-ink transition-colors cursor-pointer min-h-[44px]"
+          className="flex flex-col items-center justify-center py-1 px-1.5 rounded-lg text-[10px] font-medium text-ink-muted hover:text-ink transition-colors cursor-pointer min-h-[44px] flex-1"
           aria-label="Open Library drawer"
         >
           <LibraryIcon className="w-5 h-5" strokeWidth={1.75} />
-          <span className="mt-1">Library</span>
+          <span className="mt-0.5">Library</span>
         </button>
       </nav>
 
-      {/* Mobile Library Bottom Sheet */}
+      {/* Mobile Library Bottom Sheet per §3 */}
       <Sheet
         isOpen={isLibraryOpen}
         onClose={() => setIsLibraryOpen(false)}
-        title="Library & Navigation"
-        description="All workspaces, views, and system settings"
+        title="Library"
+        description="Canvas, People, Focus, Vault, Settings, Archive, Trash"
       >
         <div className="space-y-5 pb-4">
+          {/* Core Library Destinations */}
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted px-1 mb-2">
+              Core Library
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <NavLink
+                to="/canvas"
+                onClick={() => setIsLibraryOpen(false)}
+                className="flex items-center gap-2.5 p-3 rounded-card text-xs font-medium border border-border bg-surface-2 hover:bg-surface text-ink transition-colors min-h-[44px]"
+              >
+                <Palette className="w-5 h-5 text-accent shrink-0" strokeWidth={1.75} />
+                <span>Canvas</span>
+              </NavLink>
+
+              <NavLink
+                to="/people"
+                onClick={() => setIsLibraryOpen(false)}
+                className="flex items-center gap-2.5 p-3 rounded-card text-xs font-medium border border-border bg-surface-2 hover:bg-surface text-ink transition-colors min-h-[44px]"
+              >
+                <Users className="w-5 h-5 text-accent shrink-0" strokeWidth={1.75} />
+                <span>People</span>
+              </NavLink>
+
+              <NavLink
+                to="/focus"
+                onClick={() => setIsLibraryOpen(false)}
+                className="flex items-center gap-2.5 p-3 rounded-card text-xs font-medium border border-border bg-surface-2 hover:bg-surface text-ink transition-colors min-h-[44px]"
+              >
+                <Timer className="w-5 h-5 text-accent shrink-0" strokeWidth={1.75} />
+                <span>Focus</span>
+              </NavLink>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLibraryOpen(false);
+                  showSnackbar({ message: 'Encrypted Vault is scheduled for Phase 7' });
+                }}
+                className="flex items-center gap-2.5 p-3 rounded-card text-xs font-medium border border-border bg-surface-2 hover:bg-surface text-ink transition-colors min-h-[44px] text-left cursor-pointer"
+              >
+                <Lock className="w-5 h-5 text-accent shrink-0" strokeWidth={1.75} />
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="truncate">Vault</span>
+                  <span className="text-[9px] px-1 rounded bg-surface-3 text-ink-muted shrink-0">Encrypted</span>
+                </div>
+              </button>
+
+              <NavLink
+                to="/settings"
+                onClick={() => setIsLibraryOpen(false)}
+                className="flex items-center gap-2.5 p-3 rounded-card text-xs font-medium border border-border bg-surface-2 hover:bg-surface text-ink transition-colors min-h-[44px]"
+              >
+                <Settings className="w-5 h-5 text-accent shrink-0" strokeWidth={1.75} />
+                <span>Settings</span>
+              </NavLink>
+
+              <NavLink
+                to="/archive"
+                onClick={() => setIsLibraryOpen(false)}
+                className="flex items-center gap-2.5 p-3 rounded-card text-xs font-medium border border-border bg-surface-2 hover:bg-surface text-ink transition-colors min-h-[44px]"
+              >
+                <Archive className="w-5 h-5 text-accent shrink-0" strokeWidth={1.75} />
+                <span>Archive</span>
+              </NavLink>
+
+              <NavLink
+                to="/trash"
+                onClick={() => setIsLibraryOpen(false)}
+                className="flex items-center gap-2.5 p-3 rounded-card text-xs font-medium border border-border bg-surface-2 hover:bg-surface text-ink transition-colors min-h-[44px]"
+              >
+                <Trash2 className="w-5 h-5 text-accent shrink-0" strokeWidth={1.75} />
+                <span>Trash</span>
+              </NavLink>
+
+              <NavLink
+                to="/calendar"
+                onClick={() => setIsLibraryOpen(false)}
+                className="flex items-center gap-2.5 p-3 rounded-card text-xs font-medium border border-border bg-surface-2 hover:bg-surface text-ink transition-colors min-h-[44px]"
+              >
+                <Calendar className="w-5 h-5 text-accent shrink-0" strokeWidth={1.75} />
+                <span>Calendar</span>
+              </NavLink>
+            </div>
+          </div>
+
+          {/* Grouped Secondary Modules */}
           {NAV_GROUPS.map((group) => {
-            const itemsInGroup = visibleNavItems.filter((i) => i.group === group.id);
+            const itemsInGroup = visibleNavItems.filter((i) => i.group === group.id && i.inLibrarySheet);
             if (itemsInGroup.length === 0) return null;
 
             return (

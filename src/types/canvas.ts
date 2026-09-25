@@ -23,7 +23,6 @@ export interface CanvasEntity {
   thumbBlob?: Blob; // 512px PNG, regenerated on save (debounced)
   linkedNoteId?: number | null; // optional: a canvas belongs to a note
   tags: string[];
-  lifeAreaId?: number | null;
   createdAt: number;
   updatedAt: number;
   trashedAt?: number | null;

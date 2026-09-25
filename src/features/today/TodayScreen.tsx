@@ -5,7 +5,6 @@ import { localDateStr } from '../../lib/date';
 import { useOccurrencesForRange } from '../../db/eventsRepo';
 import { useTasksDueForRange } from '../../db/tasksRepo';
 import { useActiveRoutines, useRunsForDate, routinesRepo } from '../../db/repos/routinesRepo';
-import { useActiveAreas } from '../../db/repos/areasRepo';
 import { NowNextCard } from './sections/NowNextCard';
 import { RoutineCard } from './sections/RoutineCard';
 import { ScheduleRail } from './sections/ScheduleRail';
@@ -18,7 +17,6 @@ import { TaskEditorModal } from '../../components/tasks/TaskEditorModal';
 import type { EventOccurrence } from '../../types/event';
 import type { Task } from '../../types/task';
 import type { RoutineTimeOfDay } from '../../types/routine';
-import type { LifeArea } from '../../types/area';
 
 export function TodayScreen() {
   const navigate = useNavigate();
@@ -88,15 +86,6 @@ export function TodayScreen() {
   const dueAndOverdueTasks = useTasksDueForRange(overdueStart, endOfToday) ?? [];
   const activeRoutines = useActiveRoutines();
   const todayRuns = useRunsForDate(currentDateStr);
-  const activeAreas = useActiveAreas();
-
-  const areasMap = useMemo(() => {
-    const map = new Map<number, LifeArea>();
-    for (const a of activeAreas) {
-      if (a.id) map.set(a.id, a);
-    }
-    return map;
-  }, [activeAreas]);
 
   // Modals for editing tapped items
   const [selectedOccurrence, setSelectedOccurrence] = useState<EventOccurrence | null>(null);
@@ -180,14 +169,12 @@ export function TodayScreen() {
       {/* 4. Schedule Rail */}
       <ScheduleRail
         events={todayEvents}
-        areasMap={areasMap}
         onOpenEvent={handleOpenEvent}
       />
 
       {/* 5. Due & Overdue Tasks */}
       <DueTasksSection
         tasks={dueAndOverdueTasks}
-        areasMap={areasMap}
         onEditTask={handleEditTask}
       />
 

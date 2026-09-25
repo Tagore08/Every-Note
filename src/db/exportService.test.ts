@@ -24,7 +24,7 @@ describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () =>
       updatedAt: new Date(),
     };
 
-    // 2. Task with Life Area & Subtask Provenance
+    // 2. Task with Subtask Provenance & Tags
     const sampleTask: Task = {
       id: 2,
       title: 'Launch v2.0 Release',
@@ -32,12 +32,11 @@ describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () =>
       priority: 'high',
       dueAt: new Date('2026-09-26T12:00:00Z'),
       completedAt: null,
-      lifeAreaId: 1,
       parentTaskId: null,
       routineRunId: 10,
       importance: false,
       urgency: false,
-      tags: [],
+      tags: ['work'],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -55,7 +54,6 @@ describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () =>
       },
       linkedNoteId: 1,
       tags: ['arch'],
-      lifeAreaId: 2,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       trashedAt: null,
@@ -91,7 +89,7 @@ describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () =>
 
     // Construct full BackupEnvelope
     const envelope: BackupEnvelope = {
-      version: 14,
+      version: 15,
       app: 'notes-app',
       exportedAt: new Date().toISOString(),
       notes: [sampleNote],
@@ -102,7 +100,6 @@ describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () =>
       habits: [],
       habitLogs: [],
       focusSessions: [],
-      lifeAreas: [{ id: 1, name: 'Work', color: 'oklch(0.58 0.13 250)', sortOrder: 0, icon: '💼', archived: false, createdAt: Date.now() }],
       templates: [],
       links: [{ id: 1, sourceId: 1, targetId: null, targetTitle: 'project alpha', context: 'Reflecting on [[Project Alpha]].', createdAt: Date.now() }],
       routines: [sampleRoutine],
@@ -129,7 +126,7 @@ describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () =>
     const serialized = JSON.stringify(envelope);
     const parsed: BackupEnvelope = JSON.parse(serialized);
 
-    expect(parsed.version).toBe(14);
+    expect(parsed.version).toBe(15);
     expect(parsed.app).toBe('notes-app');
     expect(parsed.notes).toHaveLength(1);
     expect(parsed.notes[0].kind).toBe('journal');
@@ -137,7 +134,7 @@ describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () =>
     expect(parsed.notes[0].mood).toBe(5);
 
     expect(parsed.tasks).toHaveLength(1);
-    expect(parsed.tasks?.[0].lifeAreaId).toBe(1);
+    expect(parsed.tasks?.[0].tags).toContain('work');
     expect(parsed.tasks?.[0].routineRunId).toBe(10);
 
     expect(parsed.canvases).toHaveLength(1);

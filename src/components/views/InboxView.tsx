@@ -6,7 +6,6 @@ import { tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatRelativeTime, getDisplayTitle } from '../../utils/format';
 import { useFlag } from '../../app/flags';
-import { useActiveAreas, useArea } from '../../db/repos/areasRepo';
 import { parseQuickAdd } from '../../lib/quickAdd';
 import { InboxAnalyticsHeader } from '../../features/inbox/InboxAnalyticsHeader';
 import { FileAsSheet } from '../../features/inbox/FileAsSheet';
@@ -14,26 +13,6 @@ import type { Note } from '../../types/note';
 
 interface InboxViewProps {
   onOpenCapture?: () => void;
-}
-
-function NoteAreaBadge({ areaId }: { areaId?: number | null }) {
-  const area = useArea(areaId);
-  if (!area) return null;
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border border-border"
-      style={{
-        backgroundColor: `color-mix(in srgb, ${area.color} 15%, transparent)`,
-        color: area.color,
-      }}
-    >
-      <span
-        className="w-1.5 h-1.5 rounded-full shrink-0"
-        style={{ backgroundColor: area.color }}
-      />
-      <span>{area.name}</span>
-    </span>
-  );
 }
 
 export function InboxView(props: InboxViewProps) {
@@ -45,14 +24,13 @@ export function InboxView(props: InboxViewProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const isSmartInbox = useFlag('smartInbox');
-  const areas = useActiveAreas();
   const [quickInput, setQuickInput] = useState('');
   const [triageNote, setTriageNote] = useState<Note | null>(null);
 
   // Real-time NLP parsing for quick capture
   const nlp = useMemo(() => {
-    return parseQuickAdd(quickInput, areas);
-  }, [quickInput, areas]);
+    return parseQuickAdd(quickInput);
+  }, [quickInput]);
 
   const handleQuickCapture = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -60,12 +38,11 @@ export function InboxView(props: InboxViewProps) {
     if (!trimmed) return;
 
     try {
-      const parsed = parseQuickAdd(trimmed, areas);
+      const parsed = parseQuickAdd(trimmed);
       await notesRepo.createNote({
         title: parsed.title,
         content: trimmed,
         tags: parsed.tags,
-        lifeAreaId: parsed.lifeAreaId ?? null,
         inbox: true,
       });
       setQuickInput('');
@@ -169,7 +146,7 @@ export function InboxView(props: InboxViewProps) {
             type="text"
             value={quickInput}
             onChange={(e) => setQuickInput(e.target.value)}
-            placeholder="Quick capture to inbox... #tag @Area tomorrow"
+            placeholder="Quick capture to inbox... #tag tomorrow"
             className="flex-1 px-4 py-2.5 text-sm rounded-lg border border-border bg-surface text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent min-h-[44px]"
           />
           <button
@@ -251,7 +228,6 @@ export function InboxView(props: InboxViewProps) {
                         <h3 className="text-base font-semibold text-ink truncate">
                           {getDisplayTitle(note)}
                         </h3>
-                        {note.lifeAreaId && <NoteAreaBadge areaId={note.lifeAreaId} />}
                       </div>
                       <p className="text-sm text-ink-muted line-clamp-2 leading-relaxed">
                         {note.content || <span className="italic opacity-60">No additional text</span>}
@@ -279,7 +255,7 @@ export function InboxView(props: InboxViewProps) {
                             type="button"
                             onClick={() => setTriageNote(note)}
                             className="px-4 py-2 rounded-pill bg-accent text-accent-ink text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer min-h-[44px] flex items-center gap-1.5 shadow-xs"
-                            title="Triage with Life Areas, Subtasks, or Convert to Task"
+                            title="Triage, Subtasks, or Convert to Task"
                           >
                             <span>Triage / File</span>
                             <span aria-hidden="true">→</span>

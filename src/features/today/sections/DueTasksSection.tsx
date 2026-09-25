@@ -1,20 +1,17 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Task } from '../../../types/task';
-import type { LifeArea } from '../../../types/area';
 import { isOverdue } from '../../../utils/format';
 import { tasksRepo } from '../../../db/tasksRepo';
 import { useSnackbar } from '../../../context/SnackbarContext';
 
 interface DueTasksSectionProps {
   tasks: Task[];
-  areasMap?: Map<number, LifeArea>;
   onEditTask?: (task: Task) => void;
 }
 
 export function DueTasksSection({
   tasks,
-  areasMap,
   onEditTask,
 }: DueTasksSectionProps) {
   const navigate = useNavigate();
@@ -77,7 +74,6 @@ export function DueTasksSection({
         <div className="space-y-2">
           {sortedTasks.map((task) => {
             const overdue = isOverdue(task.dueAt);
-            const area = task.lifeAreaId ? areasMap?.get(task.lifeAreaId) : undefined;
 
             return (
               <div
@@ -117,18 +113,6 @@ export function DueTasksSection({
                     </div>
                   </div>
                 </div>
-
-                {area && (
-                  <div className="flex items-center gap-1.5 shrink-0 pl-2">
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: area.color }}
-                    />
-                    <span className="text-[10px] text-ink-muted hidden sm:inline">
-                      {area.name}
-                    </span>
-                  </div>
-                )}
               </div>
             );
           })}

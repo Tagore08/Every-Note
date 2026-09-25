@@ -8,7 +8,6 @@ export interface GraphNode extends SimulationNodeDatum {
   title: string;
   kind: 'note' | 'journal';
   journalDate?: string | null;
-  lifeAreaId?: number | null;
   tags: string[];
   degree: number;
   radius: number;
@@ -24,30 +23,18 @@ export interface GraphEdge extends SimulationLinkDatum<GraphNode> {
 }
 
 export interface GraphFilterOptions {
-  lifeAreaId?: number | null;
   tag?: string | null;
   includeJournals: boolean;
   hideOrphans: boolean;
 }
 
-// OKLCH area palette mapped from tokens.css
-export const AREA_COLORS: Record<number, string> = {
-  1: 'oklch(0.62 0.16 25)',   // Health — coral
-  2: 'oklch(0.58 0.13 250)',  // Work — indigo
-  3: 'oklch(0.66 0.14 145)',  // Personal — green
-  4: 'oklch(0.64 0.13 60)',   // Finance — amber
-  5: 'oklch(0.60 0.14 310)',  // Learning — violet
-  6: 'oklch(0.63 0.10 200)',  // Home — teal
-  7: 'oklch(0.61 0.17 0)',    // Relationships — rose
-  8: 'oklch(0.60 0.03 262)',  // Other — slate
-};
-
 export const DEFAULT_NODE_COLOR = 'oklch(0.65 0.02 262)';
+export const JOURNAL_NODE_COLOR = 'oklch(0.68 0.12 300)';
 export const ACCENT_COLOR = 'oklch(0.55 0.17 265)';
 
-export function getNodeColor(lifeAreaId?: number | null): string {
-  if (lifeAreaId && AREA_COLORS[lifeAreaId]) {
-    return AREA_COLORS[lifeAreaId];
+export function getNodeColor(kind?: string): string {
+  if (kind === 'journal') {
+    return JOURNAL_NODE_COLOR;
   }
   return DEFAULT_NODE_COLOR;
 }
@@ -67,9 +54,6 @@ export function buildGlobalGraph(
   let eligibleNotes = notes.filter((n) => {
     if (n.trashedAt !== null) return false;
     if (!filters.includeJournals && n.kind === 'journal') return false;
-    if (filters.lifeAreaId !== undefined && filters.lifeAreaId !== null) {
-      if (n.lifeAreaId !== filters.lifeAreaId) return false;
-    }
     if (filters.tag) {
       const cleanTag = filters.tag.toLowerCase();
       if (!n.tags?.some((t) => t.toLowerCase() === cleanTag)) return false;
@@ -136,11 +120,10 @@ export function buildGlobalGraph(
       title: n.title || (n.journalDate ? `Journal — ${n.journalDate}` : 'Untitled'),
       kind: n.kind === 'journal' ? 'journal' : 'note',
       journalDate: n.journalDate,
-      lifeAreaId: n.lifeAreaId,
       tags: n.tags || [],
       degree,
       radius,
-      color: getNodeColor(n.lifeAreaId),
+      color: getNodeColor(n.kind),
       isTodayJournal,
     };
   });
@@ -262,11 +245,10 @@ export function buildLocalGraph(
       title: n.title || (n.journalDate ? `Journal — ${n.journalDate}` : 'Untitled'),
       kind: n.kind === 'journal' ? 'journal' : 'note',
       journalDate: n.journalDate,
-      lifeAreaId: n.lifeAreaId,
       tags: n.tags || [],
       degree,
       radius,
-      color: isCenter ? ACCENT_COLOR : getNodeColor(n.lifeAreaId),
+      color: isCenter ? ACCENT_COLOR : getNodeColor(n.kind),
       isFocused: isCenter,
     };
 

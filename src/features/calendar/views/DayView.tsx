@@ -2,13 +2,11 @@ import { useMemo } from 'react';
 import { TimeGrid } from '../grid/TimeGrid';
 import type { EventOccurrence } from '../../../types/event';
 import type { Task } from '../../../types/task';
-import type { LifeArea } from '../../../types/area';
 
 interface DayViewProps {
   currentDate: Date;
   occurrences: EventOccurrence[];
   tasksDue: Task[];
-  areasMap?: Map<number, LifeArea>;
   onSlotClick: (targetDate: Date, startTimeStr: string, endTimeStr: string) => void;
   onEventClick: (occ: EventOccurrence) => void;
   onRescheduleEvent?: (
@@ -23,7 +21,6 @@ export function DayView({
   currentDate,
   occurrences,
   tasksDue,
-  areasMap,
   onSlotClick,
   onEventClick,
   onRescheduleEvent,
@@ -37,7 +34,6 @@ export function DayView({
         days={days}
         occurrences={occurrences}
         tasksDue={tasksDue}
-        areasMap={areasMap}
         onSlotClick={onSlotClick}
         onEventClick={onEventClick}
         onRescheduleEvent={onRescheduleEvent}

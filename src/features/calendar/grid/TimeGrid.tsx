@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { EventOccurrence } from '../../../types/event';
 import type { Task } from '../../../types/task';
-import type { LifeArea } from '../../../types/area';
 import { NowLine } from './NowLine';
 import { EventChip } from './EventChip';
 import { AllDayBand } from './AllDayBand';
@@ -18,7 +17,6 @@ export interface TimeGridProps {
   days: Date[]; // 1, 3, or 7
   occurrences: EventOccurrence[];
   tasksDue?: Task[];
-  areasMap?: Map<number, LifeArea>;
   onSlotClick: (targetDate: Date, startTimeStr: string, endTimeStr: string) => void;
   onEventClick: (occ: EventOccurrence) => void;
   onRescheduleEvent?: (
@@ -36,7 +34,6 @@ export function TimeGrid({
   days,
   occurrences,
   tasksDue = [],
-  areasMap,
   onSlotClick,
   onEventClick,
   onRescheduleEvent,
@@ -220,7 +217,6 @@ export function TimeGrid({
         days={days}
         allDayEvents={allDayEvents}
         tasksDue={tasksDue}
-        areasMap={areasMap}
         onEventClick={onEventClick}
         onToggleTask={onToggleTask}
       />
@@ -278,7 +274,6 @@ export function TimeGrid({
                     <EventChip
                       key={`ev-${positioned.occurrence.eventId}-${positioned.occurrence.occurrenceDate}`}
                       positioned={positioned}
-                      areasMap={areasMap}
                       onClick={onEventClick}
                       onReschedule={onRescheduleEvent}
                     />

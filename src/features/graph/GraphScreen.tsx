@@ -17,7 +17,6 @@ export function GraphScreen() {
   const [localDepth, setLocalDepth] = useState<'1' | '2'>('1');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<GraphFilterOptions>({
-    lifeAreaId: null,
     tag: null,
     includeJournals: true,
     hideOrphans: false,
@@ -104,7 +103,7 @@ export function GraphScreen() {
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 text-xs font-semibold text-white/90 transition-colors flex items-center gap-1.5"
             >
               <span>Filters</span>
-              {(filters.lifeAreaId != null || filters.tag != null || !filters.includeJournals || filters.hideOrphans) && (
+              {(filters.tag != null || !filters.includeJournals || filters.hideOrphans) && (
                 <span className="w-2 h-2 rounded-full bg-[var(--color-accent)]" />
               )}
             </button>

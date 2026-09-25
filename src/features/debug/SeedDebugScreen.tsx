@@ -36,7 +36,6 @@ export function SeedDebugScreen() {
       for (let i = 1; i <= 1000; i++) {
         const target1 = ((i * 7) % 1000) + 1;
         const target2 = ((i * 13) % 1000) + 1;
-        const areaId = (i % 7) + 1;
 
         notesToInsert.push({
           title: `Graph Benchmark #${i}`,
@@ -45,7 +44,6 @@ export function SeedDebugScreen() {
           pinned: false,
           archived: false,
           inbox: false,
-          lifeAreaId: areaId,
           trashedAt: null,
           scheduledAt: null,
           reminderAt: null,

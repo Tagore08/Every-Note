@@ -1,6 +1,5 @@
 import { db } from '../database';
 import { toLocalDateStr, addDays } from '../habitsRepo';
-import { areasRepo } from './areasRepo';
 import { notesRepo } from '../notesRepo';
 
 export interface AreaTaskCount {
@@ -63,12 +62,6 @@ export const insightsRepo = {
     const prevCaptures = notesPrevWeek + tasksPrevWeek;
 
     // 2. Tasks completed
-    const activeAreas = await areasRepo.getActiveAreas();
-    const areasMap = new Map<number, { name: string; color: string }>();
-    activeAreas.forEach((a) => {
-      if (a.id) areasMap.set(a.id, { name: a.name, color: a.color });
-    });
-
     const completedThisWeek = allTasks.filter((t) => {
       if (t.status !== 'done' || !t.completedAt) return false;
       return new Date(t.completedAt).getTime() >= oneWeekAgoMs;
@@ -80,20 +73,24 @@ export const insightsRepo = {
       return tm >= twoWeeksAgoMs && tm < oneWeekAgoMs;
     });
 
-    // Breakdown by area
-    const areaCounts = new Map<number | null, number>();
+    // Breakdown by tag/category
+    const tagCounts = new Map<string, number>();
     for (const t of completedThisWeek) {
-      const aid = t.lifeAreaId ?? null;
-      areaCounts.set(aid, (areaCounts.get(aid) || 0) + 1);
+      if (t.tags && t.tags.length > 0) {
+        for (const tag of t.tags) {
+          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+        }
+      } else {
+        tagCounts.set('general', (tagCounts.get('general') || 0) + 1);
+      }
     }
 
     const byArea: AreaTaskCount[] = [];
-    areaCounts.forEach((count, aid) => {
-      const areaInfo = aid !== null ? areasMap.get(aid) : null;
+    tagCounts.forEach((count, tagName) => {
       byArea.push({
-        areaId: aid,
-        areaName: areaInfo ? areaInfo.name : 'No Area',
-        color: areaInfo ? areaInfo.color : 'var(--color-ink-muted)',
+        areaId: null,
+        areaName: tagName,
+        color: 'var(--color-accent)',
         count,
       });
     });

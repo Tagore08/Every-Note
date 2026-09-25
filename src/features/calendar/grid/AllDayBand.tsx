@@ -1,13 +1,11 @@
 import type { EventOccurrence } from '../../../types/event';
 import type { Task } from '../../../types/task';
-import type { LifeArea } from '../../../types/area';
 import { formatDateKey } from '../../../utils/format';
 
 interface AllDayBandProps {
   days: Date[];
   allDayEvents: EventOccurrence[];
   tasksDue: Task[];
-  areasMap?: Map<number, LifeArea>;
   onEventClick: (occ: EventOccurrence) => void;
   onToggleTask?: (task: Task) => void;
 }
@@ -16,7 +14,6 @@ export function AllDayBand({
   days,
   allDayEvents,
   tasksDue,
-  areasMap,
   onEventClick,
   onToggleTask,
 }: AllDayBandProps) {
@@ -61,18 +58,12 @@ export function AllDayBand({
             <div key={`allday-${dayKey}-${idx}`} className="p-1 sm:p-1.5 space-y-1 min-h-[36px]">
               {/* All-day Events */}
               {dayEvents.map((occ) => {
-                const area = occ.originalEvent.lifeAreaId
-                  ? areasMap?.get(occ.originalEvent.lifeAreaId)
-                  : undefined;
-                const borderLeftColor = area ? area.color : 'var(--color-accent)';
-
                 return (
                   <button
                     key={`allday-ev-${occ.eventId}-${occ.occurrenceDate}`}
                     type="button"
                     onClick={() => onEventClick(occ)}
-                    style={{ borderLeftColor }}
-                    className="w-full text-left px-2 py-1 rounded-md text-[11px] font-medium border-l-[3px] bg-accent-soft text-ink hover:opacity-85 transition-opacity truncate cursor-pointer shadow-2xs block"
+                    className="w-full text-left px-2 py-1 rounded-md text-[11px] font-medium border-l-[3px] border-l-accent bg-accent-soft text-ink hover:opacity-85 transition-opacity truncate cursor-pointer shadow-2xs block"
                   >
                     {occ.title}
                   </button>

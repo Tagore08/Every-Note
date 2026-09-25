@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback } from 'react';
 import { useOccurrencesForRange, eventsRepo } from '../../db/eventsRepo';
 import { useTasksDueForRange, tasksRepo } from '../../db/tasksRepo';
 import { useScheduledNotesForRange } from '../../db/notesRepo';
-import { useActiveAreas } from '../../db/repos/areasRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { Segmented, type SegmentOption } from '../../design/ui/Segmented';
 import { EventEditorModal } from '../../components/calendar/EventEditorModal';
@@ -21,7 +20,6 @@ import {
 import { localDateStr, parseLocalDateStr } from '../../lib/date';
 import type { EventOccurrence } from '../../types/event';
 import type { Task } from '../../types/task';
-import type { LifeArea } from '../../types/area';
 
 export type CalendarViewType = 'day' | '3day' | 'week' | 'month' | 'timeline';
 
@@ -104,15 +102,6 @@ export function CalendarScreen() {
   const occurrences = useOccurrencesForRange(queryStart, queryEnd) ?? [];
   const tasksDue = useTasksDueForRange(queryStart, queryEnd) ?? [];
   const scheduledNotes = useScheduledNotesForRange(queryStart, queryEnd) ?? [];
-  const activeAreas = useActiveAreas();
-
-  const areasMap = useMemo(() => {
-    const map = new Map<number, LifeArea>();
-    for (const a of activeAreas) {
-      if (a.id) map.set(a.id, a);
-    }
-    return map;
-  }, [activeAreas]);
 
   // Navigation handlers
   const handlePrev = useCallback(() => {
@@ -347,7 +336,6 @@ export function CalendarScreen() {
             currentDate={currentDate}
             occurrences={occurrences}
             tasksDue={tasksDue}
-            areasMap={areasMap}
             onSlotClick={handleSlotClick}
             onEventClick={handleEventClick}
             onRescheduleEvent={handleRescheduleEvent}
@@ -360,7 +348,6 @@ export function CalendarScreen() {
             currentDate={currentDate}
             occurrences={occurrences}
             tasksDue={tasksDue}
-            areasMap={areasMap}
             onSlotClick={handleSlotClick}
             onEventClick={handleEventClick}
             onRescheduleEvent={handleRescheduleEvent}
@@ -373,7 +360,6 @@ export function CalendarScreen() {
             currentDate={currentDate}
             occurrences={occurrences}
             tasksDue={tasksDue}
-            areasMap={areasMap}
             onSlotClick={handleSlotClick}
             onEventClick={handleEventClick}
             onRescheduleEvent={handleRescheduleEvent}
@@ -387,8 +373,6 @@ export function CalendarScreen() {
             occurrences={occurrences}
             tasksDue={tasksDue}
             scheduledNotes={scheduledNotes}
-            areas={activeAreas}
-            areasMap={areasMap}
             onSelectDay={(date) => {
               setCurrentDate(date);
               handleViewChange('day');
@@ -402,7 +386,6 @@ export function CalendarScreen() {
             occurrences={occurrences}
             tasksDue={tasksDue}
             scheduledNotes={scheduledNotes}
-            areasMap={areasMap}
             onEventClick={handleEventClick}
             onToggleTask={handleToggleTask}
           />

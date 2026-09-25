@@ -2,22 +2,9 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { Task } from '../../types/task';
 import { useTodoTasks, tasksRepo } from '../../db/tasksRepo';
-import { useArea } from '../../db/repos/areasRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatDueDate, isOverdue } from '../../utils/format';
 import { TaskEditorModal } from '../tasks/TaskEditorModal';
-
-function AreaDot({ areaId }: { areaId?: number | null }) {
-  const area = useArea(areaId);
-  if (!area) return null;
-  return (
-    <span
-      className="w-2 h-2 rounded-full shrink-0"
-      style={{ backgroundColor: area.color }}
-      title={`Area: ${area.name}`}
-    />
-  );
-}
 
 interface QuadrantConfig {
   id: 'do' | 'schedule' | 'delegate' | 'delete';
@@ -361,8 +348,6 @@ export function EisenhowerMatrixView() {
                             >
                               <span className="w-2 h-2 rounded-full opacity-0 hover:opacity-100 bg-blue-500 transition-opacity" />
                             </button>
-
-                            <AreaDot areaId={task.lifeAreaId} />
 
                             <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
                               {task.title}

@@ -54,14 +54,12 @@ describe('Canvas Data Model', () => {
       doc: createDefaultCanvasDoc(),
       linkedNoteId: 108,
       tags: ['design', 'v2'],
-      lifeAreaId: 2,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       trashedAt: null,
     };
 
     expect(entity.linkedNoteId).toBe(108);
-    expect(entity.lifeAreaId).toBe(2);
     expect(entity.tags).toContain('design');
     expect(entity.trashedAt).toBeNull();
   });

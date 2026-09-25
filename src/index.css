@@ -15,6 +15,14 @@ body {
   min-height: 100vh;
 }
 
+/* Seamless theme transition on toggle */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color 250ms ease, border-color 250ms ease, color 200ms ease, fill 200ms ease, stroke 200ms ease !important;
+}
+
 /* Universal focus rings for accessibility (A11y Pass) */
 :focus-visible {
   outline: 2px solid var(--color-accent);

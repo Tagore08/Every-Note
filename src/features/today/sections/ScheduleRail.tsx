@@ -1,17 +1,14 @@
 import { useNavigate } from 'react-router-dom';
 import type { EventOccurrence } from '../../../types/event';
-import type { LifeArea } from '../../../types/area';
 import { formatEventTime } from '../../../utils/format';
 
 interface ScheduleRailProps {
   events: EventOccurrence[];
-  areasMap?: Map<number, LifeArea>;
   onOpenEvent?: (occ: EventOccurrence) => void;
 }
 
 export function ScheduleRail({
   events,
-  areasMap,
   onOpenEvent,
 }: ScheduleRailProps) {
   const navigate = useNavigate();
@@ -45,11 +42,6 @@ export function ScheduleRail({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {events.map((ev) => {
-            const area = ev.originalEvent.lifeAreaId
-              ? areasMap?.get(ev.originalEvent.lifeAreaId)
-              : undefined;
-            const dotColor = area ? area.color : 'var(--color-accent)';
-
             return (
               <div
                 key={`today-ev-${ev.eventId}-${ev.occurrenceDate}`}
@@ -60,8 +52,7 @@ export function ScheduleRail({
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: dotColor }}
+                    className="w-2 h-2 rounded-full shrink-0 bg-accent"
                   />
                   <span className="text-xs font-semibold text-ink truncate">
                     {ev.title}

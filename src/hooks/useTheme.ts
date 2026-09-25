@@ -36,15 +36,24 @@ export function useTheme() {
   const isDark = mode === 'dark' || (mode === 'system' && systemIsDark);
   const resolvedTheme: 'light' | 'dark' = isDark ? 'dark' : 'light';
 
-  // Apply .dark class to root
+  // Apply .dark class to root with smooth transition
   useEffect(() => {
     const root = document.documentElement;
+    
+    // Add temporary transition class
+    root.classList.add('theme-transition');
+    const timer = setTimeout(() => {
+      root.classList.remove('theme-transition');
+    }, 300);
+
     if (isDark) {
       root.classList.add('dark');
     } else {
       root.classList.remove('dark');
     }
     localStorage.setItem('notes_theme_mode', mode);
+
+    return () => clearTimeout(timer);
   }, [isDark, mode]);
 
   const setMode = useCallback((newMode: ThemeMode) => {
