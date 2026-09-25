@@ -270,6 +270,45 @@ export const routinesRepo = {
   /**
    * Routine Templates: Create routine from template.
    */
+  async getAllRoutinesForExport(): Promise<Routine[]> {
+    return db.routines.toArray();
+  },
+
+  async getAllRoutineRunsForExport(): Promise<RoutineRun[]> {
+    return db.routineRuns.toArray();
+  },
+
+  async importRoutines(routines: Routine[], runs: RoutineRun[] = [], strategy: 'merge' | 'replace'): Promise<{ routinesCount: number; runsCount: number }> {
+    return db.transaction('rw', db.routines, db.routineRuns, async () => {
+      if (strategy === 'replace') {
+        await db.routines.clear();
+        await db.routineRuns.clear();
+      }
+      let routinesCount = 0;
+      for (const r of routines) {
+        const copy = { ...r };
+        if (strategy !== 'replace') delete copy.id;
+        await db.routines.put(copy as Routine);
+        routinesCount++;
+      }
+      let runsCount = 0;
+      for (const run of runs) {
+        const copy = { ...run };
+        if (strategy !== 'replace') delete copy.id;
+        await db.routineRuns.put(copy as RoutineRun);
+        runsCount++;
+      }
+      return { routinesCount, runsCount };
+    });
+  },
+
+  async deleteAllRoutines(): Promise<void> {
+    await db.transaction('rw', db.routines, db.routineRuns, async () => {
+      await db.routines.clear();
+      await db.routineRuns.clear();
+    });
+  },
+
   async createRoutineFromTemplate(
     template: Template,
     timeOfDay: RoutineTimeOfDay = 'morning',

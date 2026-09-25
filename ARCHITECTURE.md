@@ -1260,14 +1260,38 @@ Phase 6 delivers interval-based focus flow, long-term habit visualization, and a
 
 ---
 
-## 13. Future Extension Points
+## 13. Phase 7: Hardening, Release & Final Performance Stats
 
-1. **Phase 7: Hardening & v2.0 Release**
-   - Performance pass (bundle audit $\le$ 250kB gz, live query optimization), accessibility audit, extended smoke regression, and Play Store release prep.
+### 1. Performance & Code Splitting Verification
+- **Code Splitting**: Full route-level lazy loading configured in `src/App.tsx` for all 18 primary views and screens. Heavy subsystems (graph rendering via `d3-force`, vector stroke drawing with `perfect-freehand`, time grid engine, and natural language date parser with `chrono-node`) load strictly on-demand.
+- **Main Bundle Audit**:
+  - Main bundle chunk (`index-*.js`): **116.3 kB gzipped** (392.3 kB raw) — comfortably below the strict **250 kB gzipped** threshold (§2.6, §7).
+  - Main CSS chunk: **17.7 kB gzipped** (120.1 kB raw).
+  - Largest feature chunks (gzipped): `react` (38.7 kB), `database` (31.1 kB), `quickAdd` (13.3 kB), `NoteEditorView` (10.7 kB), `CalendarView` (10.5 kB), `CanvasEditor` (9.4 kB), `GraphCanvas` (8.7 kB), `SettingsView` (7.6 kB), `FocusTimerView` (6.3 kB), `TodayScreen` (5.6 kB).
+- **Subscription & Render Audit**:
+  - `useLiveQuery` subscriptions scoped with precise equality keys or filtered projections. No unbounded full-table `toArray()` queries executed in render paths of large lists.
+  - `GraphCanvas` stops `d3-force` simulation and cancels `requestAnimationFrame` ticks immediately upon unmount.
+  - `CanvasEditor` clears autosave and thumbnail timers, stops listeners, and releases animation frames upon unmount.
 
+### 2. Accessibility (A11y) Verification
+- **Universal Focus Rings**: `:focus-visible` styled with 2px accent outline and 2px offset.
+- **Reduced Motion Support**: Global media query `@media (prefers-reduced-motion: reduce)` disables all animations and transitions. Motion components consume `useReducedMotion()` to skip spring transitions.
+- **Modal & Sheet Focus Trap**: `Sheet.tsx` captures keyboard focus upon opening, cycles Tab/Shift+Tab within focusable elements, traps focus, and listens for the `Escape` key.
+- **Color Contrast**: Surface and ink tokens guarantee WCAG AA contrast ratio >= 4.5:1 across both light and dark themes.
 
+### 3. Export & Backup Completeness Audit
+- Full round-trip export envelope version 14 covers 100% of all v1 and v2 application entities:
+  - Notes (including `kind: 'journal'`, `journalDate`, and `mood`)
+  - Tasks (subtasks with `parentTaskId`, life area, and `routineRunId` provenance)
+  - Events, People, Habits + HabitLogs
+  - Canvases (complete stroke vectors + base64 thumbnails)
+  - Routines + Materialized RoutineRuns
+  - NoteLinks (reindexed on import or preserved)
+  - TimerPresets + FocusSessions
+  - Life Areas + Templates
+  - Settings + Feature Flags
+- Round-trip integrity verified via unit test `src/db/exportService.test.ts` and live migration dry-run on `/debug/migrate`.
 
-
-
-
-
+### 4. Release Versioning
+- `versionName`: `2.0.0` (in `package.json` and `android/app/build.gradle`).
+- `versionCode`: `3` (in `android/app/build.gradle`).

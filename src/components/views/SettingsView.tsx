@@ -13,6 +13,7 @@ import { templatesRepo } from '../../db/repos/templatesRepo';
 import { linksRepo } from '../../db/repos/linksRepo';
 import { canvasRepo } from '../../db/repos/canvasRepo';
 import { timerPresetsRepo } from '../../db/repos/timerPresetsRepo';
+import { routinesRepo } from '../../db/repos/routinesRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
@@ -30,6 +31,7 @@ import type { FocusSession, TimerPreset } from '../../types/focus';
 import type { LifeArea } from '../../types/area';
 import type { Template } from '../../types/template';
 import type { CanvasEntity } from '../../types/canvas';
+import type { Routine, RoutineRun } from '../../types/routine';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -59,6 +61,8 @@ interface BackupEnvelope {
   templates?: Template[];
   canvases?: ExportCanvas[];
   timerPresets?: TimerPreset[];
+  routines?: Routine[];
+  routineRuns?: RoutineRun[];
   settings?: {
     theme?: string;
   };
@@ -173,6 +177,8 @@ export function SettingsView() {
       const allTemplates = await templatesRepo.getAllTemplatesForExport();
       const allCanvases = await canvasRepo.getAllCanvasesForExport();
       const allTimerPresets = await timerPresetsRepo.getAllPresetsForExport();
+      const allRoutines = await routinesRepo.getAllRoutinesForExport();
+      const allRoutineRuns = await routinesRepo.getAllRoutineRunsForExport();
 
       // Convert Blobs to base64 strings
       const exportedAttachments: ExportAttachment[] = [];
@@ -263,6 +269,8 @@ export function SettingsView() {
         templates: allTemplates,
         canvases: exportedCanvases,
         timerPresets: allTimerPresets,
+        routines: allRoutines,
+        routineRuns: allRoutineRuns,
         settings: {
           theme: mode,
         },
@@ -327,6 +335,8 @@ export function SettingsView() {
       let templatesArray: Template[] = [];
       let canvasesArray: ExportCanvas[] = [];
       let timerPresetsArray: TimerPreset[] = [];
+      let routinesArray: Routine[] = [];
+      let routineRunsArray: RoutineRun[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
 
@@ -367,6 +377,12 @@ export function SettingsView() {
         if ('timerPresets' in parsed && Array.isArray((parsed as BackupEnvelope).timerPresets)) {
           timerPresetsArray = (parsed as BackupEnvelope).timerPresets ?? [];
         }
+        if ('routines' in parsed && Array.isArray((parsed as BackupEnvelope).routines)) {
+          routinesArray = (parsed as BackupEnvelope).routines ?? [];
+        }
+        if ('routineRuns' in parsed && Array.isArray((parsed as BackupEnvelope).routineRuns)) {
+          routineRunsArray = (parsed as BackupEnvelope).routineRuns ?? [];
+        }
       } else if (Array.isArray(parsed)) {
         notesArray = parsed;
       } else {
@@ -390,6 +406,8 @@ export function SettingsView() {
         templates: templatesArray,
         canvases: canvasesArray,
         timerPresets: timerPresetsArray,
+        routines: routinesArray,
+        routineRuns: routineRunsArray,
       });
       setImportStrategy('merge');
     } catch (err) {
@@ -417,6 +435,8 @@ export function SettingsView() {
       const prevAttachments = await attachmentsRepo.getAllAttachmentsForExport();
       const prevCanvases = await canvasRepo.getAllCanvasesForExport();
       const prevTimerPresets = await timerPresetsRepo.getAllPresetsForExport();
+      const prevRoutines = await routinesRepo.getAllRoutinesForExport();
+      const prevRoutineRuns = await routinesRepo.getAllRoutineRunsForExport();
 
       // 1. Import Notes
       const result = await notesRepo.importNotes(importCandidate.notes, importStrategy);
@@ -562,6 +582,17 @@ export function SettingsView() {
         );
       }
 
+      // 12. Import Routines & Runs
+      let importedRoutinesCount = 0;
+      if (importCandidate.routines && importCandidate.routines.length > 0) {
+        const rResult = await routinesRepo.importRoutines(
+          importCandidate.routines,
+          importCandidate.routineRuns || [],
+          importStrategy
+        );
+        importedRoutinesCount = rResult.routinesCount;
+      }
+
       // Re-index all wikilinks after import so the graph & backlinks are fully resolved
       await linksRepo.reindexAllLinks();
 
@@ -569,7 +600,7 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedAreasCount} areas, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedRoutinesCount} routines, ${importedAreasCount} areas, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -599,6 +630,9 @@ export function SettingsView() {
           if (importStrategy === 'replace' && prevTimerPresets) {
             await timerPresetsRepo.importPresets(prevTimerPresets, 'replace');
           }
+          if (importStrategy === 'replace' && prevRoutines) {
+            await routinesRepo.importRoutines(prevRoutines, prevRoutineRuns || [], 'replace');
+          }
           await loadStorageEstimate();
         }
       );
@@ -620,6 +654,8 @@ export function SettingsView() {
       await habitsRepo.deleteAllHabits();
       await focusRepo.deleteAllSessions();
       await timerPresetsRepo.deleteAllAndReseed();
+      await routinesRepo.deleteAllRoutines();
+      await linksRepo.deleteAllLinks();
       const allCanvases = await canvasRepo.getAllCanvasesForExport();
       for (const c of allCanvases) {
         if (c.id) await canvasRepo.deleteCanvasPermanently(c.id);

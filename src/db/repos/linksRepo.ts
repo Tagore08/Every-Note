@@ -238,6 +238,15 @@ export const linksRepo = {
   /**
    * Fetches graph dataset: all active notes + all resolved links.
    */
+  
+  async getAllLinksForExport(): Promise<NoteLink[]> {
+    return db.links.toArray();
+  },
+
+  async deleteAllLinks(): Promise<void> {
+    await db.links.clear();
+  },
+
   async getAllGraphData(): Promise<{ notes: Note[]; links: NoteLink[] }> {
     const notes = await db.notes
       .filter((n) => n.trashedAt === null)

@@ -23,15 +23,45 @@ export function Sheet({
   const shouldReduceMotion = useReducedMotion();
   const sheetRef = useRef<HTMLDivElement>(null);
 
-  // Close on Escape key
+  // Trap focus and close on Escape key (A11y Pass)
   useEffect(() => {
     if (!isOpen) return;
+    const container = sheetRef.current;
+    if (!container) return;
+
+    // Focus first focusable element
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableEls = container.querySelectorAll<HTMLElement>(focusableSelector);
+    if (focusableEls.length > 0) {
+      setTimeout(() => focusableEls[0].focus(), 50);
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const elements = container.querySelectorAll<HTMLElement>(focusableSelector);
+        if (elements.length === 0) return;
+        const first = elements[0];
+        const last = elements[elements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
