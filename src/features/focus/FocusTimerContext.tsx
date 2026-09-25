@@ -5,6 +5,8 @@ import { focusRepo } from '../../db/focusRepo';
 
 export type TimerMode = 'focus' | 'shortBreak' | 'longBreak';
 export type TimerStatus = 'idle' | 'running' | 'paused';
+export type PlantType = 'bonsai' | 'sunflower' | 'cactus';
+export type PlantStage = 'seed' | 'growing' | 'bloomed' | 'withered';
 
 interface FocusTimerContextValue {
   mode: TimerMode;
@@ -16,10 +18,16 @@ interface FocusTimerContextValue {
   presets: TimerPreset[];
   selectedTaskId: number | null;
   setSelectedTaskId: (id: number | null) => void;
+  plantType: PlantType;
+  setPlantType: (type: PlantType) => void;
+  plantStage: PlantStage;
+  progress: number;
   startTimer: () => void;
   pauseTimer: () => void;
   resumeTimer: () => void;
   resetTimer: () => void;
+  giveUpTimer: () => void;
+  resetPlant: () => void;
   skipStep: () => void;
   selectPreset: (preset: TimerPreset) => void;
   refreshPresets: () => Promise<void>;
@@ -69,6 +77,25 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
   const [currentCycle, setCurrentCycle] = useState(1);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
 
+  // Gamification Plant State
+  const [plantType, setPlantTypeState] = useState<PlantType>(() => {
+    try {
+      return (localStorage.getItem('notes_app_focus_plant') as PlantType) || 'bonsai';
+    } catch {
+      return 'bonsai';
+    }
+  });
+  const [plantStage, setPlantStage] = useState<PlantStage>('seed');
+
+  const setPlantType = (t: PlantType) => {
+    setPlantTypeState(t);
+    try {
+      localStorage.setItem('notes_app_focus_plant', t);
+    } catch {
+      // storage unavailable
+    }
+  };
+
   // Absolute end timestamp preventing drift
   const targetEndTimeRef = useRef<number | null>(null);
   const sessionStartTimeRef = useRef<Date | null>(null);
@@ -88,6 +115,10 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     },
     []
   );
+
+  const totalModeDuration = getDurationForMode(mode, preset);
+  const elapsed = Math.max(0, totalModeDuration - remainingSeconds);
+  const progress = totalModeDuration > 0 ? Math.min(1, elapsed / totalModeDuration) : 0;
 
   const refreshPresets = useCallback(async () => {
     try {
@@ -111,6 +142,9 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     setPreset(newPreset);
     if (status === 'idle') {
       setRemainingSeconds(getDurationForMode(mode, newPreset));
+      if (plantStage === 'bloomed' || plantStage === 'withered') {
+        setPlantStage('seed');
+      }
     }
   };
 
@@ -151,6 +185,7 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
 
     // Advance cycle / mode
     if (mode === 'focus') {
+      setPlantStage('bloomed');
       if (currentCycle >= totalCycles) {
         setMode('longBreak');
         setRemainingSeconds(getDurationForMode('longBreak', preset));
@@ -229,6 +264,9 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     sessionStartTimeRef.current = new Date();
     targetEndTimeRef.current = Date.now() + remainingSeconds * 1000;
     setStatus('running');
+    if (mode === 'focus') {
+      setPlantStage('growing');
+    }
   };
 
   const pauseTimer = () => {
@@ -243,12 +281,33 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
   const resumeTimer = () => {
     targetEndTimeRef.current = Date.now() + remainingSeconds * 1000;
     setStatus('running');
+    if (mode === 'focus' && plantStage !== 'bloomed' && plantStage !== 'withered') {
+      setPlantStage('growing');
+    }
   };
 
   const resetTimer = () => {
     targetEndTimeRef.current = null;
     setStatus('idle');
     setRemainingSeconds(getDurationForMode(mode, preset));
+    setPlantStage('seed');
+  };
+
+  const giveUpTimer = () => {
+    targetEndTimeRef.current = null;
+    setStatus('idle');
+    if (mode === 'focus') {
+      setPlantStage('withered');
+    }
+    setRemainingSeconds(getDurationForMode(mode, preset));
+  };
+
+  const resetPlant = () => {
+    targetEndTimeRef.current = null;
+    setStatus('idle');
+    setMode('focus');
+    setRemainingSeconds(getDurationForMode('focus', preset));
+    setPlantStage('seed');
   };
 
   const skipStep = () => {
@@ -284,10 +343,16 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
         presets,
         selectedTaskId,
         setSelectedTaskId,
+        plantType,
+        setPlantType,
+        plantStage,
+        progress,
         startTimer,
         pauseTimer,
         resumeTimer,
         resetTimer,
+        giveUpTimer,
+        resetPlant,
         skipStep,
         selectPreset,
         refreshPresets,

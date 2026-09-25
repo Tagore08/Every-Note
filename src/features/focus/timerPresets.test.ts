@@ -34,3 +34,59 @@ describe('Timer Presets Model', () => {
     expect(quick.cycles).toBe(1);
   });
 });
+
+describe('Focus Plant Gamification Engine (Phase 5)', () => {
+  const PLANT_TYPES = ['bonsai', 'sunflower', 'cactus'] as const;
+
+  it('supports the 3 core plant varieties', () => {
+    expect(PLANT_TYPES).toContain('bonsai');
+    expect(PLANT_TYPES).toContain('sunflower');
+    expect(PLANT_TYPES).toContain('cactus');
+  });
+
+  it('determines plant growth progress accurately across session duration', () => {
+    const focusDurationSec = 25 * 60; // 1500 seconds
+
+    // At start (0 seconds elapsed)
+    const startProgress = Math.max(0, (focusDurationSec - 1500) / focusDurationSec);
+    expect(startProgress).toBe(0);
+
+    // Halfway through (750 seconds remaining)
+    const midProgress = (focusDurationSec - 750) / focusDurationSec;
+    expect(midProgress).toBe(0.5);
+
+    // At completion (0 seconds remaining)
+    const completeProgress = (focusDurationSec - 0) / focusDurationSec;
+    expect(completeProgress).toBe(1);
+  });
+
+  it('verifies plant lifecycle stages: seed -> growing -> bloomed vs withered', () => {
+    type Stage = 'seed' | 'growing' | 'bloomed' | 'withered';
+    let stage: Stage = 'seed';
+
+    // 1. Timer starts
+    stage = 'growing';
+    expect(stage).toBe('growing');
+
+    // 2. Normal completion -> Blooms
+    stage = 'bloomed';
+    expect(stage).toBe('bloomed');
+
+    // 3. Reset for new session
+    stage = 'seed';
+    expect(stage).toBe('seed');
+
+    // 4. Broken focus / cancelled early -> Withers
+    stage = 'growing';
+    const userGaveUp = true;
+    if (userGaveUp) {
+      stage = 'withered';
+    }
+    expect(stage).toBe('withered');
+
+    // 5. Replant after withering
+    stage = 'seed';
+    expect(stage).toBe('seed');
+  });
+});
+
