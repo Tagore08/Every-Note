@@ -8,11 +8,15 @@ import { useSnackbar } from '../../../context/SnackbarContext';
 interface DueTasksSectionProps {
   tasks: Task[];
   onEditTask?: (task: Task) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function DueTasksSection({
   tasks,
   onEditTask,
+  isCollapsed,
+  onToggleCollapse,
 }: DueTasksSectionProps) {
   const navigate = useNavigate();
   const { showUndo } = useSnackbar();
@@ -50,13 +54,28 @@ export function DueTasksSection({
       className="bg-surface border border-border rounded-card p-4 sm:p-5 shadow-card space-y-3"
     >
       <div className="flex items-center justify-between pb-2 border-b border-border">
-        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="flex items-center gap-2 text-left cursor-pointer group"
+        >
           <span className="text-base">⏰</span>
-          <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
+          <h3 className="text-sm font-bold text-ink uppercase tracking-wider group-hover:text-accent transition-colors">
             Due & Overdue
           </h3>
           <span className="text-xs text-ink-muted">({sortedTasks.length})</span>
-        </div>
+          {onToggleCollapse && (
+            <svg
+              className={`w-4 h-4 text-ink-muted transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          )}
+        </button>
         <button
           type="button"
           onClick={() => navigate('/tasks')}
@@ -66,7 +85,7 @@ export function DueTasksSection({
         </button>
       </div>
 
-      {sortedTasks.length === 0 ? (
+      {!isCollapsed && (sortedTasks.length === 0 ? (
         <div className="py-3 text-center text-xs text-ink-muted italic">
           All clear! No tasks due today or overdue.
         </div>
@@ -117,7 +136,7 @@ export function DueTasksSection({
             );
           })}
         </div>
-      )}
+      ))}
     </div>
   );
 }

@@ -83,6 +83,33 @@ export const attachmentsRepo = {
   },
 
   /**
+   * Adds a generic Blob attachment (e.g. recorded audio, canvas snapshot)
+   */
+  async addBlobAttachment(
+    noteId: number,
+    blob: Blob,
+    filename: string,
+    mimeType: string,
+    kind: AttachmentKind = 'file'
+  ): Promise<Attachment> {
+    await this.requestPersistentStorage();
+
+    const attachment: Attachment = {
+      noteId,
+      ownerType: 'note',
+      kind,
+      name: filename,
+      mimeType,
+      size: blob.size,
+      createdAt: new Date(),
+      data: blob,
+    };
+
+    const id = await db.attachments.add(attachment);
+    return { ...attachment, id: id as number };
+  },
+
+  /**
    * Adds a pure link attachment (URL + title) with zero remote fetching.
    */
   async addLinkAttachment(noteId: number, rawUrl: string, customTitle?: string): Promise<Attachment> {

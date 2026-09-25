@@ -1,7 +1,15 @@
 import { useNavigate } from 'react-router-dom';
 import { useHabitsWithStats, habitsRepo } from '../../../db/habitsRepo';
 
-export function HabitsRow() {
+interface HabitsRowProps {
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+}
+
+export function HabitsRow({
+  isCollapsed,
+  onToggleCollapse,
+}: HabitsRowProps = {}) {
   const navigate = useNavigate();
   const { activeHabits, totalActive, completedTodayCount } = useHabitsWithStats();
 
@@ -24,15 +32,30 @@ export function HabitsRow() {
       className="bg-surface border border-border rounded-card p-4 sm:p-5 shadow-card space-y-3"
     >
       <div className="flex items-center justify-between pb-2 border-b border-border">
-        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="flex items-center gap-2 text-left cursor-pointer group"
+        >
           <span className="text-base">🎯</span>
-          <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
+          <h3 className="text-sm font-bold text-ink uppercase tracking-wider group-hover:text-accent transition-colors">
             Habits
           </h3>
           <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-accent-soft text-accent">
             {completedTodayCount}/{totalActive}
           </span>
-        </div>
+          {onToggleCollapse && (
+            <svg
+              className={`w-4 h-4 text-ink-muted transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          )}
+        </button>
         <button
           type="button"
           onClick={() => navigate('/habits')}
@@ -42,8 +65,8 @@ export function HabitsRow() {
         </button>
       </div>
 
-      {/* Habit circles strip */}
-      <div className="flex items-center gap-3 overflow-x-auto pb-1">
+      {!isCollapsed && (
+        <div className="flex items-center gap-3 overflow-x-auto pb-1">
         {activeHabits.map((h) => {
           const isDone = Boolean(h.isDoneToday);
 
@@ -75,6 +98,7 @@ export function HabitsRow() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

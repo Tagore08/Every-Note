@@ -12,6 +12,8 @@ interface RoutineCardProps {
   routineRuns: RoutineRun[];
   tasks: Task[];
   currentTimeOfDay: RoutineTimeOfDay;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function RoutineCard({
@@ -19,6 +21,8 @@ export function RoutineCard({
   routineRuns,
   tasks,
   currentTimeOfDay,
+  isCollapsed,
+  onToggleCollapse,
 }: RoutineCardProps) {
   const navigate = useNavigate();
   const { showUndo } = useSnackbar();
@@ -61,7 +65,7 @@ export function RoutineCard({
     }
   }
 
-  const handleToggleItem = async (item: RoutineItem, e: React.MouseEvent) => {
+  const handleToggleStep = async (item: RoutineItem, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!run.id) return;
 
@@ -116,7 +120,11 @@ export function RoutineCard({
     >
       {/* Top Header & Routine Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
-        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="flex items-center gap-2 text-left cursor-pointer group"
+        >
           <span className="text-xl">{activeRoutine.emoji || '☀️'}</span>
           <div>
             <div className="flex items-center gap-2">
@@ -129,11 +137,24 @@ export function RoutineCard({
                 </span>
               )}
             </div>
-            <h3 className="text-base font-bold text-ink leading-tight">
-              {activeRoutine.name}
-            </h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-base font-bold text-ink leading-tight group-hover:text-accent transition-colors">
+                {activeRoutine.name}
+              </h3>
+              {onToggleCollapse && (
+                <svg
+                  className={`w-4 h-4 text-ink-muted transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              )}
+            </div>
           </div>
-        </div>
+        </button>
 
         {/* Routine switcher if multiple routines today */}
         {activeTodayRoutines.length > 1 && (
@@ -156,90 +177,94 @@ export function RoutineCard({
         )}
       </div>
 
-      {/* Routine Items Checklist */}
-      <div className="space-y-2">
-        {items.map((item) => {
-          const isDone = Boolean(itemState[item.uid]);
+      {!isCollapsed && (
+        <>
+          {/* Routine Items Checklist */}
+          <div className="space-y-2">
+            {items.map((item) => {
+              const isDone = Boolean(itemState[item.uid]);
 
-          return (
-            <div
-              key={item.uid}
-              role="button"
-              tabIndex={0}
-              onClick={() => handleItemClick(item)}
-              className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer ${
-                isDone
-                  ? 'border-border/60 bg-surface-2/30 opacity-70'
-                  : 'border-border bg-surface hover:border-accent/40 shadow-2xs'
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <button
-                  type="button"
-                  onClick={(e) => handleToggleItem(item, e)}
-                  className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
+              return (
+                <div
+                  key={item.uid}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleItemClick(item)}
+                  className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer ${
                     isDone
-                      ? 'bg-success border-success text-white'
-                      : 'border-ink-muted/60 hover:border-accent'
+                      ? 'border-border/60 bg-surface-2/30 opacity-70'
+                      : 'border-border bg-surface hover:border-accent/40 shadow-2xs'
                   }`}
-                  aria-label="Toggle step completion"
                 >
-                  {isDone && (
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`text-xs sm:text-sm font-medium truncate ${
-                        isDone ? 'line-through text-ink-muted' : 'text-ink'
+                  <div className="flex items-center gap-3 min-w-0">
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleStep(item, e)}
+                      className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
+                        isDone
+                          ? 'bg-success border-success text-white'
+                          : 'border-ink-muted/60 hover:border-accent'
                       }`}
+                      aria-label="Toggle step completion"
                     >
-                      {item.title}
-                    </span>
-                    {item.durationMin && (
-                      <span className="text-[10px] text-ink-muted shrink-0">
-                        · {item.durationMin}m
-                      </span>
-                    )}
+                      {isDone && (
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-xs sm:text-sm font-medium truncate ${
+                            isDone ? 'line-through text-ink-muted' : 'text-ink'
+                          }`}
+                        >
+                          {item.title}
+                        </span>
+                        {item.durationMin && (
+                          <span className="text-[10px] text-ink-muted shrink-0">
+                            · {item.durationMin}m
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
+
+                  {/* Action hint for pointers */}
+                  {item.kind === 'journal' && (
+                    <span className="text-[11px] font-semibold text-accent shrink-0">
+                      Open →
+                    </span>
+                  )}
+                  {item.kind === 'note' && (
+                    <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 shrink-0">
+                      Note →
+                    </span>
+                  )}
                 </div>
-              </div>
+              );
+            })}
+          </div>
 
-              {/* Action hint for pointers */}
-              {item.kind === 'journal' && (
-                <span className="text-[11px] font-semibold text-accent shrink-0">
-                  Open →
-                </span>
-              )}
-              {item.kind === 'note' && (
-                <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 shrink-0">
-                  Note →
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Progress Footer */}
-      <div className="flex items-center justify-between pt-2 border-t border-border text-xs text-ink-muted">
-        <span>
-          {doneItems} of {totalItems} completed
-        </span>
-        {isAllComplete ? (
-          <span className="font-bold text-success flex items-center gap-1">
-            ✓ Routine Complete!
-          </span>
-        ) : (
-          <span className="text-ink-muted">
-            {totalItems - doneItems} steps remaining
-          </span>
-        )}
-      </div>
+          {/* Progress Footer */}
+          <div className="flex items-center justify-between pt-2 border-t border-border text-xs text-ink-muted">
+            <span>
+              {doneItems} of {totalItems} completed
+            </span>
+            {isAllComplete ? (
+              <span className="font-bold text-success flex items-center gap-1">
+                ✓ Routine Complete!
+              </span>
+            ) : (
+              <span className="text-ink-muted">
+                {totalItems - doneItems} steps remaining
+              </span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

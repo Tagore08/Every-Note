@@ -11,6 +11,7 @@ import { ScheduleRail } from './sections/ScheduleRail';
 import { DueTasksSection } from './sections/DueTasksSection';
 import { HabitsRow } from './sections/HabitsRow';
 import { TodayCaptureBar } from './sections/TodayCaptureBar';
+import { TodayInsightsWidget } from './sections/TodayInsightsWidget';
 import { JournalPromptSection } from '../journal/JournalPromptSection';
 import { EventEditorModal } from '../../components/calendar/EventEditorModal';
 import { TaskEditorModal } from '../../components/tasks/TaskEditorModal';
@@ -104,6 +105,28 @@ export function TodayScreen() {
     setIsTaskModalOpen(true);
   }, []);
 
+  // Collapsible section state persisted across visits
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('today_collapsed_sections');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleSection = useCallback((sectionKey: string) => {
+    setCollapsedSections((prev) => {
+      const next = { ...prev, [sectionKey]: !prev[sectionKey] };
+      try {
+        localStorage.setItem('today_collapsed_sections', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <div data-testid="today-screen" className="max-w-3xl mx-auto space-y-6 pb-16">
       {/* 1. Greeting Header */}
@@ -148,7 +171,11 @@ export function TodayScreen() {
         </div>
       </div>
 
-      {/* 2. Now / Next Card */}
+      {/* 2. Top: Inbox Quick-Capture Strip */}
+      <TodayCaptureBar />
+
+      {/* 3. Middle: "Today" Overview */}
+      {/* 3a. Now / Next Card */}
       <NowNextCard
         events={todayEvents}
         routines={activeRoutines}
@@ -156,36 +183,48 @@ export function TodayScreen() {
         onOpenEvent={handleOpenEvent}
       />
 
-      {/* 3. Routine Card (Active Routine for Today) */}
+      {/* 3b. Active Routine Card */}
       {isRoutinesEnabled && (
         <RoutineCard
           routines={activeRoutines}
           routineRuns={todayRuns}
           tasks={dueAndOverdueTasks}
           currentTimeOfDay={timeOfDay}
+          isCollapsed={Boolean(collapsedSections.routines)}
+          onToggleCollapse={() => toggleSection('routines')}
         />
       )}
 
-      {/* 4. Schedule Rail */}
+      {/* 3c. Schedule Rail */}
       <ScheduleRail
         events={todayEvents}
         onOpenEvent={handleOpenEvent}
+        isCollapsed={Boolean(collapsedSections.schedule)}
+        onToggleCollapse={() => toggleSection('schedule')}
       />
 
-      {/* 5. Due & Overdue Tasks */}
+      {/* 3d. Due & Overdue Tasks */}
       <DueTasksSection
         tasks={dueAndOverdueTasks}
         onEditTask={handleEditTask}
+        isCollapsed={Boolean(collapsedSections.tasks)}
+        onToggleCollapse={() => toggleSection('tasks')}
       />
 
-      {/* 6. Habits Row */}
-      <HabitsRow />
+      {/* 3e. Habits Row */}
+      <HabitsRow
+        isCollapsed={Boolean(collapsedSections.habits)}
+        onToggleCollapse={() => toggleSection('habits')}
+      />
 
-      {/* 7. Journal Prompt Section */}
+      {/* 3f. Journal Prompt Section */}
       {isJournalEnabled && <JournalPromptSection />}
 
-      {/* 8. Sticky Quick-Capture Bar */}
-      <TodayCaptureBar />
+      {/* 4. Bottom: Lightweight Insights (Streaks, Focus time) */}
+      <TodayInsightsWidget
+        isCollapsed={Boolean(collapsedSections.insights)}
+        onToggleCollapse={() => toggleSection('insights')}
+      />
 
       {/* Event Editor Modal */}
       <EventEditorModal

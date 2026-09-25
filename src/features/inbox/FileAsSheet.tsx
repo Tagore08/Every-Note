@@ -4,6 +4,8 @@ import { TemplatePickerSheet } from '../templates/TemplatePickerSheet';
 import { parseQuickAdd } from '../../lib/quickAdd';
 import { notesRepo } from '../../db/notesRepo';
 import { tasksRepo } from '../../db/tasksRepo';
+import { eventsRepo } from '../../db/eventsRepo';
+import { peopleRepo } from '../../db/peopleRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import type { Note } from '../../types/note';
 import type { Template } from '../../types/template';
@@ -165,6 +167,79 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
       onFiled?.();
     } catch (err) {
       console.error('Failed to convert to task:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 3. Convert to Event
+  const handleConvertToEvent = async () => {
+    if (!note.id || isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      const finalTitle = (nlp.title || title || 'New Event').trim();
+      const finalTags = Array.from(new Set([...tags, ...nlp.tags]));
+      const startAt = nlp.dueAt ?? new Date();
+      const endAt = new Date(startAt.getTime() + 60 * 60 * 1000); // 1 hour default
+
+      const newEvent = await eventsRepo.createEvent({
+        title: finalTitle,
+        description: content,
+        startAt,
+        endAt,
+        allDay: false,
+        recurrence: 'none',
+        reminderAt: null,
+        tags: finalTags,
+        trashedAt: null,
+      });
+
+      const originalNoteId = note.id;
+      await notesRepo.fileInboxNote(originalNoteId);
+
+      showUndo('Converted to event', async () => {
+        if (newEvent.id) {
+          await eventsRepo.deletePermanently(newEvent.id);
+        }
+        await notesRepo.updateNote(originalNoteId, { inbox: true });
+      });
+
+      onClose();
+      onFiled?.();
+    } catch (err) {
+      console.error('Failed to convert to event:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 4. Convert to Person
+  const handleConvertToPerson = async () => {
+    if (!note.id || isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      const personName = (title || content.split('\n')[0] || 'New Person').trim();
+      const notesBody = content || (title ? '' : 'Captured from inbox');
+
+      const newPerson = await peopleRepo.createPerson({
+        name: personName,
+        notes: notesBody,
+      });
+
+      const originalNoteId = note.id;
+      await notesRepo.fileInboxNote(originalNoteId);
+
+      showUndo('Converted to person', async () => {
+        if (newPerson.id) {
+          await peopleRepo.deletePermanently(newPerson.id);
+        }
+        await notesRepo.updateNote(originalNoteId, { inbox: true });
+      });
+
+      onClose();
+      onFiled?.();
+    } catch (err) {
+      console.error('Failed to convert to person:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -386,25 +461,55 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
               <span>Delete</span>
             </button>
 
-            <div className="w-full sm:w-auto flex items-center gap-2">
+            <div className="w-full sm:w-auto flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleConvertToEvent}
+                disabled={isSubmitting}
+                className="flex-1 sm:flex-initial px-3 py-2 rounded-pill border border-border bg-surface-2 hover:bg-surface text-xs font-semibold text-ink transition-colors cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5 shadow-xs"
+                title="Convert to Calendar Event"
+              >
+                <svg className="w-3.5 h-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span>To Event</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConvertToPerson}
+                disabled={isSubmitting}
+                className="flex-1 sm:flex-initial px-3 py-2 rounded-pill border border-border bg-surface-2 hover:bg-surface text-xs font-semibold text-ink transition-colors cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5 shadow-xs"
+                title="Convert to Person"
+              >
+                <svg className="w-3.5 h-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <span>To Person</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleConvertToTask}
                 disabled={isSubmitting}
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-pill border border-border bg-surface-2 hover:bg-surface text-xs font-semibold text-ink transition-colors cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5 shadow-xs"
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-pill border border-border bg-surface-2 hover:bg-surface text-xs font-semibold text-ink transition-colors cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5 shadow-xs"
               >
                 <svg className="w-3.5 h-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M9 11l3 3L22 4" />
                   <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                 </svg>
-                <span>Convert to Task</span>
+                <span>To Task</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleFileAsNote}
                 disabled={isSubmitting}
-                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-pill bg-accent text-accent-ink text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5 shadow-card"
+                className="flex-1 sm:flex-initial px-4 py-2 rounded-pill bg-accent text-accent-ink text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5 shadow-card"
               >
                 <span>File as Note</span>
                 <span aria-hidden="true">→</span>
