@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInboxNotes, notesRepo } from '../../db/notesRepo';
@@ -6,7 +6,6 @@ import { tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatRelativeTime, getDisplayTitle } from '../../utils/format';
 import { useFlag } from '../../app/flags';
-import { parseQuickAdd } from '../../lib/quickAdd';
 import { InboxAnalyticsHeader } from '../../features/inbox/InboxAnalyticsHeader';
 import { FileAsSheet } from '../../features/inbox/FileAsSheet';
 import type { Note } from '../../types/note';
@@ -24,32 +23,7 @@ export function InboxView(props: InboxViewProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const isSmartInbox = useFlag('smartInbox');
-  const [quickInput, setQuickInput] = useState('');
   const [triageNote, setTriageNote] = useState<Note | null>(null);
-
-  // Real-time NLP parsing for quick capture
-  const nlp = useMemo(() => {
-    return parseQuickAdd(quickInput);
-  }, [quickInput]);
-
-  const handleQuickCapture = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const trimmed = quickInput.trim();
-    if (!trimmed) return;
-
-    try {
-      const parsed = parseQuickAdd(trimmed);
-      await notesRepo.createNote({
-        title: parsed.title,
-        content: trimmed,
-        tags: parsed.tags,
-        inbox: true,
-      });
-      setQuickInput('');
-    } catch (err) {
-      console.error('Failed to quick-capture note:', err);
-    }
-  };
 
   const handleFileAsNote = async (id?: number) => {
     if (typeof id !== 'number') return;
@@ -121,49 +95,10 @@ export function InboxView(props: InboxViewProps) {
             </span>
           )}
         </div>
-        {onOpenCapture && (
-          <button
-            type="button"
-            onClick={onOpenCapture}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-pill text-xs font-semibold bg-accent text-accent-ink shadow-card hover:opacity-90 transition-opacity cursor-pointer min-h-[44px]"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>Capture</span>
-          </button>
-        )}
       </div>
 
       {/* Smart Inbox Analytics Header (flag-gated) */}
       {isSmartInbox && <InboxAnalyticsHeader />}
-
-      {/* Quick Add with NLP Preview */}
-      <form onSubmit={handleQuickCapture} className="space-y-1.5">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={quickInput}
-            onChange={(e) => setQuickInput(e.target.value)}
-            placeholder="Quick capture to inbox... #tag tomorrow"
-            className="flex-1 px-4 py-2.5 text-sm rounded-lg border border-border bg-surface text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent min-h-[44px]"
-          />
-          <button
-            type="submit"
-            disabled={!quickInput.trim()}
-            className="px-5 py-2.5 rounded-pill bg-accent text-accent-ink text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity cursor-pointer min-h-[44px] shrink-0"
-          >
-            Capture
-          </button>
-        </div>
-        {nlp.previewLabel && (
-          <div className="px-3 py-1.5 text-xs text-accent bg-accent-soft rounded-lg flex items-center gap-1.5 border border-accent/20">
-            <span className="font-semibold shrink-0">🪄 Detected:</span>
-            <span className="truncate">{nlp.previewLabel}</span>
-          </div>
-        )}
-      </form>
 
       {/* Empty State */}
       {noteList.length === 0 ? (
@@ -176,7 +111,7 @@ export function InboxView(props: InboxViewProps) {
           <div>
             <h3 className="text-base font-semibold text-ink">Inbox Zero</h3>
             <p className="text-sm text-ink-muted mt-1 max-w-sm mx-auto">
-              You've cleared everything! Capture thoughts anytime with the quick bar above or press{' '}
+              You've cleared everything! Capture thoughts anytime with the button below or press{' '}
               <kbd className="px-1.5 py-0.5 rounded bg-surface-2 border border-border text-ink font-mono text-[11px]">
                 N
               </kbd>
@@ -327,6 +262,23 @@ export function InboxView(props: InboxViewProps) {
         onClose={() => setTriageNote(null)}
         note={triageNote}
       />
+
+      {/* Capture Option at Bottom to Right */}
+      {onOpenCapture && (
+        <button
+          type="button"
+          onClick={onOpenCapture}
+          className="fixed bottom-20 md:bottom-8 right-6 md:right-8 z-30 inline-flex items-center gap-2 px-5 py-3 rounded-full bg-accent text-accent-ink font-semibold text-sm shadow-pop hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+          title="Capture to Inbox"
+          aria-label="Capture to Inbox"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span>Capture</span>
+        </button>
+      )}
     </div>
   );
 }
