@@ -73,16 +73,11 @@ export function RoutinesScreen() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-border">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">
-            Routines
-          </h1>
-          <p className="text-xs text-ink-muted mt-0.5">
-            Daily checklists materialized into tasks and trackable runs
-          </p>
-        </div>
+      {/* Subheader Toolbar */}
+      <div className="flex flex-row items-center justify-between gap-4 pb-3 border-b border-border">
+        <p className="text-xs text-ink-muted">
+          Daily checklists materialized into tasks and trackable runs
+        </p>
 
         <div className="flex items-center gap-2">
           {routineTemplates.length > 0 && (

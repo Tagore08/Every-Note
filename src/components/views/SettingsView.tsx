@@ -14,13 +14,15 @@ import { canvasRepo } from '../../db/repos/canvasRepo';
 import { timerPresetsRepo } from '../../db/repos/timerPresetsRepo';
 import { routinesRepo } from '../../db/repos/routinesRepo';
 import { foldersRepo } from '../../db/repos/foldersRepo';
+import { snippetsRepo } from '../../db/repos/snippetsRepo';
+import { stickyNotesRepo } from '../../db/repos/stickyNotesRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatFileSize } from '../../utils/format';
 import {
   getNotificationPermission,
   requestNotificationPermission,
 } from '../../services/reminderService';
-import { SnippetsSettingsSection } from '../../features/snippets/SnippetsSettingsSection';
+import { CloudStorageSettings } from '../cloud/CloudStorageSettings';
 
 import type { Note } from '../../types/note';
 import type { Attachment } from '../../types/attachment';
@@ -33,6 +35,9 @@ import type { Template } from '../../types/template';
 import type { CanvasEntity } from '../../types/canvas';
 import type { Routine, RoutineRun } from '../../types/routine';
 import type { Folder } from '../../types/folder';
+import type { NoteLink } from '../../types/link';
+import type { Snippet } from '../../types/snippet';
+import type { StickyNote } from '../../types/sticky';
 
 interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -59,12 +64,14 @@ interface BackupEnvelope {
   habits?: Habit[];
   habitLogs?: HabitLog[];
   focusSessions?: FocusSession[];
-  lifeAreas?: any[];
   templates?: Template[];
+  links?: NoteLink[];
   canvases?: ExportCanvas[];
   timerPresets?: TimerPreset[];
   routines?: Routine[];
   routineRuns?: RoutineRun[];
+  snippets?: Snippet[];
+  stickyNotes?: StickyNote[];
   settings?: {
     theme?: string;
   };
@@ -125,6 +132,21 @@ export function SettingsView() {
   const [importError, setImportError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
+  // Auto-purge trash setting (30+ days)
+  const [autoPurgeTrash, setAutoPurgeTrash] = useState<boolean>(() => {
+    return localStorage.getItem('notes_auto_purge_trash') === 'true';
+  });
+
+  const handleToggleAutoPurge = (enabled: boolean) => {
+    setAutoPurgeTrash(enabled);
+    localStorage.setItem('notes_auto_purge_trash', enabled ? 'true' : 'false');
+    showSnackbar({
+      message: enabled
+        ? 'Auto-purge enabled: Trashed notes older than 30 days will be removed on startup.'
+        : 'Auto-purge disabled.',
+    });
+  };
+
   // Danger zone modal state
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
@@ -180,6 +202,10 @@ export function SettingsView() {
       const allTimerPresets = await timerPresetsRepo.getAllPresetsForExport();
       const allRoutines = await routinesRepo.getAllRoutinesForExport();
       const allRoutineRuns = await routinesRepo.getAllRoutineRunsForExport();
+      const allFolders = await foldersRepo.getAllFolders();
+      const allLinks = await linksRepo.getAllLinksForExport();
+      const allSnippets = await snippetsRepo.getAllForExport();
+      const allStickyNotes = await stickyNotesRepo.getAllForExport();
 
       // Convert Blobs to base64 strings
       const exportedAttachments: ExportAttachment[] = [];
@@ -254,10 +280,11 @@ export function SettingsView() {
       }
 
       const payload: BackupEnvelope = {
-        version: 15,
+        version: 18,
         app: 'notes-app',
         exportedAt: new Date().toISOString(),
         notes: allNotes,
+        folders: allFolders,
         tasks: allTasks,
         events: allEvents,
         people: exportedPeople,
@@ -266,10 +293,13 @@ export function SettingsView() {
         focusSessions: allFocusSessions,
         attachments: exportedAttachments,
         templates: allTemplates,
+        links: allLinks,
         canvases: exportedCanvases,
         timerPresets: allTimerPresets,
         routines: allRoutines,
         routineRuns: allRoutineRuns,
+        snippets: allSnippets,
+        stickyNotes: allStickyNotes,
         settings: {
           theme: mode,
         },
@@ -323,6 +353,7 @@ export function SettingsView() {
       }
 
       let notesArray: unknown[] = [];
+      let foldersArray: Folder[] = [];
       let tasksArray: Task[] = [];
       let eventsArray: CalendarEvent[] = [];
       let peopleArray: ExportPerson[] = [];
@@ -330,57 +361,69 @@ export function SettingsView() {
       let habitsArray: Habit[] = [];
       let habitLogsArray: HabitLog[] = [];
       let focusSessionsArray: FocusSession[] = [];
-      let lifeAreasArray: any[] = [];
       let templatesArray: Template[] = [];
+      let linksArray: NoteLink[] = [];
       let canvasesArray: ExportCanvas[] = [];
       let timerPresetsArray: TimerPreset[] = [];
       let routinesArray: Routine[] = [];
       let routineRunsArray: RoutineRun[] = [];
+      let snippetsArray: Snippet[] = [];
+      let stickyNotesArray: StickyNote[] = [];
       let exportedAt = new Date().toISOString();
       let version = 1;
 
       if ('notes' in parsed && Array.isArray((parsed as BackupEnvelope).notes)) {
-        notesArray = (parsed as BackupEnvelope).notes;
-        exportedAt = (parsed as BackupEnvelope).exportedAt || exportedAt;
-        version = (parsed as BackupEnvelope).version || version;
-        if ('tasks' in parsed && Array.isArray((parsed as BackupEnvelope).tasks)) {
-          tasksArray = (parsed as BackupEnvelope).tasks ?? [];
+        const envelope = parsed as BackupEnvelope;
+        notesArray = envelope.notes;
+        exportedAt = envelope.exportedAt || exportedAt;
+        version = envelope.version || version;
+        if ('folders' in parsed && Array.isArray(envelope.folders)) {
+          foldersArray = envelope.folders ?? [];
         }
-        if ('events' in parsed && Array.isArray((parsed as BackupEnvelope).events)) {
-          eventsArray = (parsed as BackupEnvelope).events ?? [];
+        if ('tasks' in parsed && Array.isArray(envelope.tasks)) {
+          tasksArray = envelope.tasks ?? [];
         }
-        if ('people' in parsed && Array.isArray((parsed as BackupEnvelope).people)) {
-          peopleArray = (parsed as BackupEnvelope).people ?? [];
+        if ('events' in parsed && Array.isArray(envelope.events)) {
+          eventsArray = envelope.events ?? [];
         }
-        if ('attachments' in parsed && Array.isArray((parsed as BackupEnvelope).attachments)) {
-          attachmentsArray = (parsed as BackupEnvelope).attachments ?? [];
+        if ('people' in parsed && Array.isArray(envelope.people)) {
+          peopleArray = envelope.people ?? [];
         }
-        if ('habits' in parsed && Array.isArray((parsed as BackupEnvelope).habits)) {
-          habitsArray = (parsed as BackupEnvelope).habits ?? [];
+        if ('attachments' in parsed && Array.isArray(envelope.attachments)) {
+          attachmentsArray = envelope.attachments ?? [];
         }
-        if ('habitLogs' in parsed && Array.isArray((parsed as BackupEnvelope).habitLogs)) {
-          habitLogsArray = (parsed as BackupEnvelope).habitLogs ?? [];
+        if ('habits' in parsed && Array.isArray(envelope.habits)) {
+          habitsArray = envelope.habits ?? [];
         }
-        if ('focusSessions' in parsed && Array.isArray((parsed as BackupEnvelope).focusSessions)) {
-          focusSessionsArray = (parsed as BackupEnvelope).focusSessions ?? [];
+        if ('habitLogs' in parsed && Array.isArray(envelope.habitLogs)) {
+          habitLogsArray = envelope.habitLogs ?? [];
         }
-        if ('lifeAreas' in parsed && Array.isArray((parsed as BackupEnvelope).lifeAreas)) {
-          lifeAreasArray = (parsed as BackupEnvelope).lifeAreas ?? [];
+        if ('focusSessions' in parsed && Array.isArray(envelope.focusSessions)) {
+          focusSessionsArray = envelope.focusSessions ?? [];
         }
-        if ('templates' in parsed && Array.isArray((parsed as BackupEnvelope).templates)) {
-          templatesArray = (parsed as BackupEnvelope).templates ?? [];
+        if ('templates' in parsed && Array.isArray(envelope.templates)) {
+          templatesArray = envelope.templates ?? [];
         }
-        if ('canvases' in parsed && Array.isArray((parsed as BackupEnvelope).canvases)) {
-          canvasesArray = (parsed as BackupEnvelope).canvases ?? [];
+        if ('links' in parsed && Array.isArray(envelope.links)) {
+          linksArray = envelope.links ?? [];
         }
-        if ('timerPresets' in parsed && Array.isArray((parsed as BackupEnvelope).timerPresets)) {
-          timerPresetsArray = (parsed as BackupEnvelope).timerPresets ?? [];
+        if ('canvases' in parsed && Array.isArray(envelope.canvases)) {
+          canvasesArray = envelope.canvases ?? [];
         }
-        if ('routines' in parsed && Array.isArray((parsed as BackupEnvelope).routines)) {
-          routinesArray = (parsed as BackupEnvelope).routines ?? [];
+        if ('timerPresets' in parsed && Array.isArray(envelope.timerPresets)) {
+          timerPresetsArray = envelope.timerPresets ?? [];
         }
-        if ('routineRuns' in parsed && Array.isArray((parsed as BackupEnvelope).routineRuns)) {
-          routineRunsArray = (parsed as BackupEnvelope).routineRuns ?? [];
+        if ('routines' in parsed && Array.isArray(envelope.routines)) {
+          routinesArray = envelope.routines ?? [];
+        }
+        if ('routineRuns' in parsed && Array.isArray(envelope.routineRuns)) {
+          routineRunsArray = envelope.routineRuns ?? [];
+        }
+        if ('snippets' in parsed && Array.isArray(envelope.snippets)) {
+          snippetsArray = envelope.snippets ?? [];
+        }
+        if ('stickyNotes' in parsed && Array.isArray(envelope.stickyNotes)) {
+          stickyNotesArray = envelope.stickyNotes ?? [];
         }
       } else if (Array.isArray(parsed)) {
         notesArray = parsed;
@@ -394,6 +437,7 @@ export function SettingsView() {
         app: 'notes-app',
         exportedAt,
         notes: notesArray as Note[],
+        folders: foldersArray,
         tasks: tasksArray,
         events: eventsArray,
         people: peopleArray,
@@ -401,12 +445,14 @@ export function SettingsView() {
         habits: habitsArray,
         habitLogs: habitLogsArray,
         focusSessions: focusSessionsArray,
-        lifeAreas: lifeAreasArray,
         templates: templatesArray,
+        links: linksArray,
         canvases: canvasesArray,
         timerPresets: timerPresetsArray,
         routines: routinesArray,
         routineRuns: routineRunsArray,
+        snippets: snippetsArray,
+        stickyNotes: stickyNotesArray,
       });
       setImportStrategy('merge');
     } catch (err) {
@@ -424,7 +470,7 @@ export function SettingsView() {
     if (!importCandidate) return;
 
     try {
-      // Snapshot existing tasks, events, people, habits, focusSessions, and attachments before mutating (for undo)
+      // Snapshot existing entities before mutating (for undo)
       const prevTasks = await tasksRepo.getAllTasksForExport();
       const prevEvents = await eventsRepo.getAllEventsForExport();
       const prevPeople = await peopleRepo.getAllPeopleForExport();
@@ -436,6 +482,10 @@ export function SettingsView() {
       const prevTimerPresets = await timerPresetsRepo.getAllPresetsForExport();
       const prevRoutines = await routinesRepo.getAllRoutinesForExport();
       const prevRoutineRuns = await routinesRepo.getAllRoutineRunsForExport();
+      const prevFolders = await foldersRepo.getAllFolders();
+      const prevLinks = await linksRepo.getAllLinksForExport();
+      const prevSnippets = await snippetsRepo.getAllForExport();
+      const prevStickyNotes = await stickyNotesRepo.getAllForExport();
 
       // 1. Import Notes
       const result = await notesRepo.importNotes(importCandidate.notes, importStrategy);
@@ -591,6 +641,33 @@ export function SettingsView() {
         );
       }
 
+      // 14. Import Links
+      let importedLinksCount = 0;
+      if (importCandidate.links && importCandidate.links.length > 0) {
+        importedLinksCount = await linksRepo.importLinks(
+          importCandidate.links,
+          importStrategy
+        );
+      }
+
+      // 15. Import Snippets
+      let importedSnippetsCount = 0;
+      if (importCandidate.snippets && importCandidate.snippets.length > 0) {
+        importedSnippetsCount = await snippetsRepo.importSnippets(
+          importCandidate.snippets,
+          importStrategy
+        );
+      }
+
+      // 16. Import Sticky Notes
+      let importedStickyNotesCount = 0;
+      if (importCandidate.stickyNotes && importCandidate.stickyNotes.length > 0) {
+        importedStickyNotesCount = await stickyNotesRepo.importStickyNotes(
+          importCandidate.stickyNotes,
+          importStrategy
+        );
+      }
+
       // Re-index all wikilinks after import so the graph & backlinks are fully resolved
       await linksRepo.reindexAllLinks();
 
@@ -598,7 +675,7 @@ export function SettingsView() {
       await loadStorageEstimate();
 
       showUndo(
-        `Imported ${importedNotesCount} notes, ${importedFoldersCount} folders, ${importedTasksCount} tasks, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedRoutinesCount} routines, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
+        `Imported ${importedNotesCount} notes, ${importedFoldersCount} folders, ${importedTasksCount} tasks, ${importedLinksCount} links, ${importedCanvasesCount} canvases, ${importedEventsCount} events, ${importedPeopleCount} people, ${importedHabitsCount} habits, ${importedFocusCount} focus sessions, ${importedPresetsCount} timer presets, ${importedRoutinesCount} routines, ${importedSnippetsCount} snippets, ${importedStickyNotesCount} sticky notes, ${importedTemplatesCount} templates & ${importedAttachmentsCount} attachments (${importStrategy}).`,
         async () => {
           if (prevNotes) {
             await notesRepo.importNotes(prevNotes, 'replace');
@@ -631,6 +708,19 @@ export function SettingsView() {
           if (importStrategy === 'replace' && prevRoutines) {
             await routinesRepo.importRoutines(prevRoutines, prevRoutineRuns || [], 'replace');
           }
+          if (importStrategy === 'replace' && prevFolders) {
+            await foldersRepo.importFolders(prevFolders, 'replace');
+          }
+          if (importStrategy === 'replace' && prevLinks) {
+            await linksRepo.importLinks(prevLinks, 'replace');
+          }
+          if (importStrategy === 'replace' && prevSnippets) {
+            await snippetsRepo.importSnippets(prevSnippets, 'replace');
+          }
+          if (importStrategy === 'replace' && prevStickyNotes) {
+            await stickyNotesRepo.importStickyNotes(prevStickyNotes, 'replace');
+          }
+          await linksRepo.reindexAllLinks();
           await loadStorageEstimate();
         }
       );
@@ -654,6 +744,8 @@ export function SettingsView() {
       await timerPresetsRepo.deleteAllAndReseed();
       await routinesRepo.deleteAllRoutines();
       await linksRepo.deleteAllLinks();
+      await snippetsRepo.clearAll();
+      await stickyNotesRepo.clearAllStickyNotes();
       const allCanvases = await canvasRepo.getAllCanvasesForExport();
       for (const c of allCanvases) {
         if (c.id) await canvasRepo.deleteCanvasPermanently(c.id);
@@ -661,7 +753,7 @@ export function SettingsView() {
       setShowDeleteAllModal(false);
       setDeleteConfirmationInput('');
       await loadStorageEstimate();
-      showSnackbar({ message: 'All notes, tasks, events, people, habits, focus sessions, canvases, and attachments have been completely deleted.' });
+      showSnackbar({ message: 'All notes, tasks, events, people, habits, focus sessions, canvases, snippets, sticky notes, and attachments have been completely deleted.' });
     } catch (err) {
       console.error('Failed to delete all data:', err);
     }
@@ -669,17 +761,7 @@ export function SettingsView() {
 
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 pb-12">
-      {/* Header */}
-      <div className="pb-4 border-b border-slate-200 dark:border-slate-800">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-          Settings
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Manage appearance, data backups, storage quota, and preferences.
-        </p>
-      </div>
-
+    <div className="max-w-3xl mx-auto space-y-8 pb-12 pt-2">
       {/* Quick Navigation to Labs, Archive & Trash */}
       <div className="space-y-3">
         <Link
@@ -771,11 +853,12 @@ export function SettingsView() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {(
             [
               { key: 'light', label: 'Light', desc: 'Always light' },
-              { key: 'dark', label: 'Dark', desc: 'Always dark' },
+              { key: 'dark', label: 'Dark', desc: 'Deep slate dark' },
+              { key: 'true-black', label: 'True Black', desc: 'OLED pure black' },
               {
                 key: 'system',
                 label: 'System',
@@ -791,19 +874,19 @@ export function SettingsView() {
                 onClick={() => setMode(item.key as ThemeMode)}
                 className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
                   isSelected
-                    ? 'border-blue-600 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/40 shadow-xs'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                    ? 'border-accent bg-accent-soft text-accent shadow-xs'
+                    : 'border-border bg-surface hover:border-border/80'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-sm text-slate-900 dark:text-white">
+                  <span className={`font-semibold text-sm ${isSelected ? 'text-accent' : 'text-ink'}`}>
                     {item.label}
                   </span>
                   {isSelected && (
-                    <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-accent" />
                   )}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{item.desc}</p>
+                <p className="text-xs text-ink-muted mt-1">{item.desc}</p>
               </button>
             );
           })}
@@ -868,11 +951,6 @@ export function SettingsView() {
             <strong>Why enable?</strong> Reminders send you timely alerts when events are starting or when scheduled notes require your attention. In offline installable PWAs, reminders trigger locally whenever the app is open or running on your device.
           </p>
         </div>
-      </section>
-
-      {/* Snippets / Text Expansion Section */}
-      <section className="space-y-4">
-        <SnippetsSettingsSection />
       </section>
 
       {/* 3. Browser Storage & Quota Estimation */}
@@ -943,6 +1021,11 @@ export function SettingsView() {
             <div className="text-xs text-slate-400 animate-pulse">Calculating storage estimation...</div>
           )}
         </div>
+      </section>
+
+      {/* Cloud Storage & Sync Section */}
+      <section className="space-y-4">
+        <CloudStorageSettings />
       </section>
 
       {/* 3. Data & Backups Section */}
@@ -1025,10 +1108,75 @@ export function SettingsView() {
               </button>
             </div>
           </div>
+
+          {/* Auto-Purge Trash Card */}
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-100">
+                Auto-purge trash (30+ days)
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Automatically clean up notes that have been in the trash for more than 30 days on startup.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={autoPurgeTrash}
+                onChange={(e) => handleToggleAutoPurge(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-10 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
         </div>
       </section>
 
-      {/* 4. Danger Zone */}
+      {/* 4. Help & Guides */}
+      <section className="space-y-4 pt-4 border-t border-border">
+        <div>
+          <h3 className="text-base font-semibold text-ink">
+            Help & Guides
+          </h3>
+          <p className="text-xs text-ink-muted">
+            Explore productivity shortcuts or replay the introductory tour.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('open-shortcuts-modal'))}
+            className="p-3.5 rounded-xl border border-border bg-surface hover:bg-surface-2 flex items-center justify-between text-left transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="text-base">⌨️</span>
+              <div>
+                <div className="text-xs font-semibold text-ink">Keyboard Shortcuts</div>
+                <div className="text-[11px] text-ink-muted">View all quick keys & commands</div>
+              </div>
+            </div>
+            <kbd className="px-1.5 py-0.5 rounded bg-surface-2 border border-border text-[10px] font-mono text-ink">?</kbd>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('open-onboarding-modal'))}
+            className="p-3.5 rounded-xl border border-border bg-surface hover:bg-surface-2 flex items-center justify-between text-left transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="text-base">✨</span>
+              <div>
+                <div className="text-xs font-semibold text-ink">Replay Onboarding Tour</div>
+                <div className="text-[11px] text-ink-muted">Review features and personalization</div>
+              </div>
+            </div>
+            <span className="text-xs text-accent font-semibold">Start &rarr;</span>
+          </button>
+        </div>
+      </section>
+
+      {/* 5. Danger Zone */}
       <section className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
         <div>
           <h3 className="text-base font-semibold text-red-600 dark:text-red-400">

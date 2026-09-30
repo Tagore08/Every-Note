@@ -17,7 +17,7 @@ export function Sheet({
   title,
   description,
   children,
-  maxHeight = 'max-h-[85vh]',
+  maxHeight = 'max-h-[88vh]',
   showClose = true,
 }: SheetProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -86,9 +86,9 @@ export function Sheet({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.18 }}
             onClick={onClose}
-            className="fixed inset-0 bg-slate-950/40 dark:bg-slate-950/60 backdrop-blur-xs"
+            className="fixed inset-0 bg-black/65 dark:bg-black/80"
             aria-hidden="true"
           />
 
@@ -98,42 +98,42 @@ export function Sheet({
             role="dialog"
             aria-modal="true"
             aria-labelledby={title ? 'sheet-title' : undefined}
-            initial={shouldReduceMotion ? { opacity: 0 } : { y: '100%', opacity: 0.5 }}
+            initial={shouldReduceMotion ? { opacity: 0 } : { y: '100%', opacity: 0.6 }}
             animate={shouldReduceMotion ? { opacity: 1 } : { y: 0, opacity: 1 }}
             exit={shouldReduceMotion ? { opacity: 0 } : { y: '100%', opacity: 0 }}
             transition={
               shouldReduceMotion
                 ? { duration: 0 }
-                : { type: 'spring', damping: 28, stiffness: 300 }
+                : { type: 'spring', damping: 32, stiffness: 380 }
             }
-            className={`relative z-10 w-full sm:max-w-lg bg-surface border-t sm:border border-border rounded-t-sheet sm:rounded-card shadow-float overflow-hidden flex flex-col ${maxHeight}`}
+            className={`relative z-10 w-full sm:max-w-lg bg-surface border-t sm:border border-border/60 rounded-t-sheet sm:rounded-card shadow-pop overflow-hidden flex flex-col ${maxHeight}`}
           >
-            {/* Grab handle for touch users */}
-            <div className="pt-3 pb-1 flex justify-center sm:hidden">
-              <div className="w-10 h-1.5 rounded-full bg-border" />
+            {/* Grab handle for touch users — wider & thicker */}
+            <div className="pt-4 pb-2 flex justify-center sm:hidden">
+              <div className="w-14 h-1.5 rounded-full bg-border" />
             </div>
 
             {/* Header */}
             {(title || showClose) && (
-              <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface-2/40">
-                <div>
+              <div className="flex items-start justify-between px-6 pt-2 pb-4 border-b border-border/40">
+                <div className="pr-4">
                   {title && (
-                    <h2 id="sheet-title" className="text-base font-semibold text-ink">
+                    <h2 id="sheet-title" className="text-xl font-bold text-ink tracking-tight">
                       {title}
                     </h2>
                   )}
                   {description && (
-                    <p className="text-xs text-ink-muted mt-0.5">{description}</p>
+                    <p className="text-sm font-medium text-ink-muted mt-1">{description}</p>
                   )}
                 </div>
                 {showClose && (
                   <button
                     type="button"
                     onClick={onClose}
-                    className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+                    className="p-2 -mr-2 rounded-full text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
                     aria-label="Close sheet"
                   >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <line x1="18" y1="6" x2="6" y2="18" />
                       <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
@@ -143,7 +143,7 @@ export function Sheet({
             )}
 
             {/* Scrollable Content */}
-            <div className="p-5 overflow-y-auto flex-1">{children}</div>
+            <div className="p-6 overflow-y-auto flex-1">{children}</div>
           </motion.div>
         </div>
       )}

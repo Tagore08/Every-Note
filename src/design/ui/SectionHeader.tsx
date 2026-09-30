@@ -20,20 +20,20 @@ export function SectionHeader({
   className = '',
 }: SectionHeaderProps) {
   return (
-    <div className={`flex items-center justify-between gap-4 py-2 ${className}`}>
+    <div className={`flex items-center justify-between gap-4 py-1.5 ${className}`}>
       <div>
         <div className="flex items-center gap-2">
-          <h2 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-ink-muted">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint">
             {title}
           </h2>
           {typeof count === 'number' && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-surface-2 text-ink border border-border">
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-accent-soft text-accent">
               {count}
             </span>
           )}
         </div>
         {description && (
-          <p className="text-xs text-ink-muted mt-0.5">{description}</p>
+          <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">{description}</p>
         )}
       </div>
 
@@ -41,10 +41,13 @@ export function SectionHeader({
         <button
           type="button"
           onClick={action.onClick}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill text-xs font-semibold text-accent hover:bg-accent-soft transition-colors cursor-pointer min-h-[44px]"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:opacity-80 transition-opacity cursor-pointer min-h-[36px] px-1"
         >
           {action.icon}
           <span>{action.label}</span>
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
         </button>
       )}
     </div>

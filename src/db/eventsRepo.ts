@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './database';
+import { sanitizeTags } from '../lib/tags';
 import type { CalendarEvent, EventException, EventOccurrence } from '../types/event';
 import { formatDateKey, parseDateKey } from '../utils/format';
 
@@ -237,7 +238,7 @@ export const eventsRepo = {
       ...data,
       createdAt: now,
       updatedAt: now,
-      tags: data.tags || [],
+      tags: sanitizeTags(data.tags),
       exceptions: data.exceptions || [],
       trashedAt: null,
     };
@@ -250,10 +251,14 @@ export const eventsRepo = {
   },
 
   async updateEvent(id: number, changes: Partial<CalendarEvent>): Promise<void> {
-    await db.events.update(id, {
+    const payload: Partial<CalendarEvent> = {
       ...changes,
       updatedAt: new Date(),
-    });
+    };
+    if (changes.tags !== undefined) {
+      payload.tags = sanitizeTags(changes.tags);
+    }
+    await db.events.update(id, payload);
   },
 
   /**
@@ -307,6 +312,7 @@ export const eventsRepo = {
   async importEvents(events: CalendarEvent[]): Promise<void> {
     const processed = events.map((e) => ({
       ...e,
+      tags: sanitizeTags(e.tags),
       startAt: new Date(e.startAt),
       endAt: e.endAt ? new Date(e.endAt) : null,
       reminderAt: e.reminderAt ? new Date(e.reminderAt) : null,

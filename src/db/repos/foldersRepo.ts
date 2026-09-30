@@ -12,6 +12,43 @@ export const foldersRepo = {
   },
 
   /**
+   * Ensure default 'Vault' folder exists and is pinned to the top
+   */
+  async ensureDefaultVaultFolder(): Promise<Folder> {
+    const existing = await db.folders
+      .filter((f) => f.name.toLowerCase() === 'vault' && (f.parentId === null || f.parentId === undefined))
+      .first();
+    if (!existing) {
+      const now = new Date();
+      const vaultFolder: Folder = {
+        name: 'Vault',
+        parentId: null,
+        pinned: true,
+        sortOrder: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const id = await db.folders.add(vaultFolder);
+      return { ...vaultFolder, id: id as number };
+    }
+    if (!existing.pinned) {
+      await db.folders.update(existing.id!, { pinned: true, updatedAt: new Date() });
+      return { ...existing, pinned: true };
+    }
+    return existing;
+  },
+
+  /**
+   * Toggle pinned state of a folder
+   */
+  async togglePinFolder(id: number, pinned: boolean): Promise<void> {
+    await db.folders.update(id, {
+      pinned,
+      updatedAt: new Date(),
+    });
+  },
+
+  /**
    * Create a new folder
    */
   async createFolder(name: string, parentId: number | null = null): Promise<Folder> {
@@ -44,12 +81,65 @@ export const foldersRepo = {
   },
 
   /**
-   * Move a folder into another parent folder (or root)
+   * Get all descendant folder IDs for a given folder
    */
-  async moveFolder(id: number, parentId: number | null): Promise<void> {
-    if (id === parentId) throw new Error('Folder cannot be its own parent');
+  getSubtreeFolderIds(folderId: number, folders: Folder[]): Set<number> {
+    const result = new Set<number>();
+    const queue = [folderId];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const f of folders) {
+        if (f.parentId === current && f.id) {
+          result.add(f.id);
+          queue.push(f.id);
+        }
+      }
+    }
+    return result;
+  },
+
+  /**
+   * Get ancestral path of folders from root down to folderId
+   */
+  getFolderPath(folderId: number | null, folders: Folder[]): Folder[] {
+    if (folderId === null || folderId === undefined) return [];
+    const path: Folder[] = [];
+    let currentId: number | null = folderId;
+    const visited = new Set<number>();
+
+    while (currentId !== null && !visited.has(currentId)) {
+      visited.add(currentId);
+      const findId: number = currentId;
+      const f = folders.find((item: Folder) => item.id === findId);
+      if (!f) break;
+      path.unshift(f);
+      currentId = f.parentId ?? null;
+    }
+    return path;
+  },
+
+  /**
+   * Get formatted folder path string (e.g. "Vault / Work / Frontend")
+   */
+  getFolderPathString(folderId: number | null, folders: Folder[]): string {
+    const chain = foldersRepo.getFolderPath(folderId, folders);
+    return chain.map((f) => f.name).join(' / ');
+  },
+
+  /**
+   * Move a folder into another parent folder (or root) with cycle prevention
+   */
+  async moveFolder(id: number, targetParentId: number | null): Promise<void> {
+    if (id === targetParentId) throw new Error('Folder cannot be its own parent');
+    if (targetParentId !== null) {
+      const allFolders = await db.folders.toArray();
+      const descendants = foldersRepo.getSubtreeFolderIds(id, allFolders);
+      if (descendants.has(targetParentId)) {
+        throw new Error('Cannot move a folder into its own subfolder');
+      }
+    }
     await db.folders.update(id, {
-      parentId,
+      parentId: targetParentId,
       updatedAt: new Date(),
     });
   },

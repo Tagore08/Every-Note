@@ -60,7 +60,6 @@ export function NowNextCard({
       runDate.setHours(anchor.hour, anchor.minute, 0, 0);
       const runTime = runDate.getTime();
 
-      // Include if upcoming within 3h or currently in progress
       if (runTime > nowTime - 30 * 60 * 1000 && runTime <= threeHoursLater) {
         candidates.push({
           type: 'routine',
@@ -79,10 +78,10 @@ export function NowNextCard({
     return (
       <div
         data-testid="now-next-card"
-        className="flex items-center gap-3 p-3.5 rounded-xl border border-border bg-surface shadow-xs text-xs text-ink-muted"
+        className="flex items-center gap-3 p-4 rounded-card border border-border/50 bg-surface shadow-xs text-xs text-ink-muted"
       >
-        <span className="text-base">☕</span>
-        <span>Nothing scheduled in the next 3 hours — enjoy your time.</span>
+        <span className="text-lg">☕</span>
+        <span className="leading-relaxed">Nothing scheduled in the next 3 hours — enjoy your time.</span>
       </div>
     );
   }
@@ -98,24 +97,31 @@ export function NowNextCard({
           onOpenEvent(nextItem.eventData);
         }
       }}
-      className={`flex items-center justify-between p-3.5 rounded-xl border border-accent/40 bg-accent-soft/30 shadow-xs text-xs sm:text-sm ${
-        nextItem.type === 'event' ? 'cursor-pointer hover:border-accent' : ''
+      className={`flex items-center justify-between p-4 rounded-card border border-accent/25 bg-gradient-to-r from-accent-soft/40 to-accent-soft/10 shadow-xs ${
+        nextItem.type === 'event' ? 'cursor-pointer hover:border-accent/40 transition-colors' : ''
       }`}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className="w-2 h-2 rounded-full bg-accent animate-pulse shrink-0" />
-        <span className="font-bold uppercase tracking-wider text-[11px] text-accent">
-          NEXT:
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Animated pulse dot */}
+        <span className="relative shrink-0 flex">
+          <span className="w-2.5 h-2.5 rounded-full bg-accent animate-ping absolute opacity-40" />
+          <span className="w-2.5 h-2.5 rounded-full bg-accent relative" />
         </span>
-        <span className="font-semibold text-ink truncate">
-          {nextItem.title}
-        </span>
+
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-accent mb-0.5">
+            Up Next
+          </div>
+          <div className="font-semibold text-sm text-ink truncate">
+            {nextItem.title}
+          </div>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0 text-xs font-semibold text-accent">
-        <span>{nextItem.timeStr}</span>
-        <span className="text-ink-muted font-normal text-[11px]">
-          ({diffMinutes <= 0 ? 'now' : `in ${diffMinutes}m`})
+      <div className="flex flex-col items-end shrink-0 ml-3">
+        <span className="text-sm font-bold text-accent">{nextItem.timeStr}</span>
+        <span className="text-[10px] text-ink-faint font-medium">
+          {diffMinutes <= 0 ? 'now' : `in ${diffMinutes}m`}
         </span>
       </div>
     </div>

@@ -79,6 +79,7 @@ export function HabitsView() {
       showSnackbar({ message: isDone ? 'Marked as completed' : 'Marked as incomplete' });
     } catch (err) {
       console.error('Failed to toggle habit date:', err);
+      showSnackbar({ message: 'Failed to update habit date' });
     }
   };
 
@@ -91,30 +92,45 @@ export function HabitsView() {
     timeOfDay?: HabitTimeOfDay;
     reminderAt?: string | null;
   }) => {
-    if (editingHabit?.id) {
-      await habitsRepo.updateHabit(editingHabit.id, draft);
-      showSnackbar({ message: 'Habit updated' });
-    } else {
-      await habitsRepo.createHabit(draft);
-      showSnackbar({ message: 'Habit created' });
+    try {
+      if (editingHabit?.id) {
+        await habitsRepo.updateHabit(editingHabit.id, draft);
+        showSnackbar({ message: 'Habit updated' });
+      } else {
+        await habitsRepo.createHabit(draft);
+        showSnackbar({ message: 'Habit created' });
+      }
+    } catch (err) {
+      console.error('Failed to save habit:', err);
+      showSnackbar({ message: 'Failed to save habit' });
     }
   };
 
   const handleArchiveToggle = async (id: number, archived: boolean) => {
-    if (archived) {
-      await habitsRepo.archiveHabit(id);
-      showUndo('Habit archived', async () => {
+    try {
+      if (archived) {
+        await habitsRepo.archiveHabit(id);
+        showUndo('Habit archived', async () => {
+          await habitsRepo.unarchiveHabit(id);
+        });
+      } else {
         await habitsRepo.unarchiveHabit(id);
-      });
-    } else {
-      await habitsRepo.unarchiveHabit(id);
-      showSnackbar({ message: 'Habit restored to active list' });
+        showSnackbar({ message: 'Habit restored to active list' });
+      }
+    } catch (err) {
+      console.error('Failed to archive/unarchive habit:', err);
+      showSnackbar({ message: 'Failed to update habit archive state' });
     }
   };
 
   const handleDeleteHabit = async (id: number) => {
-    await habitsRepo.deleteHabit(id);
-    showSnackbar({ message: 'Habit and history deleted' });
+    try {
+      await habitsRepo.deleteHabit(id);
+      showSnackbar({ message: 'Habit and history deleted' });
+    } catch (err) {
+      console.error('Failed to delete habit:', err);
+      showSnackbar({ message: 'Failed to delete habit' });
+    }
   };
 
   const handleToggleToday = async (habit: HabitWithStats) => {
@@ -136,6 +152,7 @@ export function HabitsView() {
       });
     } catch (err) {
       console.error('Failed to toggle habit:', err);
+      showSnackbar({ message: 'Failed to update habit' });
     }
   };
 
@@ -178,24 +195,19 @@ export function HabitsView() {
   const strokeDashoffset = circumference * (1 - progressPercent / 100);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-16">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Habits
-          </h1>
-          <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
-            Build consistency, one day at a time.
-          </p>
-        </div>
+    <div className="max-w-2xl mx-auto space-y-4 pb-24">
+      {/* Subheader Toolbar */}
+      <div className="flex items-center justify-between pb-3 border-b border-border/60">
+        <p className="text-xs font-medium text-ink-muted">
+          Build consistency, one day at a time.
+        </p>
 
         <button
           type="button"
           onClick={handleOpenCreate}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 active:scale-95 text-white transition-all shadow-sm cursor-pointer self-start sm:self-auto"
+          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-accent-ink hover:opacity-90 active:scale-95 transition-all shadow-xs cursor-pointer min-h-[36px]"
         >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
@@ -203,20 +215,20 @@ export function HabitsView() {
         </button>
       </div>
 
-      {/* Today's Progress Card with Progress Ring */}
+      {/* Today's Flow Card - Flat, Elegant & Calm */}
       {totalActive > 0 && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-950/40 dark:via-emerald-950/20 dark:to-transparent border border-emerald-500/20 shadow-xs">
-          <div className="flex items-center gap-5">
-            {/* Circular Progress Ring */}
+        <div className="p-4 rounded-xl bg-surface border border-border/80 shadow-xs">
+          <div className="flex items-center gap-4">
+            {/* Circular Progress Ring (Stroke 3.5px) */}
             <div className="relative flex items-center justify-center shrink-0">
-              <svg className="w-18 h-18 -rotate-90 transform" viewBox="0 0 72 72">
+              <svg className="w-13 h-13 -rotate-90 transform" viewBox="0 0 72 72">
                 <circle
                   cx="36"
                   cy="36"
                   r={radius}
                   stroke="currentColor"
-                  strokeWidth="6"
-                  className="text-slate-200 dark:text-slate-800/80"
+                  strokeWidth="3.5"
+                  className="text-border"
                   fill="transparent"
                 />
                 <circle
@@ -224,68 +236,61 @@ export function HabitsView() {
                   cy="36"
                   r={radius}
                   stroke="currentColor"
-                  strokeWidth="6"
+                  strokeWidth="3.5"
                   strokeDasharray={circumference}
                   strokeDashoffset={strokeDashoffset}
                   strokeLinecap="round"
-                  className="text-emerald-500 transition-all duration-700 ease-out"
+                  className="text-accent transition-all duration-700 ease-out"
                   fill="transparent"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                <span className="text-xs font-semibold text-ink">
                   {progressPercent}%
                 </span>
               </div>
             </div>
 
-            {/* Stats Breakdown */}
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">✨</span>
-                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                    Today's Progress
+            {/* Single Clean Line Stats */}
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-ink">
+                    Today's Flow
                   </span>
                 </div>
-                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
-                  {completedTodayCount} of {totalActive} completed
-                </span>
+                <div className="text-[11px] font-medium text-ink-muted">
+                  <span>{completedTodayCount} of {totalActive} completed</span>
+                  {totalActive - completedTodayCount > 0 && (
+                    <span> · {totalActive - completedTodayCount} left</span>
+                  )}
+                  {topStreakHabit && (
+                    <span className="hidden xs:inline"> · 🔥 {topStreakHabit.currentStreak}{topStreakHabit.frequency === 'weekly' ? 'w' : 'd'} streak</span>
+                  )}
+                </div>
               </div>
 
-              {/* Progress bar line */}
-              <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700/60 overflow-hidden">
+              {/* Minimalist Progress Line */}
+              <div className="w-full h-1 rounded-full bg-surface-2 overflow-hidden">
                 <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out"
+                  className="h-full bg-accent rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
 
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-0.5">
-                {progressPercent === 100 ? (
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    All habits completed today! Keep the momentum going! 🔥
-                  </span>
-                ) : (
-                  <span>
-                    {totalActive - completedTodayCount} {totalActive - completedTodayCount === 1 ? 'habit' : 'habits'} remaining today
-                  </span>
-                )}
-
-                {topStreakHabit && (
-                  <span className="hidden sm:inline font-semibold text-amber-600 dark:text-amber-400">
-                    🔥 Top streak: {topStreakHabit.currentStreak} {topStreakHabit.frequency === 'weekly' ? 'wks' : 'days'} ({topStreakHabit.name})
-                  </span>
-                )}
-              </div>
+              {progressPercent === 100 && (
+                <p className="text-[11px] font-medium text-success pt-0.5">
+                  All habits completed today! Keep the momentum! 🎉
+                </p>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Time Bucket Navigation Pills */}
+      {/* Time Bucket Navigation - Clean Segmented Control */}
       {totalActive > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+        <div className="flex items-center p-1 rounded-xl bg-surface-2/80 border border-border/60 gap-1 overflow-x-auto scrollbar-none">
           {[
             { id: 'all', label: 'All', icon: '📋', count: bucketCounts.all },
             { id: 'morning', label: 'Morning', icon: '🌅', count: bucketCounts.morning },
@@ -299,19 +304,19 @@ export function HabitsView() {
                 key={bucket.id}
                 type="button"
                 onClick={() => setSelectedBucket(bucket.id as FilterTimeBucket)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer min-h-[34px] ${
                   isSelected
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                    ? 'bg-surface text-ink font-semibold shadow-xs'
+                    : 'text-ink-muted hover:text-ink hover:bg-surface/50'
                 }`}
               >
-                <span>{bucket.icon}</span>
+                <span className="text-xs">{bucket.icon}</span>
                 <span>{bucket.label}</span>
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] ${
                     isSelected
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                      ? 'bg-accent-soft text-accent'
+                      : 'bg-surface-3 text-ink-muted'
                   }`}
                 >
                   {bucket.count}
@@ -325,43 +330,43 @@ export function HabitsView() {
       {/* Active Habits List */}
       {activeHabits.length === 0 ? (
         <div className="py-16 text-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 mx-auto flex items-center justify-center text-3xl">
+          <div className="w-14 h-14 rounded-2xl bg-surface-2 mx-auto flex items-center justify-center text-2xl">
             🎯
           </div>
           <div className="space-y-1">
-            <h3 className="font-semibold text-base text-slate-800 dark:text-slate-200">
+            <h3 className="font-semibold text-base text-ink">
               No active habits yet
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+            <p className="text-xs text-ink-muted max-w-sm mx-auto">
               Track daily routines like drinking water, reading, or working out.
             </p>
           </div>
           <button
             type="button"
             onClick={handleOpenCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-sm cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium bg-accent text-accent-ink hover:opacity-90 transition-all shadow-xs cursor-pointer min-h-[38px]"
           >
             Create your first habit
           </button>
         </div>
       ) : filteredHabits.length === 0 ? (
-        <div className="py-12 text-center space-y-3 bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-800">
-          <span className="text-2xl">
+        <div className="py-10 text-center space-y-2 bg-surface rounded-xl border border-border/70">
+          <span className="text-xl">
             {selectedBucket === 'morning' ? '🌅' : selectedBucket === 'afternoon' ? '☀️' : selectedBucket === 'evening' ? '🌙' : '✨'}
           </span>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+          <p className="text-xs text-ink-muted font-medium">
             No habits scheduled for {selectedBucket}.
           </p>
           <button
             type="button"
             onClick={() => setSelectedBucket('all')}
-            className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer"
+            className="text-xs text-accent font-medium hover:underline cursor-pointer"
           >
             View all habits
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 items-start">
           {filteredHabits.map((habit) => {
             const isDone = habit.isDoneToday;
             const freqLabel = formatHabitSchedule(habit);
@@ -372,80 +377,74 @@ export function HabitsView() {
             return (
               <div
                 key={habit.id}
-                className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                className={`group relative p-3.5 rounded-xl transition-all border ${
                   isDone
-                    ? 'border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-950/20'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
-                } shadow-xs space-y-4`}
+                    ? 'border-success/30 bg-success/5 shadow-xs'
+                    : 'border-border/70 bg-surface hover:border-border'
+                } space-y-2.5`}
               >
-                {/* Top Section: Big Tap-to-Complete Circle + Habit Info */}
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    {/* Big Tap-to-Complete Circle */}
+                {/* Main Card Content */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {/* Compact Tap-to-Complete Circle */}
                     <button
                       type="button"
                       onClick={() => handleToggleToday(habit)}
                       title={isDone ? 'Mark as incomplete' : 'Complete today'}
                       aria-label={isDone ? `Mark ${habit.name} incomplete` : `Complete ${habit.name}`}
-                      className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shrink-0 cursor-pointer transition-all ${
+                      className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 cursor-pointer transition-all ${
                         isDone
-                          ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30 scale-105 active:scale-95'
-                          : 'border-2 border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-400 bg-slate-50 dark:bg-slate-800/80 hover:scale-105 active:scale-95'
+                          ? 'bg-success text-white shadow-xs active:scale-95'
+                          : 'border border-border/80 hover:border-accent bg-surface-2/60 hover:bg-surface active:scale-95'
                       }`}
                     >
                       {isDone ? (
-                        <svg className="w-6 h-6 sm:w-7 sm:h-7 stroke-[3]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <svg className="w-4 h-4 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       ) : (
-                        <span className="text-xl sm:text-2xl select-none">
+                        <span className="text-base select-none">
                           {habit.iconOrEmoji || '🎯'}
                         </span>
                       )}
                     </button>
 
-                    {/* Habit Name & Badges */}
-                    <div
-                      className={`min-w-0 ${isHabitAnalytics ? 'cursor-pointer group/title' : ''}`}
-                      onClick={() => {
-                        if (isHabitAnalytics && habit.id) {
-                          navigate(`/habits/${habit.id}`);
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <h2 className={`text-base font-bold text-slate-900 dark:text-white truncate ${
-                          isHabitAnalytics ? 'group-hover/title:text-accent transition-colors' : ''
-                        }`}>
+                    {/* Habit Title & Muted Tags */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3
+                          onClick={() => {
+                            if (isHabitAnalytics && habit.id) {
+                              navigate(`/habits/${habit.id}`);
+                            }
+                          }}
+                          className={`text-sm font-medium text-ink truncate ${
+                            isHabitAnalytics ? 'cursor-pointer hover:text-accent' : ''
+                          }`}
+                        >
                           {habit.name}
-                        </h2>
+                        </h3>
+
                         {isDone && (
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0">
+                          <span className="text-[10px] font-medium px-1.5 py-0.2 rounded-full bg-success/15 text-success border border-success/20">
                             Done
-                          </span>
-                        )}
-                        {isHabitAnalytics && (
-                          <span className="text-[10px] text-ink-muted opacity-0 group-hover/title:opacity-100 transition-opacity">
-                            View analytics →
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap text-xs text-slate-500 dark:text-slate-400">
-                        {/* Time bucket badge */}
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium flex items-center gap-1">
+                      {/* Muted Tag Pills */}
+                      <div className="flex items-center gap-1 mt-1 flex-wrap text-[11px] text-ink-muted">
+                        <span className="px-1.5 py-0.5 rounded-md bg-surface-2 text-[10px] font-medium text-ink-muted flex items-center gap-0.5">
                           <span>{timeBadge.icon}</span>
                           <span>{timeBadge.label}</span>
                         </span>
 
-                        {/* Frequency badge */}
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium">
+                        <span className="px-1.5 py-0.5 rounded-md bg-surface-2 text-[10px] font-medium text-ink-muted">
                           {freqLabel}
                         </span>
 
-                        {/* Reminder badge */}
                         {habit.reminderAt && (
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded-md bg-surface-2 text-[10px] font-medium text-ink-muted flex items-center gap-0.5">
                             <span>⏰</span>
                             <span>{habit.reminderAt}</span>
                           </span>
@@ -454,49 +453,26 @@ export function HabitsView() {
                     </div>
                   </div>
 
-                  {/* Right Side: Streaks, Analytics & Edit */}
-                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    <div
-                      className={`text-right hidden sm:block ${isHabitAnalytics ? 'cursor-pointer hover:opacity-80' : ''}`}
-                      onClick={() => {
-                        if (isHabitAnalytics && habit.id) {
-                          navigate(`/habits/${habit.id}`);
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-1 justify-end font-bold text-sm text-amber-600 dark:text-amber-400">
-                        <span>🔥</span>
-                        <span>{habit.currentStreak} {unitLabel}</span>
-                      </div>
-                      <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                        🏆 Best: {habit.bestStreak} {unitLabel}
-                      </div>
-                    </div>
-
-                    {isHabitAnalytics && habit.id && (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/habits/${habit.id}`)}
-                        className="p-2 rounded-xl text-ink-muted hover:text-accent hover:bg-surface-elevated transition-colors cursor-pointer"
-                        title="View Analytics"
-                        aria-label="View Analytics"
+                  {/* Right: Inline Streak Badge & Actions */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {habit.currentStreak > 0 && (
+                      <div
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-medium"
+                        title={`Current streak: ${habit.currentStreak} ${unitLabel}`}
                       >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="18" y1="20" x2="18" y2="10" />
-                          <line x1="12" y1="20" x2="12" y2="4" />
-                          <line x1="6" y1="20" x2="6" y2="14" />
-                        </svg>
-                      </button>
+                        <span>🔥</span>
+                        <span>{habit.currentStreak}</span>
+                      </div>
                     )}
 
                     <button
                       type="button"
                       onClick={() => handleOpenEdit(habit)}
-                      className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
                       title="Edit Habit"
                       aria-label="Edit Habit"
                     >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M12 20h9" />
                         <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                       </svg>
@@ -504,75 +480,42 @@ export function HabitsView() {
                   </div>
                 </div>
 
-                {/* Mobile Streaks Bar (visible on small screens) */}
-                <div className="flex sm:hidden items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-slate-800/80">
-                  <div className="flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400">
-                    <span>🔥 Current:</span>
-                    <span>{habit.currentStreak} {unitLabel}</span>
-                  </div>
-                  <div className="text-slate-400 dark:text-slate-500 font-medium">
-                    🏆 Best: {habit.bestStreak} {unitLabel}
-                  </div>
+                {/* Footer Bar: Expandable Activity Graph Trigger */}
+                <div className="pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-ink-muted">
+                  <button
+                    type="button"
+                    onClick={() => habit.id && toggleHeatmap(habit.id)}
+                    className="flex items-center gap-1 text-[11px] font-normal text-ink-muted hover:text-ink transition-colors cursor-pointer"
+                  >
+                    <span>{isHeatmapExpanded ? 'Hide activity matrix' : 'View activity matrix'}</span>
+                    <svg
+                      className={`w-3 h-3 transition-transform ${isHeatmapExpanded ? 'rotate-180' : ''}`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+
+                  <span className="text-[10px] text-ink-faint">
+                    Best: {habit.bestStreak} {unitLabel}
+                  </span>
                 </div>
 
-                {/* Bottom Section: 30-day dots + Heatmap expand toggle */}
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-                    <span>30 days activity</span>
-                    {habit.id && (
-                      <button
-                        type="button"
-                        onClick={() => toggleHeatmap(habit.id!)}
-                        className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>{isHeatmapExpanded ? 'Hide Heatmap' : 'Year Heatmap'}</span>
-                        <svg
-                          className={`w-3.5 h-3.5 transition-transform ${isHeatmapExpanded ? 'rotate-180' : ''}`}
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <polyline points="6 9 12 15 18 9" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* 30 Dots Grid */}
-                  <div className="flex items-center justify-between gap-1 sm:gap-1.5 overflow-x-auto py-1">
-                    {habit.last30Days.map((day) => (
-                      <div
-                        key={day.date}
-                        title={`${day.date}: ${day.done ? 'Completed ✓' : 'Not completed'}`}
-                        className={`w-2.5 h-2.5 rounded-full shrink-0 transition-all ${
-                          day.done
-                            ? 'bg-emerald-500'
-                            : 'bg-slate-200 dark:bg-slate-700/80'
-                        } ${
-                          day.isToday
-                            ? 'ring-2 ring-emerald-500/50 ring-offset-1 dark:ring-offset-slate-900'
-                            : ''
-                        }`}
+                {/* Expandable Activity Matrix */}
+                {isHeatmapExpanded && habit.id && (
+                  <div className="pt-2 animate-in fade-in duration-200">
+                    <div className="rounded-xl border border-border/80 bg-surface-2/40 p-2 overflow-x-auto">
+                      <Heatmap
+                        range="month"
+                        logs={habit.logsMap || {}}
+                        onToggleDate={(d) => habit.id && handleToggleHabitDate(habit.id, d)}
                       />
-                    ))}
-                  </div>
-
-                  {/* Expandable GitHub-style Contribution Graph */}
-                  {isHeatmapExpanded && habit.id && (
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 animate-in fade-in duration-200">
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-1">
-                        52-week contribution graph (tap any square to view or toggle)
-                      </p>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-2 overflow-x-auto">
-                        <Heatmap
-                          logs={habit.logsMap || {}}
-                          onToggleDate={(d) => handleToggleHabitDate(habit.id!, d)}
-                        />
-                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -581,19 +524,19 @@ export function HabitsView() {
 
       {/* Archived Habits Section */}
       {archivedHabits.length > 0 && (
-        <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="pt-6 border-t border-border/60 space-y-3">
           <button
             type="button"
             onClick={() => setShowArchived(!showArchived)}
-            className="flex items-center justify-between w-full text-left cursor-pointer group"
+            className="flex items-center justify-between w-full text-left cursor-pointer group py-1"
           >
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300">
+              <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted group-hover:text-ink">
                 Archived Habits ({archivedHabits.length})
               </span>
             </div>
             <svg
-              className={`w-4 h-4 text-slate-400 transition-transform ${
+              className={`w-4 h-4 text-ink-muted transition-transform ${
                 showArchived ? 'rotate-180' : ''
               }`}
               viewBox="0 0 24 24"
@@ -606,38 +549,38 @@ export function HabitsView() {
           </button>
 
           {showArchived && (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {archivedHabits.map((habit) => (
                 <div
                   key={habit.id}
-                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 opacity-75 hover:opacity-100 transition-opacity flex items-center justify-between"
+                  className="p-3.5 rounded-xl border border-border/60 bg-surface opacity-80 hover:opacity-100 transition-opacity flex items-center justify-between"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-xl p-2 rounded-lg bg-slate-200/50 dark:bg-slate-800">
+                    <span className="text-lg p-2 rounded-lg bg-surface-2">
                       {habit.iconOrEmoji || '🎯'}
                     </span>
                     <div>
-                      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      <h4 className="text-sm font-medium text-ink">
                         {habit.name}
                       </h4>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-ink-muted">
                         Best streak: {habit.bestStreak}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => habit.id && handleArchiveToggle(habit.id, false)}
-                      className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:border-blue-500 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 text-xs font-medium bg-surface-2 border border-border/60 text-ink rounded-lg hover:border-accent transition-colors cursor-pointer min-h-[34px]"
                     >
                       Unarchive
                     </button>
                     <button
                       type="button"
                       onClick={() => habit.id && handleDeleteHabit(habit.id)}
-                      className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                      className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer min-h-[34px] min-w-[34px] flex items-center justify-center"
                       title="Delete permanently"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

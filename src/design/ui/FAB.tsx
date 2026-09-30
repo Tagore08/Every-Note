@@ -29,9 +29,7 @@ export function FAB({
     if (onLongPress) {
       timerRef.current = setTimeout(() => {
         isLongPressRef.current = true;
-        if ('vibrate' in navigator) {
-          navigator.vibrate(50);
-        }
+        if ('vibrate' in navigator) navigator.vibrate(50);
         onLongPress();
       }, 500);
     }
@@ -45,9 +43,7 @@ export function FAB({
   };
 
   const handleClick = () => {
-    if (!isLongPressRef.current) {
-      onClick();
-    }
+    if (!isLongPressRef.current) onClick();
     isLongPressRef.current = false;
   };
 
@@ -59,15 +55,17 @@ export function FAB({
       onPointerUp={endPress}
       onPointerCancel={endPress}
       onClick={handleClick}
-      whileHover={shouldReduceMotion ? undefined : { scale: 1.05 }}
-      whileTap={shouldReduceMotion ? undefined : { scale: 0.95 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-      className={`relative inline-flex items-center justify-center w-14 h-14 rounded-full bg-accent text-accent-ink shadow-float border border-accent/20 cursor-pointer select-none min-w-[56px] min-h-[56px] ${className}`}
+      whileHover={shouldReduceMotion ? undefined : { scale: 1.06 }}
+      whileTap={shouldReduceMotion ? undefined : { scale: 0.94 }}
+      transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+      className={`relative inline-flex items-center justify-center w-14 h-14 rounded-full
+        bg-accent text-accent-ink shadow-float cursor-pointer select-none min-w-[56px] min-h-[56px]
+        ${className}`}
     >
       {icon}
       {label && <span className="sr-only">{label}</span>}
       {typeof badge !== 'undefined' && (
-        <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full text-[10px] font-bold bg-danger text-white flex items-center justify-center shadow-xs">
+        <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full text-[10px] font-bold bg-danger text-white flex items-center justify-center">
           {badge}
         </span>
       )}

@@ -44,14 +44,14 @@ export function ArchiveView() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header bar */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Archive
-          </h2>
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            {notes.length}
+      {/* Subheader bar */}
+      <div className="flex items-center justify-between pb-3 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-surface-2 text-ink/70">
+            {notes.length} {notes.length === 1 ? 'archived note' : 'archived notes'}
+          </span>
+          <span className="text-xs text-ink-muted hidden sm:inline">
+            Notes stored away from active views
           </span>
         </div>
       </div>

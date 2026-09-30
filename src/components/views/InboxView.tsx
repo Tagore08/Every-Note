@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInboxNotes, notesRepo } from '../../db/notesRepo';
@@ -6,8 +6,10 @@ import { tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatRelativeTime, getDisplayTitle } from '../../utils/format';
 import { useFlag } from '../../app/flags';
+import { useFolders } from '../../db/repos/foldersRepo';
 import { InboxAnalyticsHeader } from '../../features/inbox/InboxAnalyticsHeader';
 import { FileAsSheet } from '../../features/inbox/FileAsSheet';
+import { Clock, Tag, FolderPlus, CheckCircle2, ArrowRight, Trash2, Sparkles, Pencil } from 'lucide-react';
 import type { Note } from '../../types/note';
 
 interface InboxViewProps {
@@ -16,6 +18,8 @@ interface InboxViewProps {
 
 export function InboxView(props: InboxViewProps) {
   const notes = useInboxNotes();
+  const folders = useFolders();
+  const foldersMap = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
   const navigate = useNavigate();
   const { showUndo } = useSnackbar();
   const outlet = useOutletContext<{ openCapture?: () => void } | null>();
@@ -69,7 +73,7 @@ export function InboxView(props: InboxViewProps) {
   const rowVirtualizer = useVirtualizer({
     count: noteList.length,
     getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => 120,
+    estimateSize: () => 165,
     overscan: 5,
   });
 
@@ -83,17 +87,13 @@ export function InboxView(props: InboxViewProps) {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-border">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-semibold tracking-tight text-ink">
-            Inbox
-          </h2>
-          {noteList.length > 0 && (
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-soft text-accent border border-accent/20">
-              {noteList.length}
-            </span>
-          )}
+      {/* Status Bar */}
+      <div className="flex items-center justify-between pb-2 border-b border-border/60">
+        <div className="flex items-center gap-2 text-xs text-ink-muted">
+          <span>Unprocessed captures:</span>
+          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-accent-soft text-accent border border-accent/20">
+            {noteList.length}
+          </span>
         </div>
       </div>
 
@@ -130,7 +130,7 @@ export function InboxView(props: InboxViewProps) {
           )}
         </div>
       ) : (
-        /* Virtualized Inbox List */
+        /* GoodNotes Tactile Card Inbox List */
         <div
           ref={scrollContainerRef}
           className="h-[calc(100vh-16rem)] overflow-y-auto pr-1"
@@ -144,9 +144,20 @@ export function InboxView(props: InboxViewProps) {
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const note = noteList[virtualRow.index];
+              const isStale = Date.now() - new Date(note.createdAt).getTime() > 24 * 60 * 60 * 1000;
+              const hasSketch = note.content?.includes('<svg') || note.content?.includes('data:image/svg+xml');
+              const folderName = note.folderId ? foldersMap.get(note.folderId) : null;
+
+              // Clean excerpt by stripping SVG raw strings if present
+              const cleanExcerpt = note.content
+                ? note.content.replace(/<svg[\s\S]*?<\/svg>/gi, '[Sketch]').replace(/!\[.*?\]\(data:image\/svg\+xml.*?\)/gi, '[Sketch]').trim()
+                : '';
+
               return (
                 <div
                   key={note.id ?? virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  data-index={virtualRow.index}
                   style={{
                     position: 'absolute',
                     top: 0,
@@ -154,99 +165,155 @@ export function InboxView(props: InboxViewProps) {
                     width: '100%',
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
-                  className="pb-3"
+                  className="pb-3.5"
                 >
-                  <div className="p-4 sm:p-5 rounded-card bg-surface border border-border shadow-card hover:border-accent/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
-                        <h3 className="text-base font-semibold text-ink truncate">
-                          {getDisplayTitle(note)}
-                        </h3>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (note.id) navigate(`/notes/${note.id}`);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && note.id) navigate(`/notes/${note.id}`);
+                    }}
+                    className={`group relative flex flex-col justify-between p-5 rounded-card border transition-all duration-200 cursor-pointer shadow-card hover:shadow-float ${
+                      isStale
+                        ? 'border-amber-500/30 bg-surface hover:border-amber-500/50'
+                        : 'border-border bg-surface hover:border-accent/40'
+                    }`}
+                  >
+                    {/* Left accent spine ribbon for GoodNotes tactile feel */}
+                    <div
+                      className={`absolute left-0 top-3 bottom-3 w-1.5 rounded-r-full transition-colors ${
+                        isStale
+                          ? 'bg-amber-500 group-hover:bg-amber-600'
+                          : 'bg-accent/40 group-hover:bg-accent'
+                      }`}
+                    />
+
+                    {/* Card Body */}
+                    <div className="space-y-2.5 pl-2 min-w-0">
+                      {/* Top Header: Title & Badges */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+                          <h3 className="text-base sm:text-lg font-bold text-ink truncate group-hover:text-accent transition-colors">
+                            {getDisplayTitle(note)}
+                          </h3>
+                        </div>
+
+                        {/* Status / Attention Badges */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {hasSketch && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-accent-soft text-accent border border-accent/20">
+                              <Pencil className="w-2.5 h-2.5" />
+                              <span>Sketch</span>
+                            </span>
+                          )}
+
+                          {isStale ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              <span>Pending Triage</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-accent-soft text-accent border border-accent/20">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              <span>New</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-sm text-ink-muted line-clamp-2 leading-relaxed">
-                        {note.content || <span className="italic opacity-60">No additional text</span>}
-                      </p>
-                      <div className="flex items-center gap-2 text-[11px] text-ink-muted pt-1">
-                        <span>Captured {formatRelativeTime(note.createdAt)}</span>
+
+                      {/* Dynamic Content Excerpt */}
+                      {cleanExcerpt ? (
+                        <p className="text-sm text-ink-muted line-clamp-2 leading-relaxed">
+                          {cleanExcerpt}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-ink-faint italic">
+                          No text content
+                        </p>
+                      )}
+
+                      {/* Metadata Row: Captured time, folder, tags */}
+                      <div className="flex items-center gap-3 text-xs text-ink-muted flex-wrap pt-1">
+                        <div className="flex items-center gap-1 text-[11px] text-ink-muted">
+                          <Clock className="w-3 h-3 text-ink-faint" />
+                          <span>Captured {formatRelativeTime(note.createdAt)}</span>
+                        </div>
+
+                        {folderName && (
+                          <div className="flex items-center gap-1 text-[11px] text-ink-muted bg-surface-2 px-2 py-0.5 rounded-md border border-border/60">
+                            <FolderPlus className="w-3 h-3 text-accent" />
+                            <span>{folderName}</span>
+                          </div>
+                        )}
+
                         {note.tags && note.tags.length > 0 && (
-                          <>
-                            <span>·</span>
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {note.tags.map((t) => (
-                                <span key={t} className="text-ink-muted/80">#{t}</span>
-                              ))}
-                            </div>
-                          </>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {note.tags.map((t) => (
+                              <span
+                                key={t}
+                                className="inline-flex items-center gap-0.5 text-[11px] font-medium text-ink-muted bg-surface-2 px-1.5 py-0.5 rounded-md border border-border/50"
+                              >
+                                <Tag className="w-2.5 h-2.5 text-ink-faint" />
+                                <span>{t}</span>
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
 
-                    {/* Action buttons (>=44px touch targets) */}
-                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                      {isSmartInbox ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setTriageNote(note)}
-                            className="px-4 py-2 rounded-pill bg-accent text-accent-ink text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer min-h-[44px] flex items-center gap-1.5 shadow-xs"
-                            title="Triage, Subtasks, or Convert to Task"
-                          >
-                            <span>Triage / File</span>
-                            <span aria-hidden="true">→</span>
-                          </button>
+                    {/* Tactile Action Bar */}
+                    <div className="flex items-center justify-between gap-3 pt-3.5 mt-3 border-t border-border/50 pl-2">
+                      <div className="text-[11px] text-ink-faint hidden sm:block">
+                        Click card to edit note
+                      </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(note.id)}
-                            className="p-2 rounded-lg text-ink-muted hover:text-danger hover:bg-surface-2 transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
-                            title="Delete note"
-                            aria-label="Delete note"
-                          >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                            </svg>
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleConvertToTask(note)}
-                            className="px-3 py-1.5 rounded-pill bg-surface-2 hover:bg-surface border border-border text-ink text-xs font-semibold transition-colors cursor-pointer min-h-[44px] flex items-center gap-1.5"
-                            title="Convert to Task"
-                          >
-                            <svg className="w-3.5 h-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M9 11l3 3L22 4" />
-                              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                            </svg>
-                            <span>Task</span>
-                          </button>
+                      <div
+                        className="flex items-center gap-2 ml-auto"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Convert to Task */}
+                        <button
+                          type="button"
+                          onClick={() => handleConvertToTask(note)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill bg-surface-2 hover:bg-accent hover:text-accent-ink border border-border text-ink text-xs font-semibold transition-all min-h-[38px] active:scale-95 cursor-pointer shadow-xs"
+                          title="Convert to Task"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-accent group-hover:text-inherit" />
+                          <span>Convert to Task</span>
+                        </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleFileAsNote(note.id)}
-                            className="px-3.5 py-1.5 rounded-pill bg-accent text-accent-ink text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer min-h-[44px] flex items-center gap-1.5 shadow-xs"
-                          >
-                            <span>File Note</span>
-                            <span aria-hidden="true">→</span>
-                          </button>
+                        {/* File / Triage Sheet */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isSmartInbox) {
+                              setTriageNote(note);
+                            } else {
+                              handleFileAsNote(note.id);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-pill bg-accent text-accent-ink text-xs font-semibold hover:opacity-90 transition-opacity min-h-[38px] active:scale-95 cursor-pointer shadow-xs"
+                          title={isSmartInbox ? "Triage & File Note" : "File Note"}
+                        >
+                          <span>File Note</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(note.id)}
-                            className="p-2 rounded-lg text-ink-muted hover:text-danger hover:bg-surface-2 transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
-                            title="Delete note"
-                            aria-label="Delete note"
-                          >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                            </svg>
-                          </button>
-                        </>
-                      )}
+                        {/* Delete Note */}
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(note.id)}
+                          className="p-2 rounded-lg text-ink-muted hover:text-danger hover:bg-surface-2 transition-colors cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+                          title="Delete note"
+                          aria-label="Delete note"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -262,23 +329,6 @@ export function InboxView(props: InboxViewProps) {
         onClose={() => setTriageNote(null)}
         note={triageNote}
       />
-
-      {/* Capture Option at Bottom to Right */}
-      {onOpenCapture && (
-        <button
-          type="button"
-          onClick={onOpenCapture}
-          className="fixed bottom-20 md:bottom-8 right-6 md:right-8 z-30 inline-flex items-center gap-2 px-5 py-3 rounded-full bg-accent text-accent-ink font-semibold text-sm shadow-pop hover:opacity-95 active:scale-95 transition-all cursor-pointer"
-          title="Capture to Inbox"
-          aria-label="Capture to Inbox"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          <span>Capture</span>
-        </button>
-      )}
     </div>
   );
 }

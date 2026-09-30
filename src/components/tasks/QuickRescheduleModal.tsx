@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Task } from '../../types/task';
 import { tasksRepo } from '../../db/tasksRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
+import { Dialog } from '../../design/ui/Dialog';
 
 interface QuickRescheduleModalProps {
   task: Task | null;
@@ -55,30 +56,14 @@ export function QuickRescheduleModal({ task, isOpen, onClose }: QuickRescheduleM
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in"
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title="📅 Reschedule Task"
+      size="sm"
     >
-      <div className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl bg-surface border border-border p-5 shadow-float space-y-4">
-        <div className="flex items-center justify-between pb-2 border-b border-border">
-          <div className="flex items-center gap-2">
-            <span className="text-base">📅</span>
-            <h3 className="text-sm font-bold text-ink">Reschedule Task</h3>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 text-ink-muted hover:text-ink transition-colors cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-
-        <p className="text-xs text-ink-muted truncate">
+      <div className="space-y-4">
+        <p className="text-xs text-ink-muted truncate font-medium">
           {task.title}
         </p>
 
@@ -168,6 +153,6 @@ export function QuickRescheduleModal({ task, isOpen, onClose }: QuickRescheduleM
           </button>
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }

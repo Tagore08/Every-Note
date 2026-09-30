@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type KeyboardEvent } from 'react';
 import { usePeople, peopleRepo } from '../../db/peopleRepo';
 import { PersonAvatar } from './PersonAvatar';
+import { Dialog } from '../../design/ui/Dialog';
 
 interface PersonPickerModalProps {
   isOpen: boolean;
@@ -33,20 +34,6 @@ export function PersonPickerModal({
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
   const handleCreateNew = async () => {
     const trimmed = newName.trim();
     if (!trimmed) return;
@@ -59,7 +46,7 @@ export function PersonPickerModal({
       }
       onClose();
     } catch (err) {
-      console.error('Failed to create person inline:', err);
+      console.error('Failed to create person:', err);
     } finally {
       setIsCreating(false);
     }
@@ -73,52 +60,18 @@ export function PersonPickerModal({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title="👤 With Person"
+      size="sm"
     >
-      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2">
-            <svg
-              className="w-4 h-4 text-blue-600 dark:text-blue-400"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-              With Person
-            </h3>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-            aria-label="Close"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
+      <div className="space-y-4">
         {/* Search input */}
         <div>
           <div className="relative">
             <svg
-              className="w-4 h-4 absolute left-3 top-2.5 text-slate-400"
+              className="w-3.5 h-3.5 absolute left-3 top-2.5 text-ink-muted pointer-events-none"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -133,17 +86,17 @@ export function PersonPickerModal({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search people..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-surface-2 border border-border text-xs text-ink placeholder-ink-muted focus:outline-none focus:border-accent"
             />
           </div>
         </div>
 
-        {/* People List */}
-        <div className="max-h-52 overflow-y-auto space-y-1 divide-y divide-slate-100 dark:divide-slate-800/50">
+        {/* People list */}
+        <div className="max-h-48 overflow-y-auto space-y-1 overscroll-contain">
           {people.length === 0 ? (
-            <div className="py-6 text-center text-xs text-slate-400 dark:text-slate-500">
-              {searchQuery ? 'No people match search' : 'No people saved yet'}
-            </div>
+            <p className="text-xs text-ink-muted text-center py-4">
+              {searchQuery ? 'No people match your search' : 'No people saved yet'}
+            </p>
           ) : (
             people.map((person) => {
               const isSelected = selectedPersonId === person.id;
@@ -154,41 +107,21 @@ export function PersonPickerModal({
                   onClick={() => {
                     if (person.id) {
                       onSelectPerson(person.id);
-                      onClose();
                     }
+                    onClose();
                   }}
-                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-colors cursor-pointer pt-2 ${
+                  className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors cursor-pointer text-left ${
                     isSelected
-                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-800 dark:text-slate-200'
+                      ? 'bg-accent/15 text-accent font-semibold'
+                      : 'hover:bg-surface-2 text-ink'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <PersonAvatar
-                      name={person.name}
-                      photoBlob={person.photoBlob}
-                      size="sm"
-                    />
-                    <div className="truncate">
-                      <span className="text-xs font-semibold block truncate">
-                        {person.name}
-                      </span>
-                      {person.contactInfo && (
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 block truncate">
-                          {person.contactInfo.split('\n')[0]}
-                        </span>
-                      )}
-                    </div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <PersonAvatar name={person.name} photoBlob={person.photoBlob} size="sm" />
+                    <span className="text-xs truncate">{person.name}</span>
                   </div>
-
                   {isSelected && (
-                    <svg
-                      className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    >
+                    <svg className="w-3.5 h-3.5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   )}
@@ -199,8 +132,8 @@ export function PersonPickerModal({
         </div>
 
         {/* Inline Create New Person */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+        <div className="pt-2 border-t border-border/60 space-y-2">
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
             Create New Person Inline
           </label>
           <div className="flex items-center gap-2">
@@ -210,13 +143,13 @@ export function PersonPickerModal({
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={handleNewNameKeyDown}
               placeholder="Name only required..."
-              className="flex-1 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-1.5 rounded-xl bg-surface-2 border border-border text-xs text-ink placeholder-ink-muted focus:outline-none focus:border-accent"
             />
             <button
               type="button"
               disabled={!newName.trim() || isCreating}
               onClick={handleCreateNew}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white transition-colors cursor-pointer shrink-0 shadow-xs"
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-accent hover:opacity-90 disabled:opacity-40 text-accent-ink transition-opacity cursor-pointer shrink-0 shadow-xs"
             >
               {isCreating ? 'Adding...' : '+ Add'}
             </button>
@@ -224,7 +157,7 @@ export function PersonPickerModal({
         </div>
 
         {/* Footer with Clear & Cancel */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between pt-2 border-t border-border/60">
           <div>
             {selectedPersonId && (
               <button
@@ -233,7 +166,7 @@ export function PersonPickerModal({
                   onSelectPerson(null);
                   onClose();
                 }}
-                className="text-xs text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                className="text-xs text-rose-500 hover:underline cursor-pointer"
               >
                 Clear person
               </button>
@@ -242,12 +175,12 @@ export function PersonPickerModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-medium text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
           >
             Cancel
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

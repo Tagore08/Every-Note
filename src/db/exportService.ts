@@ -12,6 +12,8 @@ import type { NoteLink } from '../types/link';
 import type { Routine, RoutineRun } from '../types/routine';
 import type { CanvasEntity } from '../types/canvas';
 import type { Folder } from '../types/folder';
+import type { Snippet } from '../types/snippet';
+import type { StickyNote } from '../types/sticky';
 
 export interface ExportAttachment extends Omit<Attachment, 'data'> {
   dataBase64?: string;
@@ -44,6 +46,8 @@ export interface BackupEnvelope {
   routineRuns?: RoutineRun[];
   canvases?: ExportCanvas[];
   timerPresets?: TimerPreset[];
+  snippets?: Snippet[];
+  stickyNotes?: StickyNote[];
   settings?: {
     theme?: string;
     flags?: Record<string, boolean>;
@@ -51,13 +55,17 @@ export interface BackupEnvelope {
   lifeAreas?: any[]; // optional for backward compatibility with old exports
 }
 
-export function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+export async function blobToBase64(blob: Blob): Promise<string> {
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  const buffer = Buffer.from(await blob.arrayBuffer());
+  return `data:${blob.type || 'application/octet-stream'};base64,${buffer.toString('base64')}`;
 }
 
 export function base64ToBlob(base64Data: string, mimeType: string): Blob {
@@ -164,11 +172,14 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
   }
 
   const allFolders = await db.folders.toArray();
-  const currentTheme = localStorage.getItem('notes_theme_mode') || 'system';
+  const allSnippets = await db.snippets.toArray();
+  const allStickyNotes = await db.stickyNotes.toArray();
+  const currentTheme =
+    (typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem('notes_theme_mode') : null) || 'system';
   const currentFlags = getStoredFlags();
 
   return {
-    version: 16,
+    version: 18,
     app: 'notes-app',
     exportedAt: new Date().toISOString(),
     notes: allNotes,
@@ -186,6 +197,8 @@ export async function buildFullBackupEnvelope(): Promise<BackupEnvelope> {
     routineRuns: allRoutineRuns,
     canvases: exportedCanvases,
     timerPresets: allTimerPresets,
+    snippets: allSnippets,
+    stickyNotes: allStickyNotes,
     settings: {
       theme: currentTheme,
       flags: currentFlags,

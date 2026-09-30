@@ -1,16 +1,39 @@
 import { useState, useEffect, useCallback } from 'react';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeColor = 'rose' | 'sage' | 'lavender' | 'champagne' | 'ocean' | 'peach' | 'slate' | 'default';
+
+export const THEME_COLORS: { label: string; value: ThemeColor }[] = [
+  { label: 'Default', value: 'default' },
+  { label: 'Rose Quartz', value: 'rose' },
+  { label: 'Sage Harmony', value: 'sage' },
+  { label: 'Lavender Dream', value: 'lavender' },
+  { label: 'Champagne Gold', value: 'champagne' },
+  { label: 'Ocean Mist', value: 'ocean' },
+  { label: 'Sunset Peach', value: 'peach' },
+  { label: 'Slate Minimal', value: 'slate' },
+];
 
 export function useTheme() {
   const [mode, setModeState] = useState<ThemeMode>(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('notes_theme_mode') as ThemeMode | null;
-      if (stored === 'light' || stored === 'dark' || stored === 'system') {
-        return stored;
-      }
+      const stored = localStorage.getItem('notes_theme_mode');
+      if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+      if (stored === 'true-black') return 'dark'; // Migrate old true-black
     }
     return 'system';
+  });
+
+  const [color, setColorState] = useState<ThemeColor>(() => {
+    if (typeof window !== 'undefined') {
+      const storedColor = localStorage.getItem('notes_theme_color') as ThemeColor | null;
+      if (storedColor && THEME_COLORS.some(t => t.value === storedColor)) return storedColor;
+      
+      // Migrate old true-black mode to slate color
+      const storedMode = localStorage.getItem('notes_theme_mode');
+      if (storedMode === 'true-black') return 'slate';
+    }
+    return 'default';
   });
 
   const [systemIsDark, setSystemIsDark] = useState<boolean>(() => {
@@ -36,7 +59,7 @@ export function useTheme() {
   const isDark = mode === 'dark' || (mode === 'system' && systemIsDark);
   const resolvedTheme: 'light' | 'dark' = isDark ? 'dark' : 'light';
 
-  // Apply .dark class to root with smooth transition
+  // Apply .dark and [data-theme] attribute to root with smooth transition
   useEffect(() => {
     const root = document.documentElement;
     
@@ -51,13 +74,25 @@ export function useTheme() {
     } else {
       root.classList.remove('dark');
     }
+
+    if (color !== 'default') {
+      root.setAttribute('data-theme', color);
+    } else {
+      root.removeAttribute('data-theme');
+    }
+
     localStorage.setItem('notes_theme_mode', mode);
+    localStorage.setItem('notes_theme_color', color);
 
     return () => clearTimeout(timer);
-  }, [isDark, mode]);
+  }, [isDark, mode, color]);
 
   const setMode = useCallback((newMode: ThemeMode) => {
     setModeState(newMode);
+  }, []);
+
+  const setColor = useCallback((newColor: ThemeColor) => {
+    setColorState(newColor);
   }, []);
 
   const toggleTheme = useCallback(() => {
@@ -70,11 +105,12 @@ export function useTheme() {
 
   return {
     mode,
+    color,
     setMode,
+    setColor,
     isDark,
     resolvedTheme,
     toggleTheme,
-    // Backwards compatibility for existing components expecting theme as resolved string
-    theme: resolvedTheme,
+    theme: isDark ? 'dark' : 'light',
   };
 }

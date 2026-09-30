@@ -16,6 +16,7 @@ import {
   ArrowRight,
   Copy,
   Check,
+  Cloud,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { notesRepo } from '../../db/notesRepo';
@@ -23,6 +24,7 @@ import { tasksRepo } from '../../db/tasksRepo';
 import { useSnippets } from '../../db/repos/snippetsRepo';
 import { useTheme } from '../../hooks/useTheme';
 import { useSnackbar } from '../../context/SnackbarContext';
+import { useDebounce } from '../../lib/debounce';
 import type { Note } from '../../types/note';
 import type { Task } from '../../types/task';
 import type { Snippet } from '../../types/snippet';
@@ -69,6 +71,7 @@ export function CommandPalette({ isOpen, onClose, onOpenCapture }: CommandPalett
   const snippets = useSnippets();
 
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 150);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [copiedSnippetId, setCopiedSnippetId] = useState<number | null>(null);
 
@@ -88,39 +91,39 @@ export function CommandPalette({ isOpen, onClose, onOpenCapture }: CommandPalett
   const notesResults = useLiveQuery<Note[]>(
     async () => {
       if (!isOpen) return [];
-      if (!query.trim()) {
+      if (!debouncedQuery.trim()) {
         const recent = await notesRepo.getActiveNotes();
         return recent.slice(0, 4);
       }
-      return await notesRepo.searchNotes(query);
+      return await notesRepo.searchNotes(debouncedQuery);
     },
-    [isOpen, query]
+    [isOpen, debouncedQuery]
   );
 
   // Live query matching tasks
   const tasksResults = useLiveQuery<Task[]>(
     async () => {
       if (!isOpen) return [];
-      if (!query.trim()) {
+      if (!debouncedQuery.trim()) {
         const todos = await tasksRepo.getTodoTasks();
         return todos.slice(0, 4);
       }
-      return await tasksRepo.searchTasks(query);
+      return await tasksRepo.searchTasks(debouncedQuery);
     },
-    [isOpen, query]
+    [isOpen, debouncedQuery]
   );
 
   // Filter snippets matching query
   const snippetResults = useMemo(() => {
-    if (!query.trim()) return snippets.slice(0, 3);
-    const q = query.toLowerCase();
+    if (!debouncedQuery.trim()) return snippets.slice(0, 3);
+    const q = debouncedQuery.toLowerCase();
     return snippets.filter(
       (s) =>
         s.trigger.toLowerCase().includes(q) ||
         s.expansion.toLowerCase().includes(q) ||
         (s.description && s.description.toLowerCase().includes(q))
     ).slice(0, 5);
-  }, [snippets, query]);
+  }, [snippets, debouncedQuery]);
 
   // Available quick actions
   const actions: PaletteAction[] = useMemo(() => {
@@ -214,10 +217,32 @@ export function CommandPalette({ isOpen, onClose, onOpenCapture }: CommandPalett
         },
       },
       {
+        id: 'act-cloud-storage',
+        type: 'action',
+        title: 'Cloud Storage & Sync',
+        subtitle: 'Backup or restore data with Nextcloud, Drive, Dropbox, or S3',
+        icon: <Cloud className="w-4 h-4 text-emerald-500" />,
+        run: () => {
+          navigate('/settings');
+          onClose();
+        },
+      },
+      {
+        id: 'act-text-expansion',
+        type: 'action',
+        title: 'Text Replace Shortcut',
+        subtitle: 'Configure shortcut triggers, text expansion, and manage tags',
+        icon: <Zap className="w-4 h-4 text-amber-500" />,
+        run: () => {
+          navigate('/text-expansion');
+          onClose();
+        },
+      },
+      {
         id: 'act-settings',
         type: 'action',
         title: 'Settings',
-        subtitle: 'Preferences, snippets, backups, and data',
+        subtitle: 'Preferences, backups, and data',
         icon: <Settings className="w-4 h-4 text-slate-500" />,
         run: () => {
           navigate('/settings');
@@ -320,7 +345,8 @@ export function CommandPalette({ isOpen, onClose, onOpenCapture }: CommandPalett
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-12 sm:pt-20 px-3 sm:px-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+      style={{ paddingTop: 'calc(var(--safe-area-top, env(safe-area-inset-top, 0px)) + 24px)' }}
+      className="fixed inset-0 z-50 flex items-start justify-center px-3 sm:px-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

@@ -12,6 +12,7 @@ export interface HeatmapProps {
   logs: Record<string, boolean | number>;
   startDate?: Date;
   endDate?: Date;
+  range?: 'month' | 'year';
   onToggleDate?: (dateStr: string) => void;
   className?: string;
 }
@@ -20,14 +21,17 @@ export function Heatmap({
   logs,
   startDate: _startDate,
   endDate,
+  range = 'year',
   onToggleDate,
   className = '',
 }: HeatmapProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const todayStr = useMemo(() => toLocalDateStr(new Date()), []);
+  const isMonth = range === 'month';
+  const numWeeks = isMonth ? 5 : 52;
 
-  // Compute 52 weeks (approx 364 days) ending today or endDate
+  // Compute weeks (5 for month, 52 for year) ending today or endDate
   const { weeks, monthLabels } = useMemo(() => {
     const end = endDate ? new Date(endDate) : new Date();
     // Align end date to Sunday of current week
@@ -35,8 +39,7 @@ export function Heatmap({
     const daysToSun = endDayOfWeek === 0 ? 0 : 7 - endDayOfWeek;
     const endSun = new Date(end.getFullYear(), end.getMonth(), end.getDate() + daysToSun);
 
-    // 52 weeks = 52 * 7 = 364 days
-    const totalDays = 52 * 7;
+    const totalDays = numWeeks * 7;
     const startMon = new Date(endSun.getFullYear(), endSun.getMonth(), endSun.getDate() - totalDays + 1);
 
     const generatedWeeks: HeatmapDay[][] = [];
@@ -82,7 +85,7 @@ export function Heatmap({
     }
 
     return { weeks: generatedWeeks, monthLabels: months };
-  }, [logs, endDate]);
+  }, [logs, endDate, numWeeks]);
 
   const selectedDayInfo = useMemo(() => {
     if (!selectedDate) return null;
@@ -118,15 +121,15 @@ export function Heatmap({
   };
 
   return (
-    <div className={`w-full overflow-x-auto select-none ${className}`}>
-      <div className="min-w-[680px] p-2">
+    <div className={`w-full ${isMonth ? '' : 'overflow-x-auto'} select-none ${className}`}>
+      <div className={`${isMonth ? 'w-fit' : 'min-w-[680px]'} p-2`}>
         {/* Month labels header */}
-        <div className="flex text-[11px] text-ink-muted mb-1.5 pl-6 relative h-4">
+        <div className={`flex text-[11px] text-ink-muted mb-1.5 ${isMonth ? 'pl-7' : 'pl-6'} relative h-4`}>
           {monthLabels.map((m, idx) => (
             <span
               key={idx}
               className="absolute font-medium"
-              style={{ left: `${m.weekIndex * 13 + 24}px` }}
+              style={{ left: `${m.weekIndex * (isMonth ? 19 : 13) + (isMonth ? 28 : 24)}px` }}
             >
               {m.label}
             </span>
@@ -134,19 +137,19 @@ export function Heatmap({
         </div>
 
         {/* Heatmap grid */}
-        <div className="flex gap-1 items-start">
+        <div className="flex gap-1.5 items-start">
           {/* Day of week labels */}
-          <div className="flex flex-col gap-1 text-[9px] text-ink-muted pr-1.5 pt-0.5 select-none w-5 text-right font-medium">
-            <span className="h-2.5 leading-none">M</span>
-            <span className="h-2.5 leading-none opacity-0">T</span>
-            <span className="h-2.5 leading-none">W</span>
-            <span className="h-2.5 leading-none opacity-0">T</span>
-            <span className="h-2.5 leading-none">F</span>
-            <span className="h-2.5 leading-none opacity-0">S</span>
-            <span className="h-2.5 leading-none opacity-0">S</span>
+          <div className={`flex flex-col gap-[3px] text-[9px] text-ink-muted pr-1.5 select-none w-5 text-right font-medium`}>
+            <span className={`${isMonth ? 'h-3.5' : 'h-2.5'} leading-none flex items-center justify-end`}>M</span>
+            <span className={`${isMonth ? 'h-3.5' : 'h-2.5'} leading-none opacity-0`}>T</span>
+            <span className={`${isMonth ? 'h-3.5' : 'h-2.5'} leading-none flex items-center justify-end`}>W</span>
+            <span className={`${isMonth ? 'h-3.5' : 'h-2.5'} leading-none opacity-0`}>T</span>
+            <span className={`${isMonth ? 'h-3.5' : 'h-2.5'} leading-none flex items-center justify-end`}>F</span>
+            <span className={`${isMonth ? 'h-3.5' : 'h-2.5'} leading-none opacity-0`}>S</span>
+            <span className={`${isMonth ? 'h-3.5' : 'h-2.5'} leading-none opacity-0`}>S</span>
           </div>
 
-          {/* 52 columns of 7 squares */}
+          {/* Columns of 7 squares */}
           <div className="flex gap-[3px]">
             {weeks.map((week, wIdx) => (
               <div key={wIdx} className="flex flex-col gap-[3px]">
@@ -160,7 +163,7 @@ export function Heatmap({
                       key={day.date}
                       type="button"
                       onClick={() => setSelectedDate(day.date)}
-                      className={`w-2.5 h-2.5 rounded-[2px] transition-all cursor-pointer relative ${
+                      className={`${isMonth ? 'w-3.5 h-3.5 rounded-[3px]' : 'w-2.5 h-2.5 rounded-[2px]'} transition-all cursor-pointer relative ${
                         isToday
                           ? 'ring-1 ring-accent ring-offset-1 ring-offset-bg z-10'
                           : ''

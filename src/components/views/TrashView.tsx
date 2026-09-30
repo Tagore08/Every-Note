@@ -5,7 +5,7 @@ import { getDisplayTitle, getContentSnippet, formatRelativeTime } from '../../ut
 
 export function TrashView() {
   const notes = useTrashNotes();
-  const { showUndo } = useSnackbar();
+  const { showUndo, showSnackbar } = useSnackbar();
 
   // State for single-item delete modal
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -21,6 +21,7 @@ export function TrashView() {
       });
     } catch (err) {
       console.error('Failed to restore note:', err);
+      showSnackbar({ message: 'Failed to restore note' });
     }
   };
 
@@ -29,8 +30,10 @@ export function TrashView() {
     try {
       await notesRepo.deletePermanently(deleteTargetId);
       setDeleteTargetId(null);
+      showSnackbar({ message: 'Note permanently deleted' });
     } catch (err) {
       console.error('Failed to permanently delete note:', err);
+      showSnackbar({ message: 'Failed to delete note permanently' });
     }
   };
 
@@ -38,8 +41,10 @@ export function TrashView() {
     try {
       await notesRepo.emptyTrash();
       setShowEmptyTrashModal(false);
+      showSnackbar({ message: 'Trash emptied' });
     } catch (err) {
       console.error('Failed to empty trash:', err);
+      showSnackbar({ message: 'Failed to empty trash' });
     }
   };
 
@@ -53,14 +58,14 @@ export function TrashView() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Trash
-          </h2>
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            {notes.length}
+      {/* Subheader bar */}
+      <div className="flex flex-row items-center justify-between gap-3 pb-3 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-surface-2 text-ink/70">
+            {notes.length} {notes.length === 1 ? 'item' : 'items'}
+          </span>
+          <span className="text-xs text-ink-muted hidden sm:inline">
+            Deleted notes pending permanent purge
           </span>
         </div>
 
@@ -68,7 +73,7 @@ export function TrashView() {
           <button
             type="button"
             onClick={() => setShowEmptyTrashModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/60 transition-colors self-start sm:self-auto"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/60 transition-colors cursor-pointer"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="3 6 5 6 21 6" />

@@ -247,6 +247,15 @@ export const linksRepo = {
     await db.links.clear();
   },
 
+  async importLinks(links: NoteLink[], strategy: 'merge' | 'replace' = 'merge'): Promise<number> {
+    if (strategy === 'replace') {
+      await db.links.clear();
+    }
+    if (links.length === 0) return 0;
+    await db.links.bulkPut(links);
+    return links.length;
+  },
+
   async getAllGraphData(): Promise<{ notes: Note[]; links: NoteLink[] }> {
     const notes = await db.notes
       .filter((n) => n.trashedAt === null)

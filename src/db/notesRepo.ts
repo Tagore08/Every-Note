@@ -1,8 +1,10 @@
+import Dexie from 'dexie';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './database';
 import { attachmentsRepo } from './attachmentsRepo';
 import { localDateStr } from '../lib/date';
 import { computeJournalStreak, filterOnThisDay } from '../lib/journal';
+import { sanitizeTag, sanitizeTags } from '../lib/tags';
 import type { Note, JournalMood } from '../types/note';
 
 /**
@@ -39,7 +41,7 @@ export const notesRepo = {
     const newNote: Note = {
       title: draft.title?.trim() ?? '',
       content: draft.content ?? '',
-      tags: draft.tags ?? [],
+      tags: sanitizeTags(draft.tags),
       folderId: draft.folderId !== undefined ? draft.folderId : null,
       isScratchpad: draft.isScratchpad ?? false,
       pinned: draft.pinned ?? false,
@@ -89,10 +91,11 @@ export const notesRepo = {
    * Update fields on an existing note. Automatically bumps updatedAt.
    */
   async updateNote(id: number, changes: Partial<Omit<Note, 'id' | 'createdAt'>>): Promise<void> {
-    await db.notes.update(id, {
-      ...changes,
-      updatedAt: new Date(),
-    });
+    const payload = { ...changes, updatedAt: new Date() };
+    if (changes.tags !== undefined) {
+      payload.tags = sanitizeTags(changes.tags);
+    }
+    await db.notes.update(id, payload);
   },
 
   /**
@@ -163,26 +166,30 @@ export const notesRepo = {
    * Hard-delete a note permanently from IndexedDB (also purges its attachments).
    */
   async deletePermanently(id: number): Promise<void> {
-    await db.notes.delete(id);
-    await attachmentsRepo.deleteAttachmentsByNoteId(id);
+    await db.transaction('rw', [db.notes, db.attachments], async () => {
+      await db.notes.delete(id);
+      await attachmentsRepo.deleteAttachmentsByNoteId(id);
+    });
   },
 
   /**
    * Empty trash: permanently delete all soft-deleted notes and their attachments.
    */
   async emptyTrash(): Promise<number> {
-    const trashedNotes = await db.notes
-      .filter((note) => note.trashedAt !== null)
-      .toArray();
+    return await db.transaction('rw', [db.notes, db.attachments], async () => {
+      const trashedNotes = await db.notes
+        .filter((note) => note.trashedAt !== null)
+        .toArray();
 
-    const ids = trashedNotes.map((n) => n.id!).filter((id) => typeof id === 'number');
-    if (ids.length > 0) {
-      await db.notes.bulkDelete(ids);
-      for (const id of ids) {
-        await attachmentsRepo.deleteAttachmentsByNoteId(id);
+      const ids = trashedNotes.map((n) => n.id!).filter((id) => typeof id === 'number');
+      if (ids.length > 0) {
+        await db.notes.bulkDelete(ids);
+        for (const id of ids) {
+          await attachmentsRepo.deleteAttachmentsByNoteId(id);
+        }
       }
-    }
-    return ids.length;
+      return ids.length;
+    });
   },
 
   /**
@@ -190,18 +197,20 @@ export const notesRepo = {
    */
   async purgeOldTrash(days = 30): Promise<number> {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    const oldNotes = await db.notes
-      .filter((note) => note.trashedAt !== null && new Date(note.trashedAt) < cutoff)
-      .toArray();
+    return await db.transaction('rw', [db.notes, db.attachments], async () => {
+      const oldNotes = await db.notes
+        .filter((note) => note.trashedAt !== null && new Date(note.trashedAt) < cutoff)
+        .toArray();
 
-    const ids = oldNotes.map((n) => n.id!).filter((id) => typeof id === 'number');
-    if (ids.length > 0) {
-      await db.notes.bulkDelete(ids);
-      for (const id of ids) {
-        await attachmentsRepo.deleteAttachmentsByNoteId(id);
+      const ids = oldNotes.map((n) => n.id!).filter((id) => typeof id === 'number');
+      if (ids.length > 0) {
+        await db.notes.bulkDelete(ids);
+        for (const id of ids) {
+          await attachmentsRepo.deleteAttachmentsByNoteId(id);
+        }
       }
-    }
-    return ids.length;
+      return ids.length;
+    });
   },
 
   /**
@@ -240,9 +249,9 @@ export const notesRepo = {
     );
 
     if (tagFilter && tagFilter.trim()) {
-      const cleanTag = tagFilter.trim().toLowerCase();
+      const cleanTag = sanitizeTag(tagFilter);
       collection = collection.filter((note) =>
-        note.tags?.some((t) => t.toLowerCase() === cleanTag)
+        note.tags?.some((t) => sanitizeTag(t) === cleanTag)
       );
     }
 
@@ -339,6 +348,108 @@ export const notesRepo = {
   },
 
   /**
+   * Rename a tag across all notes, snippets, and tasks in the database.
+   */
+  async renameTag(oldTag: string, newTag: string): Promise<{ affectedNotes: number }> {
+    const cleanOld = sanitizeTag(oldTag);
+    const cleanNew = sanitizeTag(newTag);
+    if (!cleanOld || !cleanNew || cleanOld === cleanNew) return { affectedNotes: 0 };
+
+    return await db.transaction('rw', [db.notes, db.snippets, db.tasks], async () => {
+      const notes = await db.notes.toArray();
+      let affectedNotes = 0;
+
+      for (const note of notes) {
+        if (note.tags && note.tags.some((t) => sanitizeTag(t) === cleanOld)) {
+          const updatedTags = note.tags.map((t) => (sanitizeTag(t) === cleanOld ? cleanNew : sanitizeTag(t)));
+          const uniqueTags = sanitizeTags(updatedTags);
+          await db.notes.update(note.id!, {
+            tags: uniqueTags,
+            updatedAt: new Date(),
+          });
+          affectedNotes++;
+        }
+      }
+
+      // Also update snippets
+      const snippets = await db.snippets.toArray();
+      for (const s of snippets) {
+        if (s.tags && s.tags.some((t) => sanitizeTag(t) === cleanOld)) {
+          const updatedTags = s.tags.map((t) => (sanitizeTag(t) === cleanOld ? cleanNew : sanitizeTag(t)));
+          await db.snippets.update(s.id!, {
+            tags: sanitizeTags(updatedTags),
+            updatedAt: new Date(),
+          });
+        }
+      }
+
+      // Also update tasks
+      const tasks = await db.tasks.toArray();
+      for (const t of tasks) {
+        if (t.tags && t.tags.some((tag) => sanitizeTag(tag) === cleanOld)) {
+          const updatedTags = t.tags.map((tag) => (sanitizeTag(tag) === cleanOld ? cleanNew : sanitizeTag(tag)));
+          await db.tasks.update(t.id!, {
+            tags: sanitizeTags(updatedTags),
+            updatedAt: new Date(),
+          });
+        }
+      }
+
+      return { affectedNotes };
+    });
+  },
+
+  /**
+   * Remove a tag from all notes, snippets, and tasks.
+   */
+  async deleteTag(tagToDelete: string): Promise<{ affectedNotes: number }> {
+    const clean = sanitizeTag(tagToDelete);
+    if (!clean) return { affectedNotes: 0 };
+
+    return await db.transaction('rw', [db.notes, db.snippets, db.tasks], async () => {
+      const notes = await db.notes.toArray();
+      let affectedNotes = 0;
+
+      for (const note of notes) {
+        if (note.tags && note.tags.some((t) => sanitizeTag(t) === clean)) {
+          const updatedTags = note.tags.filter((t) => sanitizeTag(t) !== clean);
+          await db.notes.update(note.id!, {
+            tags: sanitizeTags(updatedTags),
+            updatedAt: new Date(),
+          });
+          affectedNotes++;
+        }
+      }
+
+      // Also update snippets
+      const snippets = await db.snippets.toArray();
+      for (const s of snippets) {
+        if (s.tags && s.tags.some((t) => sanitizeTag(t) === clean)) {
+          const updatedTags = s.tags.filter((t) => sanitizeTag(t) !== clean);
+          await db.snippets.update(s.id!, {
+            tags: sanitizeTags(updatedTags),
+            updatedAt: new Date(),
+          });
+        }
+      }
+
+      // Also update tasks
+      const tasks = await db.tasks.toArray();
+      for (const t of tasks) {
+        if (t.tags && t.tags.some((tag) => sanitizeTag(tag) === clean)) {
+          const updatedTags = t.tags.filter((tag) => sanitizeTag(tag) !== clean);
+          await db.tasks.update(t.id!, {
+            tags: sanitizeTags(updatedTags),
+            updatedAt: new Date(),
+          });
+        }
+      }
+
+      return { affectedNotes };
+    });
+  },
+
+  /**
    * Retrieves all notes in the database for complete JSON backup export.
    */
   async getAllNotesForExport(): Promise<Note[]> {
@@ -366,7 +477,7 @@ export const notesRepo = {
         id: typeof raw.id === 'number' ? raw.id : undefined,
         title: typeof raw.title === 'string' ? raw.title : '',
         content: typeof raw.content === 'string' ? raw.content : '',
-        tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
+        tags: sanitizeTags(raw.tags),
         pinned: Boolean(raw.pinned),
         archived: Boolean(raw.archived),
         trashedAt: isNaN(trashedAt?.getTime() ?? 0) ? null : trashedAt,
@@ -384,11 +495,53 @@ export const notesRepo = {
 
 
     if (strategy === 'replace') {
-      await db.notes.clear();
-      if (sanitizedNotes.length > 0) {
-        await db.notes.bulkAdd(sanitizedNotes);
+      try {
+        await db.transaction('rw', db.notes, async () => {
+          // Pre-check for duplicate IDs to detect key conflicts cleanly
+          const seenIds = new Set<number>();
+          const duplicateIds: number[] = [];
+          for (const n of sanitizedNotes) {
+            if (typeof n.id === 'number') {
+              if (seenIds.has(n.id)) {
+                duplicateIds.push(n.id);
+              } else {
+                seenIds.add(n.id);
+              }
+            }
+          }
+
+          if (duplicateIds.length > 0) {
+            throw new Dexie.ConstraintError(
+              `Duplicate note IDs detected in backup payload: [${Array.from(new Set(duplicateIds)).join(', ')}]`
+            );
+          }
+
+          await db.notes.clear();
+          if (sanitizedNotes.length > 0) {
+            await db.notes.bulkAdd(sanitizedNotes);
+          }
+        });
+        return { importedCount: sanitizedNotes.length, previousSnapshot };
+      } catch (err: any) {
+        const isConstraint =
+          err?.name === 'ConstraintError' ||
+          err instanceof Dexie.ConstraintError ||
+          (err instanceof Dexie.BulkError &&
+            Object.values((err as any).failures || (err as any).failuresByPos || {}).some(
+              (f: any) => f?.name === 'ConstraintError' || String(f).includes('ConstraintError')
+            )) ||
+          String(err?.message).includes('ConstraintError');
+
+        if (isConstraint) {
+          console.error('Constraint error during notes replace import:', err);
+          throw new Error(
+            `Import failed due to note constraint conflict: ${err.message || 'Duplicate or invalid ID'}. Database state was safely rolled back.`
+          );
+        }
+
+        console.error('Failed to import notes using replace strategy; transaction rolled back:', err);
+        throw err;
       }
-      return { importedCount: sanitizedNotes.length, previousSnapshot };
     }
 
     // Merge strategy:

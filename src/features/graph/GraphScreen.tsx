@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Sliders, Filter, Sparkles } from 'lucide-react';
 import { useAllGraphData } from '../../db/repos/linksRepo';
 import { buildGlobalGraph, buildLocalGraph, type GraphFilterOptions, type GraphNode } from './lib/graphData';
-import { GraphCanvas } from './components/GraphCanvas';
+import { GraphCanvas, DEFAULT_GRAPH_SETTINGS, type GraphPhysicsSettings } from './components/GraphCanvas';
+import { ObsidianGraphSettings } from './components/ObsidianGraphSettings';
 import { GraphFiltersSheet } from './components/GraphFiltersSheet';
 import { EmptyState } from '../../design/ui/EmptyState';
 import { Segmented } from '../../design/ui/Segmented';
@@ -16,6 +18,27 @@ export function GraphScreen() {
 
   const [localDepth, setLocalDepth] = useState<'1' | '2'>('1');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const [physicsSettings, setPhysicsSettings] = useState<GraphPhysicsSettings>(() => {
+    try {
+      const stored = localStorage.getItem('notes_graph_physics_settings');
+      if (stored) return { ...DEFAULT_GRAPH_SETTINGS, ...JSON.parse(stored) };
+    } catch {
+      // fallback
+    }
+    return DEFAULT_GRAPH_SETTINGS;
+  });
+
+  const handlePhysicsSettingsChange = (next: GraphPhysicsSettings) => {
+    setPhysicsSettings(next);
+    try {
+      localStorage.setItem('notes_graph_physics_settings', JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+
   const [filters, setFilters] = useState<GraphFilterOptions>({
     tag: null,
     includeJournals: true,
@@ -57,9 +80,9 @@ export function GraphScreen() {
   };
 
   return (
-    <div className="relative w-full h-[calc(100vh-4rem)] md:h-screen flex flex-col bg-[#111318] text-white">
+    <div className="relative w-full h-[calc(100vh-4rem)] md:h-screen flex flex-col bg-[#101216] text-white">
       {/* Top Header Bar */}
-      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 bg-gradient-to-b from-black/70 via-black/30 to-transparent pointer-events-none">
+      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
           {isLocalMode ? (
             <button
@@ -74,6 +97,10 @@ export function GraphScreen() {
           <div>
             <h1 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
               <span>{isLocalMode ? `Connections: ${centerNodeTitle}` : 'Knowledge Graph'}</span>
+              <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-white/10 text-white/80 border border-white/10 hidden sm:inline-flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5 text-accent" />
+                Obsidian Physics
+              </span>
             </h1>
             <div className="text-xs text-white/60">
               {nodes.length} node{nodes.length === 1 ? '' : 's'} · {edges.length} connection{edges.length === 1 ? '' : 's'}
@@ -100,16 +127,44 @@ export function GraphScreen() {
             <button
               type="button"
               onClick={() => setIsFiltersOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 text-xs font-semibold text-white/90 transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 text-xs font-semibold text-white/90 transition-colors flex items-center gap-1.5 cursor-pointer"
             >
+              <Filter className="w-3.5 h-3.5 text-white/70" />
               <span>Filters</span>
               {(filters.tag != null || !filters.includeJournals || filters.hideOrphans) && (
-                <span className="w-2 h-2 rounded-full bg-[var(--color-accent)]" />
+                <span className="w-2 h-2 rounded-full bg-accent" />
               )}
             </button>
           )}
+
+          {/* Obsidian Graph Settings Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen((prev) => !prev)}
+            className={`px-3 py-1.5 rounded-xl backdrop-blur-md border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              isSettingsOpen
+                ? 'bg-accent text-accent-ink border-accent shadow-xs'
+                : 'bg-white/10 hover:bg-white/20 border-white/10 text-white/90'
+            }`}
+            title="Obsidian Graph Settings (Display, Forces, Groups)"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Settings</span>
+          </button>
         </div>
       </div>
+
+      {/* Floating Obsidian Graph Controls */}
+      <ObsidianGraphSettings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={physicsSettings}
+        onChange={handlePhysicsSettingsChange}
+        includeJournals={filters.includeJournals}
+        onIncludeJournalsChange={(val) => setFilters((prev) => ({ ...prev, includeJournals: val }))}
+        hideOrphans={filters.hideOrphans}
+        onHideOrphansChange={(val) => setFilters((prev) => ({ ...prev, hideOrphans: val }))}
+      />
 
       {/* Main Canvas or Empty State */}
       {nodes.length === 0 ? (
@@ -134,6 +189,7 @@ export function GraphScreen() {
           <GraphCanvas
             nodes={nodes}
             edges={edges}
+            settings={physicsSettings}
             onOpenNote={handleOpenNote}
             onFocusNode={handleFocusNode}
             isLocalView={isLocalMode}

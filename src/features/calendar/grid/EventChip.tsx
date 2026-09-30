@@ -15,6 +15,27 @@ interface EventChipProps {
 
 type DragMode = 'move' | 'resize-top' | 'resize-bottom' | null;
 
+// Soft color palette for event chips (cycles by eventId hash)
+const EVENT_COLORS = [
+  { bg: 'bg-violet-50 dark:bg-violet-950/40', bar: 'bg-violet-500', tag: 'bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300' },
+  { bg: 'bg-blue-50 dark:bg-blue-950/40',     bar: 'bg-blue-500',   tag: 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300' },
+  { bg: 'bg-emerald-50 dark:bg-emerald-950/40', bar: 'bg-emerald-500', tag: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300' },
+  { bg: 'bg-amber-50 dark:bg-amber-950/40',   bar: 'bg-amber-500',  tag: 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300' },
+  { bg: 'bg-rose-50 dark:bg-rose-950/40',     bar: 'bg-rose-500',   tag: 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300' },
+  { bg: 'bg-indigo-50 dark:bg-indigo-950/40', bar: 'bg-indigo-500', tag: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300' },
+];
+
+function getEventColor(eventId: string | number) {
+  // Simple hash for consistent color per event
+  const str = String(eventId);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return EVENT_COLORS[Math.abs(hash) % EVENT_COLORS.length];
+}
+
 export function EventChip({
   positioned,
   onClick,
@@ -32,12 +53,11 @@ export function EventChip({
   const initialHeightRef = useRef(height);
   const isDraggingRef = useRef(false);
 
-  const chipColor = 'var(--color-accent)';
+  const colors = getEventColor(occurrence.eventId);
 
   // Helper to handle mouse drag start on desktop only
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, mode: DragMode) => {
-      // Mobile tap only (EXPANSION_PLAN §5.3 / Phase 3 spec: desktop only drag)
       if (e.pointerType === 'touch' || e.button !== 0 || !onReschedule) return;
 
       e.preventDefault();
@@ -51,20 +71,15 @@ export function EventChip({
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
         const deltaY = moveEvent.clientY - startPointerYRef.current;
-        if (Math.abs(deltaY) > 4) {
-          isDraggingRef.current = true;
-        }
+        if (Math.abs(deltaY) > 4) isDraggingRef.current = true;
 
-        // Snap to 15-minute intervals (15 min = 15px with 60px/hr)
-        const snapStepPx = (15 / 60) * HOUR_HEIGHT; // 15px
+        const snapStepPx = (15 / 60) * HOUR_HEIGHT;
         const snappedDelta = Math.round(deltaY / snapStepPx) * snapStepPx;
 
         if (mode === 'move') {
-          // Clamp so top doesn't go below 0 or above grid
           const newTop = Math.max(0, Math.min(24 * HOUR_HEIGHT - initialHeightRef.current, initialTopRef.current + snappedDelta));
           setDragOffsetPx(newTop - initialTopRef.current);
         } else if (mode === 'resize-bottom') {
-          // Minimum 15-min height
           const newH = Math.max(snapStepPx, initialHeightRef.current + snappedDelta);
           setResizeDeltaPx(newH - initialHeightRef.current);
         } else if (mode === 'resize-top') {
@@ -82,14 +97,12 @@ export function EventChip({
         window.removeEventListener('pointerup', handlePointerUp);
 
         if (isDraggingRef.current) {
-          // Calculate new startAt and endAt from applied deltas
           const origStart = new Date(occurrence.startAt);
           const origEnd = occurrence.endAt
             ? new Date(occurrence.endAt)
             : new Date(origStart.getTime() + 60 * 60 * 1000);
 
           if (mode === 'move') {
-            // Minutes delta
             setDragOffsetPx((currOffset) => {
               const minutesDelta = (currOffset / HOUR_HEIGHT) * 60;
               const newStart = new Date(origStart.getTime() + minutesDelta * 60 * 1000);
@@ -130,9 +143,7 @@ export function EventChip({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isDraggingRef.current) {
-      onClick(occurrence);
-    }
+    if (!isDraggingRef.current) onClick(occurrence);
   };
 
   const currentTop = top + dragOffsetPx;
@@ -148,16 +159,19 @@ export function EventChip({
       style={{
         top: `${currentTop}px`,
         height: `${currentHeight}px`,
-        left: `${leftPercent}%`,
-        width: `${widthPercent}%`,
-        borderLeftColor: chipColor,
+        left: `${leftPercent + 1}%`,
+        width: `${widthPercent - 2}%`,
       }}
-      className={`absolute group border-l-[3.5px] rounded-lg px-2 py-1 text-left text-xs transition-shadow select-none cursor-pointer overflow-hidden z-10 ${
-        activeDragMode
+      className={`absolute group rounded-xl overflow-hidden text-left text-xs select-none cursor-pointer z-10 transition-shadow
+        ${colors.bg} border border-transparent
+        ${activeDragMode
           ? 'shadow-float ring-2 ring-accent opacity-90 cursor-grabbing'
-          : 'shadow-xs hover:shadow-card hover:brightness-95 dark:hover:brightness-110'
-      } bg-surface-2 dark:bg-surface border border-border`}
+          : 'hover:shadow-card hover:ring-1 hover:ring-accent/20'
+        }`}
     >
+      {/* Refleq-style: left accent bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-[3.5px] rounded-l-xl ${colors.bar}`} />
+
       {/* Top resize handle (desktop only) */}
       <div
         onPointerDown={(e) => handlePointerDown(e, 'resize-top')}
@@ -165,26 +179,30 @@ export function EventChip({
         title="Drag to resize start time"
       />
 
-      <div className="flex items-center justify-between gap-1 leading-tight">
-        <span className="font-semibold text-ink truncate text-[11px] sm:text-xs">
-          {occurrence.title}
-        </span>
-        {occurrence.recurrence !== 'none' && (
-          <span className="text-[10px] text-ink-muted shrink-0" title="Recurring event">
-            ↻
-          </span>
+      {/* Content */}
+      <div className="pl-3 pr-2 pt-1.5 pb-1 h-full flex flex-col justify-between">
+        <div>
+          <div className="flex items-start justify-between gap-1">
+            <span className="font-semibold text-[11px] sm:text-xs leading-tight text-ink line-clamp-2">
+              {occurrence.title}
+            </span>
+            {occurrence.recurrence !== 'none' && (
+              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${colors.tag}`}>
+                ↻
+              </span>
+            )}
+          </div>
+          <div className="text-[10px] text-ink-muted mt-0.5 truncate">
+            {formatEventTime(occurrence.startAt, occurrence.endAt, occurrence.allDay)}
+          </div>
+        </div>
+
+        {currentHeight >= 65 && occurrence.description && (
+          <div className="text-[10px] text-ink-muted line-clamp-1 opacity-80 mt-0.5">
+            {occurrence.description}
+          </div>
         )}
       </div>
-
-      <div className="text-[10px] text-ink-muted truncate mt-0.5">
-        {formatEventTime(occurrence.startAt, occurrence.endAt, occurrence.allDay)}
-      </div>
-
-      {currentHeight >= 55 && occurrence.description && (
-        <div className="text-[10px] text-ink-muted line-clamp-1 mt-0.5 opacity-80">
-          {occurrence.description}
-        </div>
-      )}
 
       {/* Bottom resize handle (desktop only) */}
       <div

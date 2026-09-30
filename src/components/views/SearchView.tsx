@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useSearchNotes } from '../../db/notesRepo';
 import { getDisplayTitle, getSearchSnippet, formatRelativeTime } from '../../utils/format';
+import { useDebounce } from '../../lib/debounce';
 
 function HighlightedText({ text, query }: { text: string; query: string }): ReactNode {
   if (!query.trim() || !text) return text;
@@ -32,8 +33,9 @@ function HighlightedText({ text, query }: { text: string; query: string }): Reac
 
 export function SearchView() {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 200);
   const navigate = useNavigate();
-  const results = useSearchNotes(query);
+  const results = useSearchNotes(debouncedQuery);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const resultList = results ?? [];
@@ -96,12 +98,12 @@ export function SearchView() {
             </p>
           </div>
         </div>
-      ) : results === undefined ? (
+      ) : results === undefined || (query.trim() !== '' && query !== debouncedQuery) ? (
         <div className="py-8 text-center text-sm text-ink-muted animate-pulse">Searching...</div>
       ) : resultList.length === 0 ? (
         <div className="rounded-card border border-border p-8 text-center space-y-2 bg-surface shadow-card">
           <p className="text-sm text-ink">
-            No notes found matching <span className="font-semibold">"{query}"</span>
+            No notes found matching <span className="font-semibold">"{debouncedQuery}"</span>
           </p>
           <p className="text-xs text-ink-muted">
             Search is case-insensitive across titles, bodies, and tags.
@@ -127,7 +129,7 @@ export function SearchView() {
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const note = resultList[virtualRow.index];
-                const snippet = getSearchSnippet(note.content, query);
+                const snippet = getSearchSnippet(note.content, debouncedQuery);
 
                 return (
                   <div
@@ -159,7 +161,7 @@ export function SearchView() {
                             </span>
                           )}
                           <h4 className="font-semibold text-base text-ink truncate">
-                            <HighlightedText text={getDisplayTitle(note)} query={query} />
+                            <HighlightedText text={getDisplayTitle(note)} query={debouncedQuery} />
                           </h4>
                         </div>
                         <span className="text-[11px] text-ink-muted shrink-0">
@@ -169,7 +171,7 @@ export function SearchView() {
 
                       {snippet && (
                         <p className="text-sm text-ink-muted line-clamp-2 leading-relaxed">
-                          <HighlightedText text={snippet} query={query} />
+                          <HighlightedText text={snippet} query={debouncedQuery} />
                         </p>
                       )}
 
@@ -180,7 +182,7 @@ export function SearchView() {
                               key={t}
                               className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-2 text-ink-muted"
                             >
-                              #<HighlightedText text={t} query={query} />
+                              #<HighlightedText text={t} query={debouncedQuery} />
                             </span>
                           ))}
                         </div>

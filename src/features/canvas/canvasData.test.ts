@@ -1,66 +1,106 @@
-import { describe, it, expect } from 'vitest';
-import { createDefaultCanvasDoc } from '../../db/repos/canvasRepo';
-import type { CanvasDoc, CanvasEntity, Stroke } from '../../types/canvas';
+import { describe, it, expect, beforeEach } from 'vitest';
+import 'fake-indexeddb/auto';
+import { db } from '../../db/database';
+import { canvasRepo, createDefaultCanvasDoc } from '../../db/repos/canvasRepo';
+import type { CanvasDoc, Stroke } from '../../types/canvas';
 
-describe('Canvas Data Model', () => {
-  it('creates default canvas doc with 3000x2000 fixed virtual page dimensions', () => {
-    const doc = createDefaultCanvasDoc();
-    expect(doc.version).toBe(1);
-    expect(doc.width).toBe(3000);
-    expect(doc.height).toBe(2000);
-    expect(doc.bg).toBe('#ffffff');
-    expect(doc.strokes).toEqual([]);
+describe('Canvas Repository & Data Integration', () => {
+  beforeEach(async () => {
+    await db.canvases.clear();
   });
 
-  it('preserves stroke immutability and doc structure during stroke updates', () => {
-    const doc: CanvasDoc = createDefaultCanvasDoc();
-    const stroke1: Stroke = {
+  it('creates default canvas doc with 3000x2000 fixed dimensions and custom background', () => {
+    const defaultDoc = createDefaultCanvasDoc();
+    expect(defaultDoc.version).toBe(1);
+    expect(defaultDoc.width).toBe(3000);
+    expect(defaultDoc.height).toBe(2000);
+    expect(defaultDoc.bg).toBe('#ffffff');
+    expect(defaultDoc.strokes).toEqual([]);
+
+    const darkDoc = createDefaultCanvasDoc('#1e1e2e');
+    expect(darkDoc.bg).toBe('#1e1e2e');
+  });
+
+  it('creates, retrieves, and persists a canvas in Dexie database', async () => {
+    const created = await canvasRepo.createCanvas({
+      title: 'Architecture Blueprint',
+      tags: ['#System', 'Architecture '],
+      linkedNoteId: 42,
+    });
+
+    expect(created.id).toBeDefined();
+    expect(created.title).toBe('Architecture Blueprint');
+    expect(created.tags).toEqual(['system', 'architecture']);
+    expect(created.linkedNoteId).toBe(42);
+    expect(created.trashedAt).toBeNull();
+
+    const fetched = await canvasRepo.getCanvasById(created.id!);
+    expect(fetched).toBeDefined();
+    expect(fetched?.title).toBe('Architecture Blueprint');
+    expect(fetched?.tags).toEqual(['system', 'architecture']);
+  });
+
+  it('updates canvas strokes and document structure', async () => {
+    const canvas = await canvasRepo.createCanvas({ title: 'Sketch Pad' });
+    const stroke: Stroke = {
       id: 's1',
       tool: 'pen',
-      color: '#18181b',
-      size: 8,
+      color: '#ff0000',
+      size: 4,
       points: [
-        [100, 100, 0.5],
-        [105, 108, 0.6],
+        [10, 10, 0.5],
+        [20, 25, 0.7],
       ],
     };
 
-    const stroke2: Stroke = {
-      id: 's2',
-      tool: 'highlighter',
-      color: 'oklch(0.64 0.13 60)',
-      size: 16,
-      points: [
-        [200, 200, 0.5],
-        [250, 200, 0.5],
-      ],
+    const newDoc: CanvasDoc = {
+      ...canvas.doc,
+      strokes: [stroke],
     };
 
-    const updatedDoc: CanvasDoc = {
-      ...doc,
-      strokes: [...doc.strokes, stroke1, stroke2],
-    };
+    await canvasRepo.updateCanvasDoc(canvas.id!, newDoc);
 
-    expect(doc.strokes).toHaveLength(0); // Original unchanged
-    expect(updatedDoc.strokes).toHaveLength(2);
-    expect(updatedDoc.strokes[0].tool).toBe('pen');
-    expect(updatedDoc.strokes[1].tool).toBe('highlighter');
+    const updated = await canvasRepo.getCanvasById(canvas.id!);
+    expect(updated?.doc.strokes).toHaveLength(1);
+    expect(updated?.doc.strokes[0].id).toBe('s1');
+    expect(updated?.doc.strokes[0].tool).toBe('pen');
   });
 
-  it('supports linking a canvas to a parent note with provenance', () => {
-    const entity: CanvasEntity = {
-      id: 42,
-      title: 'Architecture Diagram',
-      doc: createDefaultCanvasDoc(),
-      linkedNoteId: 108,
-      tags: ['design', 'v2'],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      trashedAt: null,
-    };
+  it('handles soft-delete (trash), restoration, and permanent removal', async () => {
+    const canvas = await canvasRepo.createCanvas({ title: 'Temporary Wireframe' });
+    expect(canvas.trashedAt).toBeNull();
 
-    expect(entity.linkedNoteId).toBe(108);
-    expect(entity.tags).toContain('design');
-    expect(entity.trashedAt).toBeNull();
+    await canvasRepo.trashCanvas(canvas.id!);
+    const trashed = await canvasRepo.getCanvasById(canvas.id!);
+    expect(trashed?.trashedAt).not.toBeNull();
+
+    const activeList = await canvasRepo.getAllCanvases(false);
+    expect(activeList.find((c) => c.id === canvas.id)).toBeUndefined();
+
+    const trashedList = await canvasRepo.getTrashedCanvases();
+    expect(trashedList.find((c) => c.id === canvas.id)).toBeDefined();
+
+    await canvasRepo.restoreCanvas(canvas.id!);
+    const restored = await canvasRepo.getCanvasById(canvas.id!);
+    expect(restored?.trashedAt).toBeNull();
+
+    await canvasRepo.deleteCanvasPermanently(canvas.id!);
+    const deleted = await canvasRepo.getCanvasById(canvas.id!);
+    expect(deleted).toBeUndefined();
+  });
+
+  it('filters canvases linked to specific parent notes', async () => {
+    await canvasRepo.createCanvas({ title: 'Canvas A', linkedNoteId: 101 });
+    await canvasRepo.createCanvas({ title: 'Canvas B', linkedNoteId: 101 });
+    await canvasRepo.createCanvas({ title: 'Canvas C', linkedNoteId: 202 });
+
+    const note101Canvases = await canvasRepo.getCanvasesForNote(101);
+    expect(note101Canvases).toHaveLength(2);
+    expect(note101Canvases.map((c) => c.title)).toContain('Canvas A');
+    expect(note101Canvases.map((c) => c.title)).toContain('Canvas B');
+
+    const note202Canvases = await canvasRepo.getCanvasesForNote(202);
+    expect(note202Canvases).toHaveLength(1);
+    expect(note202Canvases[0].title).toBe('Canvas C');
   });
 });

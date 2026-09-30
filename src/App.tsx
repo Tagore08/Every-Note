@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SnackbarProvider } from './context/SnackbarContext';
 import { AppShell } from './app/AppShell';
@@ -7,6 +8,7 @@ import { templatesRepo } from './db/repos/templatesRepo';
 import { linksRepo } from './db/repos/linksRepo';
 import { timerPresetsRepo } from './db/repos/timerPresetsRepo';
 import { snippetsRepo } from './db/repos/snippetsRepo';
+import { foldersRepo } from './db/repos/foldersRepo';
 import { FocusTimerProvider } from './features/focus/FocusTimerContext';
 
 // Code-split all feature views using React.lazy per EXPANSION_PLAN §6 & §7
@@ -18,6 +20,9 @@ const RoutinesScreen = lazy(() =>
 );
 const InboxView = lazy(() =>
   import('./components/views/InboxView').then((m) => ({ default: m.InboxView }))
+);
+const ScratchpadScreen = lazy(() =>
+  import('./features/scratchpad/ScratchpadScreen').then((m) => ({ default: m.ScratchpadScreen }))
 );
 const NotesView = lazy(() =>
   import('./components/views/NotesView').then((m) => ({ default: m.NotesView }))
@@ -63,6 +68,9 @@ const SearchView = lazy(() =>
 const TagsView = lazy(() =>
   import('./components/views/TagsView').then((m) => ({ default: m.TagsView }))
 );
+const TextExpansionView = lazy(() =>
+  import('./components/views/TextExpansionView').then((m) => ({ default: m.TextExpansionView }))
+);
 const TemplatesScreen = lazy(() =>
   import('./features/templates/TemplatesScreen').then((m) => ({ default: m.TemplatesScreen }))
 );
@@ -94,10 +102,13 @@ const SeedDebugScreen = lazy(() =>
 
 export function App() {
   useEffect(() => {
+    void Style;
+    StatusBar.setOverlaysWebView({ overlay: true });
     // Seed defaults for Templates, Timer Presets, and Snippets idempotently on first load
     templatesRepo.seedDefaults().catch((err) => console.error('Failed to seed templates:', err));
     timerPresetsRepo.seedDefaults().catch((err) => console.error('Failed to seed timer presets:', err));
     snippetsRepo.seedDefaults().catch((err) => console.error('Failed to seed snippets:', err));
+    foldersRepo.ensureDefaultVaultFolder().catch((err) => console.error('Failed to ensure vault folder:', err));
     linksRepo.ensureInitialReindex().catch((err) => console.error('Failed to ensure links reindex:', err));
   }, []);
 
@@ -116,6 +127,7 @@ export function App() {
 
               {/* Primary features */}
               <Route path="inbox" element={<InboxView />} />
+              <Route path="scratchpad" element={<ScratchpadScreen />} />
               <Route path="journal" element={<JournalScreen />} />
               <Route path="journal/:date" element={<JournalScreen />} />
               <Route path="notes" element={<NotesView />} />
@@ -137,6 +149,9 @@ export function App() {
               <Route path="search" element={<SearchView />} />
               <Route path="tags" element={<TagsView />} />
               <Route path="areas" element={<Navigate to="/tags" replace />} />
+              <Route path="text-expansion" element={<TextExpansionView />} />
+              <Route path="snippets" element={<Navigate to="/text-expansion" replace />} />
+              <Route path="expansions" element={<Navigate to="/text-expansion" replace />} />
               <Route path="archive" element={<ArchiveView />} />
               <Route path="trash" element={<TrashView />} />
               <Route path="settings" element={<SettingsView />} />

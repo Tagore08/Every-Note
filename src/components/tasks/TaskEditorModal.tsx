@@ -8,6 +8,8 @@ import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
 import { useSnippetAutocomplete } from '../../features/snippets/useSnippetAutocomplete';
 import { SnippetSuggestPill } from '../../features/snippets/SnippetSuggestPill';
+import { sanitizeTag } from '../../lib/tags';
+import { useSnackbar } from '../../context/SnackbarContext';
 
 interface TaskEditorModalProps {
   task: Task | null;
@@ -31,6 +33,7 @@ function dateToInputString(date?: Date | null): string {
 }
 
 export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorModalProps) {
+  const { showSnackbar } = useSnackbar();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<TaskStatus>('todo');
@@ -141,20 +144,36 @@ export function TaskEditorModal({ task, isOpen, onClose, onDelete }: TaskEditorM
     if (e) e.preventDefault();
     const clean = subtaskInput.trim();
     if (!clean || !task.id) return;
-    await tasksRepo.createSubtask(task.id, clean);
-    setSubtaskInput('');
+    try {
+      await tasksRepo.createSubtask(task.id, clean);
+      setSubtaskInput('');
+    } catch (err) {
+      console.error('Failed to add subtask:', err);
+      showSnackbar({ message: 'Failed to add subtask' });
+    }
   };
 
   const handleToggleSubtask = async (subtaskId: number, currentStatus: TaskStatus) => {
-    await tasksRepo.toggleTaskStatus(subtaskId, currentStatus);
+    try {
+      await tasksRepo.toggleTaskStatus(subtaskId, currentStatus);
+    } catch (err) {
+      console.error('Failed to update subtask:', err);
+      showSnackbar({ message: 'Failed to update subtask' });
+    }
   };
 
   const handleDeleteSubtask = async (subtaskId: number) => {
-    await tasksRepo.deleteTask(subtaskId);
+    try {
+      await tasksRepo.deleteTask(subtaskId);
+      showSnackbar({ message: 'Subtask deleted' });
+    } catch (err) {
+      console.error('Failed to delete subtask:', err);
+      showSnackbar({ message: 'Failed to delete subtask' });
+    }
   };
 
   const handleAddTag = (rawTag: string) => {
-    const clean = rawTag.trim().replace(/^#/, '');
+    const clean = sanitizeTag(rawTag);
     if (!clean || tags.includes(clean)) {
       setTagInput('');
       return;

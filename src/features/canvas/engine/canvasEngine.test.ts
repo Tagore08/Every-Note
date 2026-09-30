@@ -138,7 +138,7 @@ describe('Canvas History', () => {
       points: [[2, 2, 0.5]],
     };
 
-    const history = new CanvasHistory(50, []);
+    const history = new CanvasHistory<Stroke[]>(50, []);
     expect(history.canUndo()).toBe(false);
     expect(history.canRedo()).toBe(false);
 

@@ -126,14 +126,14 @@ export function TodayScreen() {
   }, []);
 
   return (
-    <div data-testid="today-screen" className="max-w-3xl mx-auto space-y-6 pb-16">
+    <div data-testid="today-screen" className="max-w-3xl mx-auto space-y-5 pb-16">
       {/* 1. Greeting Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-border">
+      <div className="flex items-center justify-between pt-1 pb-2">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-ink">
-            {greeting}
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink leading-tight">
+            {greeting} 👋
           </h1>
-          <p className="text-xs text-ink-muted mt-0.5 font-medium">
+          <p className="text-xs text-ink-faint mt-1 font-medium">
             {fullDateFormatted}
           </p>
         </div>
@@ -142,10 +142,10 @@ export function TodayScreen() {
           <button
             type="button"
             onClick={() => navigate('/settings')}
-            className="p-2.5 rounded-xl border border-border bg-surface hover:bg-surface-2 text-ink-muted hover:text-ink transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-surface border border-border/60 hover:bg-surface-2 text-ink-muted hover:text-ink transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center shadow-xs"
             title="Settings"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>

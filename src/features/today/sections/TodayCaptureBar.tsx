@@ -13,7 +13,7 @@ interface TodayCaptureBarProps {
 }
 
 export function TodayCaptureBar({
-  className = "sticky top-2 sm:top-4 z-20 p-2 sm:p-2.5 rounded-2xl bg-[var(--color-surface)]/95 backdrop-blur-md border border-[var(--color-border)] shadow-card transition-all"
+  className = "sticky top-2 z-20 p-2.5 rounded-2xl bg-surface/96 backdrop-blur-xl border border-border/60 shadow-card transition-all"
 }: TodayCaptureBarProps = {}) {
   const navigate = useNavigate();
   const { showUndo, showSnackbar } = useSnackbar();

@@ -1,166 +1,158 @@
-import { describe, it, expect } from 'vitest';
-import type { BackupEnvelope, ExportCanvas } from './exportService';
+import { describe, it, expect, beforeEach } from 'vitest';
+import 'fake-indexeddb/auto';
+import { db } from './database';
+import {
+  buildFullBackupEnvelope,
+  blobToBase64,
+  base64ToBlob,
+} from './exportService';
 import type { Note } from '../types/note';
 import type { Task } from '../types/task';
-import type { Routine } from '../types/routine';
-import type { TimerPreset } from '../types/focus';
+import type { Folder } from '../types/folder';
+import type { Snippet } from '../types/snippet';
+import type { StickyNote } from '../types/sticky';
 
-describe('Export/Import Envelope Round-Trip Completeness Audit (Phase 7)', () => {
-  it('covers all v2 data types in full backup envelope specification', () => {
-    // 1. Journal Note
-    const sampleNote: Note = {
-      id: 1,
-      title: 'Daily Reflection',
-      content: 'Reflecting on [[Project Alpha]].',
-      tags: ['reflection'],
-      pinned: false,
-      archived: false,
-      trashedAt: null,
-      inbox: false,
-      kind: 'journal',
-      journalDate: '2026-09-25',
-      mood: 5,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+describe('Export Service & Backup Envelope Engine', () => {
+  beforeEach(async () => {
+    await db.notes.clear();
+    await db.folders.clear();
+    await db.tasks.clear();
+    await db.events.clear();
+    await db.people.clear();
+    await db.habits.clear();
+    await db.habitLogs.clear();
+    await db.focusSessions.clear();
+    await db.attachments.clear();
+    await db.templates.clear();
+    await db.links.clear();
+    await db.routines.clear();
+    await db.routineRuns.clear();
+    await db.canvases.clear();
+    await db.timerPresets.clear();
+    await db.snippets.clear();
+    await db.stickyNotes.clear();
+  });
 
-    // 2. Task with Subtask Provenance & Tags
-    const sampleTask: Task = {
-      id: 2,
-      title: 'Launch v2.0 Release',
-      status: 'todo',
-      priority: 'high',
-      dueAt: new Date('2026-09-26T12:00:00Z'),
-      completedAt: null,
-      parentTaskId: null,
-      routineRunId: 10,
-      importance: false,
-      urgency: false,
-      tags: ['work'],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+  describe('buildFullBackupEnvelope', () => {
+    it('queries all Dexie tables and constructs a specification-compliant v18 BackupEnvelope', async () => {
+      // 1. Seed database records
+      const sampleFolder: Folder = {
+        name: 'Architecture',
+        parentId: null,
+        sortOrder: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const folderId = await db.folders.add(sampleFolder);
 
-    // 3. Canvas Doc
-    const sampleCanvas: ExportCanvas = {
-      id: 1,
-      title: 'System Diagram',
-      doc: {
-        version: 1,
-        width: 3000,
-        height: 2000,
-        bg: '#ffffff',
-        strokes: [],
-      },
-      linkedNoteId: 1,
-      tags: ['arch'],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      trashedAt: null,
-      thumbBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-    };
+      const sampleNote: Note = {
+        title: 'Project Roadmap',
+        content: 'System architecture diagram and roadmap.',
+        tags: ['planning', 'arch'],
+        pinned: true,
+        archived: false,
+        trashedAt: null,
+        inbox: false,
+        folderId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await db.notes.add(sampleNote);
 
-    // 4. Routine & Run
-    const sampleRoutine: Routine = {
-      id: 5,
-      name: 'Evening Wind-down',
-      emoji: '🌙',
-      daysOfWeek: [1, 2, 3, 4, 5],
-      timeOfDay: 'evening',
-      items: [{ uid: 'r1', kind: 'custom', title: 'Write reflection', durationMin: 15 }],
-      active: true,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+      const sampleTask: Task = {
+        title: 'Complete Stage 5',
+        status: 'todo',
+        priority: 'high',
+        dueAt: new Date(),
+        completedAt: null,
+        parentTaskId: null,
+        routineRunId: null,
+        importance: true,
+        urgency: true,
+        tags: ['qa', 'build'],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await db.tasks.add(sampleTask);
 
-    // 5. Timer Preset
-    const samplePreset: TimerPreset = {
-      id: 3,
-      name: 'Deep Focus',
-      focusMin: 50,
-      shortBreakMin: 10,
-      longBreakMin: 30,
-      cycles: 2,
-      autoStartBreaks: true,
-      autoStartFocus: false,
-      sound: true,
-      isDefault: false,
-    };
+      const sampleSnippet: Snippet = {
+        trigger: '#addr',
+        expansion: '100 Innovation Way',
+        tags: ['work'],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await db.snippets.add(sampleSnippet);
 
-    // Construct full BackupEnvelope
-    const envelope: BackupEnvelope = {
-      version: 16,
-      app: 'notes-app',
-      exportedAt: new Date().toISOString(),
-      notes: [sampleNote],
-      folders: [
-        {
-          id: 1,
-          name: 'Projects',
-          parentId: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ],
-      tasks: [sampleTask],
-      events: [],
-      people: [],
-      attachments: [],
-      habits: [],
-      habitLogs: [],
-      focusSessions: [],
-      templates: [],
-      links: [{ id: 1, sourceId: 1, targetId: null, targetTitle: 'project alpha', context: 'Reflecting on [[Project Alpha]].', createdAt: Date.now() }],
-      routines: [sampleRoutine],
-      routineRuns: [],
-      canvases: [sampleCanvas],
-      timerPresets: [samplePreset],
-      settings: {
-        theme: 'system',
-        flags: {
-          canvas: true,
-          journal: true,
-          graph: true,
-          routines: true,
-          calendarPro: true,
-          insights: true,
-          focusPro: true,
-          habitAnalytics: true,
-          smartInbox: true,
-        },
-      },
-    };
+      const sampleSticky: StickyNote = {
+        x: 50,
+        y: 80,
+        width: 200,
+        height: 180,
+        color: 'yellow',
+        content: 'Remember to verify tests',
+        zIndex: 1,
+        showTimestamp: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await db.stickyNotes.add(sampleSticky);
 
-    // Verify envelope serialization and deserialization
-    const serialized = JSON.stringify(envelope);
-    const parsed: BackupEnvelope = JSON.parse(serialized);
+      // 2. Build envelope
+      const envelope = await buildFullBackupEnvelope();
 
-    expect(parsed.version).toBe(16);
-    expect(parsed.app).toBe('notes-app');
-    expect(parsed.folders).toHaveLength(1);
-    expect(parsed.folders![0].name).toBe('Projects');
-    expect(parsed.notes).toHaveLength(1);
-    expect(parsed.notes[0].kind).toBe('journal');
-    expect(parsed.notes[0].journalDate).toBe('2026-09-25');
-    expect(parsed.notes[0].mood).toBe(5);
+      // 3. Verify envelope metadata and table contents
+      expect(envelope.version).toBe(18);
+      expect(envelope.app).toBe('notes-app');
+      expect(envelope.exportedAt).toBeDefined();
 
-    expect(parsed.tasks).toHaveLength(1);
-    expect(parsed.tasks?.[0].tags).toContain('work');
-    expect(parsed.tasks?.[0].routineRunId).toBe(10);
+      expect(envelope.folders).toHaveLength(1);
+      expect(envelope.folders![0].name).toBe('Architecture');
 
-    expect(parsed.canvases).toHaveLength(1);
-    expect(parsed.canvases?.[0].doc.width).toBe(3000);
-    expect(parsed.canvases?.[0].thumbBase64).toContain('data:image/png;base64');
+      expect(envelope.notes).toHaveLength(1);
+      expect(envelope.notes[0].title).toBe('Project Roadmap');
+      expect(envelope.notes[0].pinned).toBe(true);
 
-    expect(parsed.routines).toHaveLength(1);
-    expect(parsed.routines?.[0].name).toBe('Evening Wind-down');
+      expect(envelope.tasks).toHaveLength(1);
+      expect(envelope.tasks![0].title).toBe('Complete Stage 5');
+      expect(envelope.tasks![0].priority).toBe('high');
 
-    expect(parsed.timerPresets).toHaveLength(1);
-    expect(parsed.timerPresets?.[0].name).toBe('Deep Focus');
+      expect(envelope.snippets).toHaveLength(1);
+      expect(envelope.snippets![0].trigger).toBe('#addr');
 
-    expect(parsed.links).toHaveLength(1);
-    expect(parsed.links?.[0].targetTitle).toBe('project alpha');
+      expect(envelope.stickyNotes).toHaveLength(1);
+      expect(envelope.stickyNotes![0].content).toBe('Remember to verify tests');
 
-    expect(parsed.settings?.flags?.focusPro).toBe(true);
+      expect(envelope.settings?.flags?.canvas).toBe(true);
+      expect(envelope.settings?.flags?.journal).toBe(true);
+    });
+  });
+
+  describe('Binary Blob <-> Base64 Serialization', () => {
+    it('performs lossless round-trip serialization between Blob and Base64', async () => {
+      const originalText = 'Hello binary world! 🚀 12345';
+      const originalBlob = new Blob([originalText], { type: 'text/plain' });
+
+      // Convert Blob to Base64
+      const base64 = await blobToBase64(originalBlob);
+      expect(typeof base64).toBe('string');
+      expect(base64.startsWith('data:text/plain;base64,')).toBe(true);
+
+      // Convert Base64 back to Blob
+      const restoredBlob = base64ToBlob(base64, 'text/plain');
+      expect(restoredBlob).toBeInstanceOf(Blob);
+      expect(restoredBlob.type).toBe('text/plain');
+
+      // Verify reconstructed text matches original
+      const restoredText = await restoredBlob.text();
+      expect(restoredText).toBe(originalText);
+    });
+
+    it('handles malformed base64 strings gracefully without throwing', () => {
+      const invalidBase64 = '@@@invalid-not-base64@@@';
+      const fallbackBlob = base64ToBlob(invalidBase64, 'application/octet-stream');
+      expect(fallbackBlob).toBeInstanceOf(Blob);
+      expect(fallbackBlob.size).toBe(0);
+    });
   });
 });

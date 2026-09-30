@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { db } from './database';
+import { db, TARGET_VERSION } from './database';
 import {
   buildFullBackupEnvelope,
   triggerDownload,
   saveBackupToOPFS,
 } from './exportService';
 
+export { TARGET_VERSION };
+
 const SCHEMA_VERSION_KEY = 'notes_app_schema_version';
-const TARGET_VERSION = 14; // Phase 6 schema version
 
 export interface BackupGateStatus {
   isUpgrading: boolean;
@@ -28,6 +29,18 @@ function setGateState(newState: Partial<BackupGateStatus>) {
   for (const listener of listeners) {
     listener(gateState);
   }
+}
+
+export function getGateState(): BackupGateStatus {
+  return gateState;
+}
+
+export function resetGateStateForTesting(): void {
+  gateState = {
+    isUpgrading: false,
+    message: '',
+    error: null,
+  };
 }
 
 async function checkRawDb(): Promise<{ exists: boolean; version: number; storeNames: string[] }> {
@@ -68,27 +81,47 @@ export async function runPreUpgradeBackupGate(): Promise<void> {
 
     try {
       // 1. Build backup before running Dexie migration
-      // Dexie can open and perform upgrades while preserving prior records
-      // In Dexie 4, opening the db runs upgrade() handlers in transaction.
-      // We read current data or build envelope.
       let envelope: any;
       try {
         envelope = await buildFullBackupEnvelope();
-      } catch (err) {
-        console.warn('Could not build standard envelope, proceeding with safe open:', err);
+      } catch (err: any) {
+        console.error('Failed to build pre-upgrade backup envelope:', err);
+        setGateState({
+          isUpgrading: true,
+          message: 'Pre-upgrade safety backup failed.',
+          error: `Could not build backup envelope: ${err?.message || 'Unknown error'}. Database upgrade aborted to protect your data.`,
+        });
+        return; // Abort upgrade! Prevent db.open() from running.
       }
 
-      if (envelope) {
-        const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `pre-upgrade-v${rawInfo.version || lastSeen || 7}-backup-${dateStr}.json`;
-        const json = JSON.stringify(envelope, null, 2);
-
-        // 2. Write to OPFS (primary reliable local file store)
-        await saveBackupToOPFS(json, filename);
-
-        // 3. Trigger browser download
-        triggerDownload(json, filename);
+      if (!envelope) {
+        console.error('Pre-upgrade envelope is empty or undefined');
+        setGateState({
+          isUpgrading: true,
+          message: 'Pre-upgrade safety backup failed.',
+          error: 'Backup envelope could not be created. Database upgrade aborted to protect your data.',
+        });
+        return; // Abort upgrade! Prevent db.open() from running.
       }
+
+      const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `pre-upgrade-v${rawInfo.version || lastSeen || 7}-backup-${dateStr}.json`;
+      const json = JSON.stringify(envelope, null, 2);
+
+      // 2. Write to OPFS (primary reliable local file store)
+      const opfsSaved = await saveBackupToOPFS(json, filename);
+      if (!opfsSaved) {
+        console.error('Failed to save backup to OPFS');
+        setGateState({
+          isUpgrading: true,
+          message: 'Safety backup could not be stored.',
+          error: 'Could not write safety backup to device storage (OPFS). Database upgrade aborted to prevent data loss.',
+        });
+        return; // Abort upgrade! Prevent db.open() from running.
+      }
+
+      // 3. Trigger browser download
+      triggerDownload(json, filename);
 
       // 4. Complete Dexie open and upgrade
       await db.open();
@@ -108,6 +141,7 @@ export async function runPreUpgradeBackupGate(): Promise<void> {
       setGateState({
         isUpgrading: false,
         message: 'Upgrade complete!',
+        error: null,
       });
     } catch (err: any) {
       console.error('Backup gate or upgrade failed:', err);
@@ -116,8 +150,7 @@ export async function runPreUpgradeBackupGate(): Promise<void> {
         message: 'Upgrade encountered an issue.',
         error: err?.message || 'Unknown migration error',
       });
-      // Fallback: still try opening
-      await db.open().catch(() => {});
+      // Safety: Never attempt fallback db.open() if upgrade/gate threw an error
     }
   } else {
     // Fresh install or already on current version

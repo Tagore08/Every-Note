@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './database';
+import { sanitizeTags } from '../lib/tags';
 import type { Task, TaskStatus } from '../types/task';
 import type { Note } from '../types/note';
 
@@ -20,7 +21,7 @@ export const tasksRepo = {
       updatedAt: now,
       importance: Boolean(draft.importance),
       urgency: Boolean(draft.urgency),
-      tags: Array.isArray(draft.tags) ? draft.tags : [],
+      tags: sanitizeTags(draft.tags),
       trashedAt: null,
       sourceNoteId: typeof draft.sourceNoteId === 'number' ? draft.sourceNoteId : null,
       personId: typeof draft.personId === 'number' ? draft.personId : null,
@@ -77,6 +78,9 @@ export const tasksRepo = {
       ...changes,
       updatedAt: new Date(),
     };
+    if (changes.tags !== undefined) {
+      cleanChanges.tags = sanitizeTags(changes.tags);
+    }
     if (changes.dueAt !== undefined) {
       cleanChanges.dueAt = changes.dueAt ? new Date(changes.dueAt) : null;
     }
@@ -250,7 +254,7 @@ export const tasksRepo = {
         updatedAt: isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
         importance: Boolean(raw.importance),
         urgency: Boolean(raw.urgency),
-        tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
+        tags: sanitizeTags(raw.tags),
         trashedAt: isNaN(trashedAt?.getTime() ?? 0) ? null : trashedAt,
         sourceNoteId: typeof raw.sourceNoteId === 'number' ? raw.sourceNoteId : null,
         personId: typeof raw.personId === 'number' ? raw.personId : null,
@@ -373,6 +377,36 @@ export function useSubtaskProgress(parentTaskId: number | null | undefined): { t
     return await tasksRepo.getSubtaskProgress(parentTaskId);
   }, [parentTaskId]);
   return progress ?? { total: 0, completed: 0 };
+}
+
+/**
+ * Hook that returns an aggregated map of parentTaskId -> { total, completed }
+ * for all subtasks across the entire tasks table in a single Dexie live subscription.
+ * Eliminates N+1 query overhead in list views.
+ */
+export function useAllSubtaskProgressMap(): Map<number, { total: number; completed: number }> {
+  const map = useLiveQuery(async () => {
+    const subtasks = await db.tasks
+      .filter((t) => typeof t.parentTaskId === 'number' && (!t.trashedAt || t.trashedAt === null))
+      .toArray();
+
+    const progressMap = new Map<number, { total: number; completed: number }>();
+    for (const st of subtasks) {
+      const pid = st.parentTaskId!;
+      let entry = progressMap.get(pid);
+      if (!entry) {
+        entry = { total: 0, completed: 0 };
+        progressMap.set(pid, entry);
+      }
+      entry.total += 1;
+      if (st.status === 'done') {
+        entry.completed += 1;
+      }
+    }
+    return progressMap;
+  }, []);
+
+  return map ?? new Map();
 }
 
 export function useTasksDueForRange(start: Date, end: Date): Task[] | undefined {

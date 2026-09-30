@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useRef, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useRef, useCallback, useMemo, type ReactNode } from 'react';
 
 export interface SnackbarAction {
   label: string;
@@ -79,8 +79,13 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const contextValue = useMemo(
+    () => ({ showSnackbar, showUndo, hideSnackbar }),
+    [showSnackbar, showUndo, hideSnackbar]
+  );
+
   return (
-    <SnackbarContext.Provider value={{ showSnackbar, showUndo, hideSnackbar }}>
+    <SnackbarContext.Provider value={contextValue}>
       {children}
 
       {/* Floating Global Snackbar */}

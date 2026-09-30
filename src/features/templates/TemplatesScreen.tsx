@@ -125,18 +125,15 @@ export function TemplatesScreen() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Templates</h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Reusable blueprints for tasks, notes, and journal entries.
-          </p>
-        </div>
+      {/* Subheader Toolbar */}
+      <div className="flex items-center justify-between gap-4 pb-2 border-b border-border/40">
+        <p className="text-xs text-ink-muted">
+          Reusable blueprints for tasks, notes, and journal entries.
+        </p>
         <button
           type="button"
           onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-accent text-accent-ink text-sm font-semibold hover:opacity-90 active:scale-95 transition-all shadow-card cursor-pointer min-h-[44px]"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-pill bg-accent text-accent-ink text-xs font-semibold hover:opacity-90 active:scale-95 transition-all shadow-card cursor-pointer"
         >
           <span>+ New Template</span>
         </button>

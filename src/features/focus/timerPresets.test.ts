@@ -1,8 +1,21 @@
-import { describe, it, expect } from 'vitest';
-import { DEFAULT_TIMER_PRESETS } from '../../db/repos/timerPresetsRepo';
+import { describe, it, expect, beforeEach } from 'vitest';
+import 'fake-indexeddb/auto';
+import { db } from '../../db/database';
+import { timerPresetsRepo, DEFAULT_TIMER_PRESETS } from '../../db/repos/timerPresetsRepo';
+import {
+  PLANT_LIBRARY,
+  PLANT_CATEGORIES,
+  getPlantById,
+  getPlantsByCategory,
+  DEFAULT_STARTER_PLANT_IDS,
+} from './plants/plantLibrary';
 
-describe('Timer Presets Model', () => {
-  it('seeds standard Pomodoro, Deep Work, and Quick presets', () => {
+describe('Timer Presets Repository & Database Integration', () => {
+  beforeEach(async () => {
+    await db.timerPresets.clear();
+  });
+
+  it('verifies standard preset configurations in DEFAULT_TIMER_PRESETS', () => {
     expect(DEFAULT_TIMER_PRESETS).toHaveLength(3);
     const names = DEFAULT_TIMER_PRESETS.map((p) => p.name);
     expect(names).toContain('Classic Pomodoro');
@@ -15,78 +28,122 @@ describe('Timer Presets Model', () => {
     expect(pomodoro.longBreakMin).toBe(15);
     expect(pomodoro.cycles).toBe(4);
     expect(pomodoro.isDefault).toBe(true);
-  });
 
-  it('verifies Deep Work interval configurations', () => {
     const deepWork = DEFAULT_TIMER_PRESETS.find((p) => p.name === 'Deep Work')!;
     expect(deepWork.focusMin).toBe(50);
     expect(deepWork.shortBreakMin).toBe(10);
     expect(deepWork.longBreakMin).toBe(30);
-    expect(deepWork.cycles).toBe(2);
-    expect(deepWork.isDefault).toBe(false);
-  });
 
-  it('verifies Quick preset configurations', () => {
     const quick = DEFAULT_TIMER_PRESETS.find((p) => p.name === 'Quick')!;
     expect(quick.focusMin).toBe(15);
     expect(quick.shortBreakMin).toBe(3);
     expect(quick.longBreakMin).toBe(0);
-    expect(quick.cycles).toBe(1);
+  });
+
+  it('seeds default presets idempotently into the database', async () => {
+    await timerPresetsRepo.seedDefaults();
+    let presets = await timerPresetsRepo.getAll();
+    expect(presets).toHaveLength(3);
+
+    // Calling seedDefaults a second time should not duplicate
+    await timerPresetsRepo.seedDefaults();
+    presets = await timerPresetsRepo.getAll();
+    expect(presets).toHaveLength(3);
+
+    const defaultPreset = await timerPresetsRepo.getDefault();
+    expect(defaultPreset.name).toBe('Classic Pomodoro');
+    expect(defaultPreset.focusMin).toBe(25);
+  });
+
+  it('creates custom presets and supports switching the default preset', async () => {
+    await timerPresetsRepo.seedDefaults();
+
+    const created = await timerPresetsRepo.create({
+      name: 'Ultra Sprint',
+      focusMin: 10,
+      shortBreakMin: 2,
+      longBreakMin: 5,
+      cycles: 3,
+      autoStartBreaks: false,
+      autoStartFocus: false,
+      sound: true,
+      isDefault: false,
+    });
+
+    expect(created).toBeDefined();
+    expect(created.name).toBe('Ultra Sprint');
+    expect(created.isDefault).toBe(false);
+
+    // Switch default to Ultra Sprint
+    await timerPresetsRepo.setDefault(created.id!);
+
+    const newDefault = await timerPresetsRepo.getDefault();
+    expect(newDefault.id).toBe(created.id);
+    expect(newDefault.name).toBe('Ultra Sprint');
+
+    // Previous default should now be false
+    const all = await timerPresetsRepo.getAll();
+    const oldDefault = all.find((p) => p.name === 'Classic Pomodoro');
+    expect(oldDefault?.isDefault).toBe(false);
+  });
+
+  it('updates, duplicates, and deletes presets with fallback default re-assignment', async () => {
+    await timerPresetsRepo.seedDefaults();
+    const presets = await timerPresetsRepo.getAll();
+    const deepWork = presets.find((p) => p.name === 'Deep Work')!;
+
+    await timerPresetsRepo.update(deepWork.id!, { focusMin: 60, cycles: 3 });
+    const updated = await db.timerPresets.get(deepWork.id!);
+    expect(updated?.focusMin).toBe(60);
+    expect(updated?.cycles).toBe(3);
+
+    // Test duplicate
+    const copy = await timerPresetsRepo.duplicate(deepWork.id!);
+    expect(copy).toBeDefined();
+    expect(copy?.name).toBe('Deep Work (Copy)');
+    expect(copy?.focusMin).toBe(60);
+
+    // Test deleting the default preset: should automatically promote remaining preset
+    const currentDefault = await timerPresetsRepo.getDefault();
+    await timerPresetsRepo.delete(currentDefault.id!);
+
+    const nextDefault = await timerPresetsRepo.getDefault();
+    expect(nextDefault.id).not.toBe(currentDefault.id);
+    expect(nextDefault.isDefault).toBe(true);
   });
 });
 
-describe('Focus Plant Gamification Engine (Phase 5)', () => {
-  const PLANT_TYPES = ['bonsai', 'sunflower', 'cactus'] as const;
+describe('Gamified Plant Library System Integration', () => {
+  it('contains valid categories and starter plant varieties', () => {
+    expect(PLANT_CATEGORIES).toHaveLength(3);
+    const categoryIds = PLANT_CATEGORIES.map((c) => c.id);
+    expect(categoryIds).toEqual(['low_water', 'moderate', 'high_water']);
 
-  it('supports the 3 core plant varieties', () => {
-    expect(PLANT_TYPES).toContain('bonsai');
-    expect(PLANT_TYPES).toContain('sunflower');
-    expect(PLANT_TYPES).toContain('cactus');
+    expect(DEFAULT_STARTER_PLANT_IDS).toHaveLength(3);
+    DEFAULT_STARTER_PLANT_IDS.forEach((id) => {
+      const plant = getPlantById(id);
+      expect(plant).toBeDefined();
+      expect(plant.id).toBe(id);
+    });
   });
 
-  it('determines plant growth progress accurately across session duration', () => {
-    const focusDurationSec = 25 * 60; // 1500 seconds
+  it('correctly retrieves and classifies plants by hydration category', () => {
+    const lowWater = getPlantsByCategory('low_water');
+    const moderate = getPlantsByCategory('moderate');
+    const highWater = getPlantsByCategory('high_water');
 
-    // At start (0 seconds elapsed)
-    const startProgress = Math.max(0, (focusDurationSec - 1500) / focusDurationSec);
-    expect(startProgress).toBe(0);
+    expect(lowWater.length).toBeGreaterThanOrEqual(3);
+    expect(moderate.length).toBeGreaterThanOrEqual(3);
+    expect(highWater.length).toBeGreaterThanOrEqual(3);
 
-    // Halfway through (750 seconds remaining)
-    const midProgress = (focusDurationSec - 750) / focusDurationSec;
-    expect(midProgress).toBe(0.5);
-
-    // At completion (0 seconds remaining)
-    const completeProgress = (focusDurationSec - 0) / focusDurationSec;
-    expect(completeProgress).toBe(1);
+    expect(lowWater.every((p) => p.category === 'low_water')).toBe(true);
+    expect(moderate.every((p) => p.category === 'moderate')).toBe(true);
+    expect(highWater.every((p) => p.category === 'high_water')).toBe(true);
   });
 
-  it('verifies plant lifecycle stages: seed -> growing -> bloomed vs withered', () => {
-    type Stage = 'seed' | 'growing' | 'bloomed' | 'withered';
-    let stage: Stage = 'seed';
-
-    // 1. Timer starts
-    stage = 'growing';
-    expect(stage).toBe('growing');
-
-    // 2. Normal completion -> Blooms
-    stage = 'bloomed';
-    expect(stage).toBe('bloomed');
-
-    // 3. Reset for new session
-    stage = 'seed';
-    expect(stage).toBe('seed');
-
-    // 4. Broken focus / cancelled early -> Withers
-    stage = 'growing';
-    const userGaveUp = true;
-    if (userGaveUp) {
-      stage = 'withered';
-    }
-    expect(stage).toBe('withered');
-
-    // 5. Replant after withering
-    stage = 'seed';
-    expect(stage).toBe('seed');
+  it('falls back safely to default plant when invalid ID is requested', () => {
+    const fallback = getPlantById('unknown_mystery_plant');
+    expect(fallback).toBeDefined();
+    expect(fallback.id).toBe(PLANT_LIBRARY[0].id);
   });
 });
-

@@ -7,7 +7,6 @@ export const FEATURE_FLAGS = [
   'graph',
   'routines',
   'calendarPro',
-  'insights',
   'focusPro',
   'habitAnalytics',
   'smartInbox',
@@ -53,12 +52,6 @@ export const FLAG_INFO: Record<Flag, FlagInfo> = {
     description: 'Multi-day time-grid engine with day, 3-day, week & timeline views',
     phase: 'Phase 3',
   },
-  insights: {
-    id: 'insights',
-    label: 'Insights Hub',
-    description: 'Local personal productivity metrics, activity trends & analytics',
-    phase: 'Phase 6',
-  },
   focusPro: {
     id: 'focusPro',
     label: 'Focus Pro',
@@ -83,20 +76,25 @@ const STORAGE_KEY = 'notes_app_feature_flags_v2';
 const EVENT_NAME = 'notes_app_flags_changed';
 
 export function getDefaultFlags(): Record<Flag, boolean> {
-  const defaults = {} as Record<Flag, boolean>;
-  for (const flag of FEATURE_FLAGS) {
-    // All expansion flags default to OFF for Phase 0
-    defaults[flag] = false;
-  }
-  return defaults;
+  return {
+    canvas: true,
+    journal: true,
+    graph: true,
+    routines: true,
+    calendarPro: false,
+    focusPro: false,
+    habitAnalytics: false,
+    smartInbox: false,
+  };
 }
 
 export function getStoredFlags(): Record<Flag, boolean> {
+  const defaults = getDefaultFlags();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return getDefaultFlags();
+    if (!raw) return defaults;
     const parsed = JSON.parse(raw);
-    const flags = getDefaultFlags();
+    const flags = { ...defaults };
     for (const flag of FEATURE_FLAGS) {
       if (typeof parsed[flag] === 'boolean') {
         flags[flag] = parsed[flag];
@@ -104,14 +102,16 @@ export function getStoredFlags(): Record<Flag, boolean> {
     }
     return flags;
   } catch {
-    return getDefaultFlags();
+    return defaults;
   }
 }
 
 export function saveFlags(flags: Record<Flag, boolean>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(flags));
-    window.dispatchEvent(new Event(EVENT_NAME));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(EVENT_NAME));
+    }
   } catch (err) {
     console.error('Failed to save feature flags:', err);
   }

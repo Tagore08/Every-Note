@@ -1,4 +1,5 @@
 import { db } from '../database';
+import { sanitizeTags } from '../../lib/tags';
 import type { CanvasDoc, CanvasEntity } from '../../types/canvas';
 
 export function createDefaultCanvasDoc(bg = '#ffffff'): CanvasDoc {
@@ -20,7 +21,7 @@ export const canvasRepo = {
       doc,
       thumbBlob: data.thumbBlob,
       linkedNoteId: data.linkedNoteId ?? null,
-      tags: data.tags ?? [],
+      tags: sanitizeTags(data.tags),
       createdAt: data.createdAt ?? now,
       updatedAt: data.updatedAt ?? now,
       trashedAt: null,
@@ -49,10 +50,14 @@ export const canvasRepo = {
     id: number,
     data: Partial<Pick<CanvasEntity, 'title' | 'tags' | 'linkedNoteId'>>
   ): Promise<void> {
-    await db.canvases.update(id, {
+    const patch: Partial<CanvasEntity> = {
       ...data,
       updatedAt: Date.now(),
-    });
+    };
+    if (data.tags !== undefined) {
+      patch.tags = sanitizeTags(data.tags);
+    }
+    await db.canvases.update(id, patch);
   },
 
   async getAllCanvases(includeTrashed = false): Promise<CanvasEntity[]> {
@@ -101,7 +106,11 @@ export const canvasRepo = {
     if (strategy === 'replace') {
       await db.canvases.clear();
     }
-    for (const c of canvases) {
+    const sanitized = canvases.map((c) => ({
+      ...c,
+      tags: sanitizeTags(c.tags),
+    }));
+    for (const c of sanitized) {
       if (strategy === 'replace' && c.id) {
         await db.canvases.put(c);
       } else {
@@ -109,6 +118,6 @@ export const canvasRepo = {
         await db.canvases.add(rest as CanvasEntity);
       }
     }
-    return canvases.length;
+    return sanitized.length;
   },
 };

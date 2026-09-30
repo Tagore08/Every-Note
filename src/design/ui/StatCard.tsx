@@ -30,32 +30,32 @@ export function StatCard({
     <Component
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={`p-4 sm:p-5 rounded-card bg-surface border border-border shadow-card flex flex-col justify-between text-left transition-all ${
-        onClick ? 'hover:bg-surface-2/60 cursor-pointer active:scale-[0.99] min-h-[44px]' : ''
+      className={`p-4 rounded-card bg-surface border border-border/70 shadow-card flex flex-col justify-between text-left transition-all ${
+        onClick ? 'hover:shadow-float hover:-translate-y-0.5 cursor-pointer active:scale-[0.99] active:translate-y-0 min-h-[44px]' : ''
       } ${className}`}
     >
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-xs font-medium text-ink-muted uppercase tracking-wider">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-faint">
           {label}
         </span>
         {icon && (
-          <span className="w-8 h-8 rounded-lg bg-surface-2 flex items-center justify-center text-ink-muted shrink-0">
+          <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent-soft to-surface-2 flex items-center justify-center text-accent shrink-0">
             {icon}
           </span>
         )}
       </div>
 
       <div className="flex items-baseline justify-between gap-2">
-        <div className="text-2xl sm:text-3xl font-semibold text-ink tracking-tight">
+        <div className="text-2xl sm:text-3xl font-bold text-ink tracking-tight">
           {value}
         </div>
         {delta && (
           <span
             className={`inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-full ${
               delta.trend === 'up'
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
                 : delta.trend === 'down'
-                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                ? 'bg-rose-500/12 text-rose-600 dark:text-rose-400'
                 : 'bg-surface-2 text-ink-muted'
             }`}
           >
@@ -67,7 +67,7 @@ export function StatCard({
       </div>
 
       {subtext && (
-        <p className="text-xs text-ink-muted mt-2 leading-relaxed">{subtext}</p>
+        <p className="text-xs text-ink-muted mt-1.5 leading-relaxed">{subtext}</p>
       )}
     </Component>
   );

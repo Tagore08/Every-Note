@@ -2,8 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Notes App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Every Notes</title>
     <meta name="description" content="Local-first personal notes" />
 
     <!-- Favicon & Touch Icons -->
@@ -11,24 +11,32 @@
     <link rel="alternate icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- Theme Colors -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f8fafc" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a" />
-    <meta name="theme-color" content="#0f172a" />
+    <!-- Theme Colors — Dark plum default -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#2F172C" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1B0C1A" />
+    <meta name="theme-color" content="#2F172C" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Notes" />
+    <meta name="apple-mobile-web-app-title" content="Every Notes" />
 
     <!-- Immediate Theme Detection (Prevents White Flash) -->
     <script>
       (function() {
         try {
-          const stored = localStorage.getItem('notes_theme_mode');
-          const isDark = stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches) || (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          const storedMode = localStorage.getItem('notes_theme_mode');
+          const isDark = storedMode === 'dark' || (!storedMode && window.matchMedia('(prefers-color-scheme: dark)').matches) || (storedMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) || storedMode === 'true-black';
           if (isDark) {
             document.documentElement.classList.add('dark');
           } else {
             document.documentElement.classList.remove('dark');
+          }
+          
+          let storedColor = localStorage.getItem('notes_theme_color');
+          if (storedMode === 'true-black' && !storedColor) {
+            storedColor = 'slate';
+          }
+          if (storedColor && storedColor !== 'default') {
+            document.documentElement.setAttribute('data-theme', storedColor);
           }
         } catch (e) {}
       })();
@@ -42,13 +50,13 @@
         padding: 0;
       }
       body {
-        background-color: #f8fafc;
-        color: #0f172a;
+        background-color: #2F172C;
+        color: #F8F3F7;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       }
       html.dark body {
-        background-color: #0f172a;
-        color: #f8fafc;
+        background-color: #1B0C1A;
+        color: #FDFBFD;
       }
       #splash-container {
         display: flex;
@@ -69,21 +77,21 @@
       }
       .splash-title {
         font-size: 1.25rem;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        margin-bottom: 8px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        margin-bottom: 6px;
         opacity: 0.9;
       }
       .splash-subtitle {
-        font-size: 0.875rem;
-        opacity: 0.6;
-        margin-bottom: 24px;
+        font-size: 0.8rem;
+        opacity: 0.5;
+        margin-bottom: 28px;
       }
       .splash-bar {
-        width: 120px;
+        width: 100px;
         height: 3px;
         border-radius: 9999px;
-        background-color: rgba(59, 130, 246, 0.2);
+        background-color: rgba(124, 95, 196, 0.15);
         overflow: hidden;
         position: relative;
       }
@@ -93,7 +101,7 @@
         left: 0;
         bottom: 0;
         width: 40%;
-        background-color: #3b82f6;
+        background-color: #7C5FC4;
         border-radius: 9999px;
         animation: splash-indeterminate 1.5s infinite ease-in-out;
       }
@@ -108,18 +116,18 @@
       }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100 min-h-screen">
+  <body class="antialiased min-h-screen">
     <div id="root">
       <div id="splash-container">
         <svg class="splash-logo" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="splashBg" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#1e40af"/>
-              <stop offset="100%" stop-color="#2563eb"/>
+              <stop offset="0%" stop-color="#8B6BD4"/>
+              <stop offset="100%" stop-color="#6B46C1"/>
             </linearGradient>
             <linearGradient id="splashFold" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#cbd5e1"/>
-              <stop offset="100%" stop-color="#f8fafc"/>
+              <stop offset="0%" stop-color="#e9e2f8"/>
+              <stop offset="100%" stop-color="#f9f7ff"/>
             </linearGradient>
           </defs>
           <rect width="512" height="512" rx="116" fill="url(#splashBg)"/>

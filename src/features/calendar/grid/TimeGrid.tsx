@@ -28,7 +28,13 @@ export interface TimeGridProps {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function formatHour(h: number): string {
+  if (h === 0) return '12 AM';
+  if (h === 12) return '12 PM';
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
 
 export function TimeGrid({
   days,
@@ -61,7 +67,7 @@ export function TimeGrid({
     let targetMinutes = 7 * 60; // default 07:00
     if (hasToday) {
       const nowMin = now.getHours() * 60 + now.getMinutes();
-      targetMinutes = Math.max(7 * 60, nowMin - 60); // 1 hour before now, or 07:00
+      targetMinutes = Math.max(7 * 60, nowMin - 60);
     }
 
     const targetScrollTop = (targetMinutes / 60) * HOUR_HEIGHT;
@@ -73,15 +79,12 @@ export function TimeGrid({
   const dayLayouts = useMemo(() => {
     return days.map((day) => {
       const dayKey = formatDateKey(day);
-      // Filter occurrences that fall on this day
       const dayOccurrences = occurrences.filter((occ) => {
         if (occ.occurrenceDate === dayKey) return true;
-        // Check if multi-day event spans across this day
         const s = new Date(occ.startAt);
         const e = occ.endAt ? new Date(occ.endAt) : s;
         return isSameDay(s, day) || isSameDay(e, day);
       });
-
       return layoutDayEvents(dayOccurrences, day);
     });
   }, [days, occurrences]);
@@ -102,7 +105,7 @@ export function TimeGrid({
   // Slot mousedown for click / range creation (desktop)
   const handleColumnMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, dayIndex: number) => {
-      if (e.button !== 0) return; // Primary button only
+      if (e.button !== 0) return;
 
       const rect = e.currentTarget.getBoundingClientRect();
       const clickY = e.clientY - rect.top;
@@ -112,11 +115,7 @@ export function TimeGrid({
       const startMin = roundedH * 60 + roundedM;
 
       isMouseDownRef.current = true;
-      setDragSelection({
-        dayIndex,
-        startMin,
-        currentMin: startMin + 30,
-      });
+      setDragSelection({ dayIndex, startMin, currentMin: startMin + 30 });
 
       const handleWindowMouseMove = (moveEvent: MouseEvent) => {
         if (!isMouseDownRef.current) return;
@@ -128,10 +127,7 @@ export function TimeGrid({
 
         setDragSelection((prev) => {
           if (!prev) return null;
-          return {
-            ...prev,
-            currentMin: curMin + (curMin >= prev.startMin ? 30 : 0),
-          };
+          return { ...prev, currentMin: curMin + (curMin >= prev.startMin ? 30 : 0) };
         });
       };
 
@@ -176,32 +172,30 @@ export function TimeGrid({
   return (
     <div
       data-testid="time-grid-engine"
-      className="flex flex-col h-full bg-surface border border-border rounded-card overflow-hidden shadow-card"
+      className="flex flex-col h-full bg-surface border border-border/60 rounded-card overflow-hidden shadow-card"
     >
-      {/* Pinned Day Column Headers */}
-      <div className="flex border-b border-border bg-surface-2/80 select-none">
+      {/* ── Pinned Day Column Headers ── */}
+      <div className="flex border-b border-border/50 bg-surface select-none">
         {/* Left corner spacer matching hour labels rail */}
-        <div className="w-12 sm:w-16 shrink-0 border-r border-border" />
+        <div className="w-11 sm:w-14 shrink-0 border-r border-border/40" />
 
         {/* Days Header */}
-        <div className="flex-1 grid grid-flow-col auto-cols-fr divide-x divide-border">
+        <div className="flex-1 grid grid-flow-col auto-cols-fr divide-x divide-border/40">
           {days.map((day, idx) => {
             const isToday = isSameDay(day, new Date());
             return (
               <div
                 key={`header-${day.toISOString()}-${idx}`}
-                className={`py-2 px-1 text-center transition-colors ${
-                  isToday ? 'bg-accent-soft/40' : ''
-                }`}
+                className={`py-3 px-1 text-center transition-colors ${isToday ? 'bg-accent-soft/30' : ''}`}
               >
-                <div className="text-[11px] font-medium text-ink-muted uppercase">
-                  {WEEKDAY_NAMES[day.getDay()]}
+                <div className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider">
+                  {WEEKDAY_SHORT[day.getDay()]}
                 </div>
                 <div
-                  className={`inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs sm:text-sm font-bold mt-0.5 ${
+                  className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold mt-1 ${
                     isToday
                       ? 'bg-accent text-accent-ink shadow-xs'
-                      : 'text-ink'
+                      : 'text-ink hover:bg-surface-2 transition-colors'
                   }`}
                 >
                   {day.getDate()}
@@ -212,7 +206,7 @@ export function TimeGrid({
         </div>
       </div>
 
-      {/* Pinned All-Day Band */}
+      {/* ── Pinned All-Day Band ── */}
       <AllDayBand
         days={days}
         allDayEvents={allDayEvents}
@@ -221,28 +215,30 @@ export function TimeGrid({
         onToggleTask={onToggleTask}
       />
 
-      {/* Scrolling 24-hour Grid Body */}
+      {/* ── Scrolling 24-hour Grid Body ── */}
       <div
         ref={containerRef}
         data-testid="grid-scroll-container"
         className="flex-1 overflow-y-auto overflow-x-hidden relative"
       >
         <div className="flex" style={{ height: `${24 * HOUR_HEIGHT}px` }}>
-          {/* Left Rail: Hour Labels (60px/hour) */}
-          <div className="w-12 sm:w-16 shrink-0 border-r border-border select-none bg-surface/50">
+          {/* Left Rail: Hour Labels */}
+          <div className="w-11 sm:w-14 shrink-0 border-r border-border/40 select-none">
             {HOURS.map((h) => (
               <div
                 key={`hour-${h}`}
                 style={{ height: `${HOUR_HEIGHT}px` }}
-                className="relative text-[10px] sm:text-[11px] font-medium text-ink-muted text-right pr-1.5 sm:pr-2.5 pt-1"
+                className="relative text-right pr-2 pt-1"
               >
-                {formatTimeSlot(h, 0)}
+                <span className="text-[9px] sm:text-[10px] font-medium text-ink-faint leading-none">
+                  {formatHour(h)}
+                </span>
               </div>
             ))}
           </div>
 
           {/* Grid Columns for visible days */}
-          <div className="flex-1 grid grid-flow-col auto-cols-fr divide-x divide-border relative">
+          <div className="flex-1 grid grid-flow-col auto-cols-fr divide-x divide-border/30 relative">
             {days.map((day, dayIndex) => {
               const isToday = isSameDay(day, new Date());
               const layout = dayLayouts[dayIndex];
@@ -251,18 +247,18 @@ export function TimeGrid({
                 <div
                   key={`day-col-${day.toISOString()}-${dayIndex}`}
                   onMouseDown={(e) => handleColumnMouseDown(e, dayIndex)}
-                  className="relative h-full select-none cursor-pointer"
+                  className={`relative h-full select-none cursor-pointer ${isToday ? 'bg-accent-soft/5' : ''}`}
                   title="Click or drag to create event"
                 >
-                  {/* Hour background grid lines + half-hour hairlines */}
+                  {/* Hour grid lines */}
                   {HOURS.map((h) => (
                     <div
                       key={`grid-line-${h}`}
                       style={{ height: `${HOUR_HEIGHT}px` }}
-                      className="border-b border-border/40 relative hover:bg-surface-2/40 transition-colors pointer-events-none"
+                      className="border-b border-border/25 relative hover:bg-accent-soft/10 transition-colors pointer-events-none"
                     >
                       {/* Half-hour dashed hairline */}
-                      <div className="absolute top-[30px] left-0 right-0 border-b border-border/25 border-dashed" />
+                      <div className="absolute top-[30px] left-0 right-0 border-b border-border/15 border-dashed" />
                     </div>
                   ))}
 
@@ -282,7 +278,7 @@ export function TimeGrid({
                   {/* Drag-to-create Ghost Indicator */}
                   {dragSelection && dragSelection.dayIndex === dayIndex && (
                     <div
-                      className="absolute left-1 right-1 rounded-lg bg-accent/20 border-2 border-accent border-dashed pointer-events-none z-30"
+                      className="absolute left-1 right-1 rounded-xl bg-accent/15 border-2 border-accent border-dashed pointer-events-none z-30"
                       style={{
                         top: `${(Math.min(dragSelection.startMin, dragSelection.currentMin) / 60) * HOUR_HEIGHT}px`,
                         height: `${Math.max(
@@ -296,7 +292,7 @@ export function TimeGrid({
                           Math.floor(Math.min(dragSelection.startMin, dragSelection.currentMin) / 60),
                           Math.min(dragSelection.startMin, dragSelection.currentMin) % 60
                         )}
-                        {' - '}
+                        {' – '}
                         {formatTimeSlot(
                           Math.floor(Math.max(dragSelection.startMin, dragSelection.currentMin) / 60),
                           Math.max(dragSelection.startMin, dragSelection.currentMin) % 60

@@ -5,6 +5,7 @@ import { useSnackbar } from '../../context/SnackbarContext';
 import { formatDateKey, parseDateKey } from '../../utils/format';
 import { PersonBadge } from '../people/PersonBadge';
 import { PersonPickerModal } from '../people/PersonPickerModal';
+import { sanitizeTag } from '../../lib/tags';
 
 interface EventEditorModalProps {
   isOpen: boolean;
@@ -120,7 +121,7 @@ export function EventEditorModal({
   if (!isOpen) return null;
 
   const handleAddTag = (rawTag: string) => {
-    const clean = rawTag.trim().replace(/^#/, '');
+    const clean = sanitizeTag(rawTag);
     if (!clean || tags.includes(clean)) {
       setTagInput('');
       return;
@@ -255,6 +256,7 @@ export function EventEditorModal({
       onClose();
     } catch (err) {
       console.error('Failed to cancel occurrence:', err);
+      showSnackbar({ message: 'Failed to delete occurrence' });
     }
   };
 
@@ -271,6 +273,7 @@ export function EventEditorModal({
       onClose();
     } catch (err) {
       console.error('Failed to delete event:', err);
+      showSnackbar({ message: 'Failed to delete event' });
     }
   };
 

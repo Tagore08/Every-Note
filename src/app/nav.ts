@@ -60,6 +60,14 @@ export const NAV_ITEMS: NavItemConfig[] = [
     flag: 'canvas',
     inLibrarySheet: true,
   },
+  {
+    id: 'scratchpad',
+    label: 'Scratchpad',
+    route: '/scratchpad',
+    group: 'capture',
+    iconName: 'Edit3',
+    inLibrarySheet: true,
+  },
 
   // ORGANIZE
   {
@@ -93,6 +101,14 @@ export const NAV_ITEMS: NavItemConfig[] = [
     route: '/tags',
     group: 'organize',
     iconName: 'Tag',
+    inLibrarySheet: true,
+  },
+  {
+    id: 'text-expansion',
+    label: 'Text Replace Shortcut',
+    route: '/text-expansion',
+    group: 'organize',
+    iconName: 'Zap',
     inLibrarySheet: true,
   },
 

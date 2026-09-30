@@ -5,7 +5,11 @@ import { localDateStr, addDays, formatJournalDateHeader } from '../../lib/date';
 import { MoodRow } from './MoodRow';
 import { PromptChips } from './PromptChips';
 import { OnThisDayCard } from './OnThisDayCard';
+import { DrawingPadModal } from '../drawing/DrawingPadModal';
+import { useSnackbar } from '../../context/SnackbarContext';
+import { PenTool } from 'lucide-react';
 import type { JournalMood } from '../../types/note';
+import { sanitizeTag } from '../../lib/tags';
 
 export function JournalScreen() {
   const { date } = useParams<{ date?: string }>();
@@ -41,6 +45,8 @@ export function JournalScreen() {
     }
   });
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const [isDrawingOpen, setIsDrawingOpen] = useState(false);
+  const { showSnackbar } = useSnackbar();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,6 +68,15 @@ export function JournalScreen() {
       }
       return next;
     });
+  };
+
+  const handleSaveDrawing = (svg: string, _strokesJson: string) => {
+    const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    const sketchMarkdown = `\n\n![Sketch](${dataUri})\n`;
+    const next = (content ? content.trimEnd() + '\n' : '') + sketchMarkdown;
+    setContent(next);
+    debouncedSave(next, mood, tags);
+    showSnackbar({ message: 'Attached drawing to journal' });
   };
 
   // Sync state when entry loads or date changes
@@ -137,7 +152,7 @@ export function JournalScreen() {
 
   // Add tag
   const handleAddTag = () => {
-    const trimmed = tagInput.trim().replace(/^#/, '');
+    const trimmed = sanitizeTag(tagInput);
     if (trimmed && !tags.includes(trimmed)) {
       const nextTags = [...tags, trimmed];
       setTags(nextTags);
@@ -254,6 +269,17 @@ export function JournalScreen() {
             <span className="text-xs text-ink-muted/70 font-mono hidden sm:inline">
               {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : ''}
             </span>
+
+            {/* Sketch / Drawing tool button */}
+            <button
+              type="button"
+              onClick={() => setIsDrawingOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface-2 text-ink-muted hover:text-accent hover:border-accent/40 text-xs font-semibold transition-all cursor-pointer min-h-[38px]"
+              title="Add Sketch / Drawing"
+            >
+              <PenTool className="w-3.5 h-3.5 text-accent" />
+              <span className="hidden sm:inline">Sketch</span>
+            </button>
 
             {/* Serif Font Toggle */}
             <button
@@ -405,6 +431,14 @@ export function JournalScreen() {
         {/* On This Day Card */}
         <OnThisDayCard currentDateStr={currentDateStr} />
       </div>
+
+      {/* Freehand Drawing Modal */}
+      <DrawingPadModal
+        isOpen={isDrawingOpen}
+        onClose={() => setIsDrawingOpen(false)}
+        onSave={handleSaveDrawing}
+        title={`Sketch for ${headerInfo.formattedDate}`}
+      />
     </div>
   );
 }

@@ -14,12 +14,20 @@ export function registerReminderNavigator(fn: (path: string) => void) {
 }
 
 export function getNotificationSupport(): boolean {
-  return typeof window !== 'undefined' && 'Notification' in window;
+  if (typeof window !== 'undefined' && 'Notification' in window) return true;
+  if (typeof globalThis !== 'undefined' && 'Notification' in globalThis) return true;
+  return false;
 }
 
 export function getNotificationPermission(): NotificationPermission | 'unsupported' {
   if (!getNotificationSupport()) return 'unsupported';
-  return Notification.permission;
+  if (typeof window !== 'undefined' && (window as any).Notification) {
+    return (window as any).Notification.permission;
+  }
+  if (typeof globalThis !== 'undefined' && (globalThis as any).Notification) {
+    return (globalThis as any).Notification.permission;
+  }
+  return 'unsupported';
 }
 
 export async function requestNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {
@@ -192,38 +200,67 @@ export async function checkDueReminders() {
   }
 }
 
+export const FOREGROUND_REMINDER_INTERVAL_MS = 60000; // 1 minute
+export const BACKGROUND_REMINDER_INTERVAL_MS = 300000; // 5 minutes
+
 /**
- * Initializes the reminder scheduler loop.
+ * Initializes the reminder scheduler loop with visibility-aware adaptive intervals.
  */
 export function startReminderScheduler(navigate?: (path: string) => void): () => void {
   if (navigate) {
     registerReminderNavigator(navigate);
   }
 
-  // Run check immediately
-  checkDueReminders();
+  const isPermitted = getNotificationSupport() && getNotificationPermission() === 'granted';
 
-  // Run periodic check every 30 seconds
-  if (timerId) {
-    clearInterval(timerId);
-  }
-  timerId = setInterval(() => {
+  // Run check immediately if permission granted
+  if (isPermitted) {
     checkDueReminders();
-  }, 30000);
+  }
 
-  // Check on tab visibility restoration
-  const onVisibilityChange = () => {
-    if (document.visibilityState === 'visible') {
-      checkDueReminders();
+  const resetTimer = (intervalMs: number) => {
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+    // Only schedule timer if notifications are granted and supported
+    if (getNotificationSupport() && getNotificationPermission() === 'granted') {
+      timerId = setInterval(() => {
+        checkDueReminders();
+      }, intervalMs);
     }
   };
-  document.addEventListener('visibilitychange', onVisibilityChange);
+
+  // Start with appropriate interval based on current visibility
+  const initialInterval =
+    typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      ? BACKGROUND_REMINDER_INTERVAL_MS
+      : FOREGROUND_REMINDER_INTERVAL_MS;
+
+  resetTimer(initialInterval);
+
+  // Adapt interval and check immediately on visibility changes
+  const onVisibilityChange = () => {
+    if (typeof document === 'undefined') return;
+    if (document.visibilityState === 'visible') {
+      checkDueReminders();
+      resetTimer(FOREGROUND_REMINDER_INTERVAL_MS);
+    } else {
+      resetTimer(BACKGROUND_REMINDER_INTERVAL_MS);
+    }
+  };
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibilityChange);
+  }
 
   return () => {
     if (timerId) {
       clearInterval(timerId);
       timerId = null;
     }
-    document.removeEventListener('visibilitychange', onVisibilityChange);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
   };
 }

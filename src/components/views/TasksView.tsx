@@ -1,8 +1,8 @@
-import React, { useState, useRef, useMemo, type KeyboardEvent, type TouchEvent } from 'react';
+import React, { useState, useRef, useMemo, useCallback, type KeyboardEvent, type TouchEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { Task } from '../../types/task';
 import type { Template } from '../../types/template';
-import { useTodoTasks, useDoneTasks, tasksRepo, useSubtaskProgress, useSubtasks } from '../../db/tasksRepo';
+import { useTodoTasks, useDoneTasks, tasksRepo, useAllSubtaskProgressMap, useSubtasks } from '../../db/tasksRepo';
 import { parseQuickAdd } from '../../lib/quickAdd';
 import { useSnackbar } from '../../context/SnackbarContext';
 import { formatDueDate, isOverdue, formatRelativeTime } from '../../utils/format';
@@ -18,17 +18,16 @@ import { SnippetSuggestPill } from '../../features/snippets/SnippetSuggestPill';
 export type TaskViewType = 'today' | 'upcoming' | 'all' | 'matrix';
 export type GroupByType = 'none' | 'tag' | 'priority' | 'date';
 
-function SubtaskProgressChip({
-  parentTaskId,
+const SubtaskProgressChip = React.memo(function SubtaskProgressChip({
+  progress,
   isExpanded,
   onToggleExpand,
 }: {
-  parentTaskId?: number;
+  progress?: { total: number; completed: number };
   isExpanded: boolean;
   onToggleExpand: (e: React.MouseEvent) => void;
 }) {
-  const progress = useSubtaskProgress(parentTaskId);
-  if (progress.total === 0) return null;
+  if (!progress || progress.total === 0) return null;
   return (
     <button
       type="button"
@@ -52,10 +51,11 @@ function SubtaskProgressChip({
       </svg>
     </button>
   );
-}
+});
 
 function TaskSubtasksChecklist({ parentTaskId }: { parentTaskId: number }) {
   const subtasks = useSubtasks(parentTaskId);
+  const { showSnackbar } = useSnackbar();
   const [newTitle, setNewTitle] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
@@ -65,6 +65,7 @@ function TaskSubtasksChecklist({ parentTaskId }: { parentTaskId: number }) {
       await tasksRepo.toggleTaskStatus(st.id, st.status);
     } catch (err) {
       console.error('Failed to toggle subtask:', err);
+      showSnackbar({ message: 'Failed to update subtask' });
     }
   };
 
@@ -77,6 +78,7 @@ function TaskSubtasksChecklist({ parentTaskId }: { parentTaskId: number }) {
       setNewTitle('');
     } catch (err) {
       console.error('Failed to add subtask:', err);
+      showSnackbar({ message: 'Failed to add subtask' });
     }
   };
 
@@ -150,7 +152,189 @@ function TaskSubtasksChecklist({ parentTaskId }: { parentTaskId: number }) {
   );
 }
 
-export function TasksView() {
+interface TaskRowProps {
+  task: Task;
+  subtaskProgress?: { total: number; completed: number };
+  isSubtasksOpen: boolean;
+  onToggleComplete: (task: Task) => void;
+  onOpenEditor: (task: Task) => void;
+  onToggleSubtasksExpand: (taskId: number, e: React.MouseEvent) => void;
+  onReschedule: (task: Task) => void;
+  onDeleteTask: (taskId: number) => void;
+  onTouchStart: (e: TouchEvent, taskId?: number) => void;
+  onTouchEnd: (e: TouchEvent, task: Task) => void;
+}
+
+const TaskRow = React.memo(function TaskRow({
+  task,
+  subtaskProgress,
+  isSubtasksOpen,
+  onToggleComplete,
+  onOpenEditor,
+  onToggleSubtasksExpand,
+  onReschedule,
+  onDeleteTask,
+  onTouchStart,
+  onTouchEnd,
+}: TaskRowProps) {
+  const overdue = task.status === 'todo' && task.dueAt && isOverdue(task.dueAt);
+  const prioMeta = getPriorityMeta(task.priority);
+
+  return (
+    <div
+      onTouchStart={(e) => onTouchStart(e, task.id)}
+      onTouchEnd={(e) => onTouchEnd(e, task)}
+      className={`group rounded-2xl border bg-surface p-3 sm:p-3.5 shadow-card transition-all hover:border-accent/40 flex flex-col gap-1 select-none ${
+        overdue
+          ? 'border-danger/40 bg-danger/5'
+          : 'border-border'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        {/* Circular checkbox styled by priority level (Todoist style) */}
+        <button
+          type="button"
+          onClick={() => onToggleComplete(task)}
+          className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+            task.status === 'done'
+              ? 'bg-success border-success text-white'
+              : prioMeta.checkboxBorder
+          }`}
+          aria-label={task.status === 'done' ? 'Mark task todo' : 'Mark task done'}
+        >
+          {task.status === 'done' && (
+            <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          )}
+        </button>
+
+        {/* Task body: tap to edit */}
+        <div
+          onClick={() => onOpenEditor(task)}
+          className="flex-1 min-w-0 cursor-pointer"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <p
+                className={`text-sm font-semibold leading-snug break-words ${
+                  task.status === 'done'
+                    ? 'line-through text-ink-muted'
+                    : overdue
+                    ? 'text-danger font-bold'
+                    : 'text-ink'
+                }`}
+              >
+                {task.title}
+              </p>
+
+              {/* Subtasks Progress Chip with toggle */}
+              {task.id && (
+                <SubtaskProgressChip
+                  progress={subtaskProgress}
+                  isExpanded={isSubtasksOpen}
+                  onToggleExpand={(e) => onToggleSubtasksExpand(task.id!, e)}
+                />
+              )}
+            </div>
+
+            {/* Due Date & Action hints */}
+            <div className="flex items-center gap-2 shrink-0">
+              {task.dueAt && (
+                <span
+                  className={`text-xs font-semibold ${
+                    overdue
+                      ? 'text-danger font-bold'
+                      : 'text-ink-muted'
+                  }`}
+                >
+                  {overdue ? 'Overdue · ' : ''}
+                  {formatDueDate(task.dueAt)}
+                </span>
+              )}
+
+              {/* Action buttons (always visible on mobile, hover/focus on desktop) */}
+              <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReschedule(task);
+                  }}
+                  className="p-1 rounded-lg text-ink-muted hover:text-accent hover:bg-surface-2 transition-colors cursor-pointer"
+                  title="Reschedule"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (task.id) onDeleteTask(task.id);
+                  }}
+                  className="p-1 rounded-lg text-ink-muted hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                  title="Delete"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Metadata row: Priority Badge, Tags, Source Note */}
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs text-ink-muted">
+            {/* P1-P4 Priority Badge */}
+            {prioMeta.level !== 'p4' && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${prioMeta.badgeBg}`}>
+                {prioMeta.shortLabel}
+              </span>
+            )}
+
+            {/* Tags */}
+            {task.tags &&
+              task.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-2 text-ink-muted border border-border"
+                >
+                  #{tag}
+                </span>
+              ))}
+
+            {/* Linked note */}
+            {typeof task.sourceNoteId === 'number' && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-accent">
+                <span>Note #{task.sourceNoteId}</span>
+              </span>
+            )}
+
+            {/* Completion time */}
+            {task.status === 'done' && task.completedAt && (
+              <span className="text-[10px] text-ink-muted">
+                · Completed {formatRelativeTime(task.completedAt)}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Nested Indented Subtasks Checklist */}
+      {task.id && isSubtasksOpen && (
+        <TaskSubtasksChecklist parentTaskId={task.id} />
+      )}
+    </div>
+  );
+});
+
+export const TasksView = React.memo(function TasksView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawView = searchParams.get('view');
   const view: TaskViewType = rawView === 'matrix' || rawView === 'today' || rawView === 'upcoming' || rawView === 'all'
@@ -180,14 +364,15 @@ export function TasksView() {
   // Expanded subtasks parent IDs
   const [expandedSubtaskParents, setExpandedSubtaskParents] = useState<Record<number, boolean>>({});
 
-  const toggleSubtasksExpand = (taskId: number, e: React.MouseEvent) => {
+  const toggleSubtasksExpand = useCallback((taskId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     setExpandedSubtaskParents((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
-  };
+  }, []);
 
   const todoTasks = useTodoTasks();
   const doneTasks = useDoneTasks();
-  const { showUndo } = useSnackbar();
+  const allSubtaskProgress = useAllSubtaskProgressMap();
+  const { showUndo, showSnackbar } = useSnackbar();
 
   // Swipe detection for touch devices
   const touchStartX = useRef<number | null>(null);
@@ -241,22 +426,11 @@ export function TasksView() {
       setQuickPriority('p4');
     } catch (err) {
       console.error('Failed to create task:', err);
+      showSnackbar({ message: 'Failed to create task' });
     }
   };
 
-  const handleToggleComplete = async (task: Task) => {
-    if (!task.id) return;
-    if (task.status === 'todo') {
-      const hasIncomplete = await tasksRepo.hasIncompleteSubtasks(task.id);
-      if (hasIncomplete) {
-        setWarningTask(task);
-        return;
-      }
-    }
-    await executeToggleComplete(task);
-  };
-
-  const executeToggleComplete = async (task: Task) => {
+  const executeToggleComplete = useCallback(async (task: Task) => {
     if (!task.id) return;
     const previousStatus = task.status;
     try {
@@ -269,10 +443,23 @@ export function TasksView() {
       );
     } catch (err) {
       console.error('Failed to toggle task status:', err);
+      showSnackbar({ message: 'Failed to update task status' });
     }
-  };
+  }, [showUndo, showSnackbar]);
 
-  const handleDeleteTask = async (taskId: number) => {
+  const handleToggleComplete = useCallback(async (task: Task) => {
+    if (!task.id) return;
+    if (task.status === 'todo') {
+      const hasIncomplete = await tasksRepo.hasIncompleteSubtasks(task.id);
+      if (hasIncomplete) {
+        setWarningTask(task);
+        return;
+      }
+    }
+    await executeToggleComplete(task);
+  }, [executeToggleComplete]);
+
+  const handleDeleteTask = useCallback(async (taskId: number) => {
     const taskToDelete = (todoTasks || []).concat(doneTasks || []).find((t) => t.id === taskId);
     if (!taskToDelete) return;
 
@@ -283,8 +470,9 @@ export function TasksView() {
       });
     } catch (err) {
       console.error('Failed to delete task:', err);
+      showSnackbar({ message: 'Failed to delete task' });
     }
-  };
+  }, [todoTasks, doneTasks, showUndo, showSnackbar]);
 
   const handleApplyTemplate = async (template: Template) => {
     const dueAt = template.body.dueOffsetDays
@@ -311,13 +499,13 @@ export function TasksView() {
   };
 
   // Touch Swipe Handlers: Swipe right = Complete, Swipe left = Reschedule
-  const handleTouchStart = (e: TouchEvent, taskId?: number) => {
+  const handleTouchStart = useCallback((e: TouchEvent, taskId?: number) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     swipedTaskId.current = taskId ?? null;
-  };
+  }, []);
 
-  const handleTouchEnd = (e: TouchEvent, task: Task) => {
+  const handleTouchEnd = useCallback((e: TouchEvent, task: Task) => {
     if (touchStartX.current === null || touchStartY.current === null) return;
     const diffX = e.changedTouches[0].clientX - touchStartX.current;
     const diffY = e.changedTouches[0].clientY - touchStartY.current;
@@ -335,12 +523,12 @@ export function TasksView() {
     touchStartX.current = null;
     touchStartY.current = null;
     swipedTaskId.current = null;
-  };
+  }, [handleToggleComplete]);
 
-  const openEditor = (task: Task) => {
+  const openEditor = useCallback((task: Task) => {
     setSelectedTask(task);
     setIsEditorOpen(true);
-  };
+  }, []);
 
   // Filter tasks based on view and tag selection
   const rawList = view === 'all' && segment === 'done' ? doneTasks : todoTasks;
@@ -522,10 +710,10 @@ interface TaskGroup {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
-      {/* 1. Header & View Switcher */}
+      {/* 1. View Switcher & Task Count */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold tracking-tight text-ink">Tasks</h2>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-ink-muted">Total tasks:</span>
           <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-accent-soft text-accent">
             {filteredTasks.length}
           </span>
@@ -778,165 +966,21 @@ interface TaskGroup {
               )}
 
               <div className="space-y-2">
-                {group.tasks.map((task) => {
-                  const overdue = task.status === 'todo' && task.dueAt && isOverdue(task.dueAt);
-                  const prioMeta = getPriorityMeta(task.priority);
-                  const isSubtasksOpen = Boolean(task.id && expandedSubtaskParents[task.id]);
-
-                  return (
-                    <div
-                      key={task.id}
-                      onTouchStart={(e) => handleTouchStart(e, task.id)}
-                      onTouchEnd={(e) => handleTouchEnd(e, task)}
-                      className={`group rounded-2xl border bg-surface p-3 sm:p-3.5 shadow-card transition-all hover:border-accent/40 flex flex-col gap-1 select-none ${
-                        overdue
-                          ? 'border-danger/40 bg-danger/5'
-                          : 'border-border'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        {/* Circular checkbox styled by priority level (Todoist style) */}
-                        <button
-                          type="button"
-                          onClick={() => handleToggleComplete(task)}
-                          className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all cursor-pointer ${
-                            task.status === 'done'
-                              ? 'bg-success border-success text-white'
-                              : prioMeta.checkboxBorder
-                          }`}
-                          aria-label={task.status === 'done' ? 'Mark task todo' : 'Mark task done'}
-                        >
-                          {task.status === 'done' && (
-                            <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-
-                        {/* Task body: tap to edit */}
-                        <div
-                          onClick={() => openEditor(task)}
-                          className="flex-1 min-w-0 cursor-pointer"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2 flex-wrap min-w-0">
-                              <p
-                                className={`text-sm font-semibold leading-snug break-words ${
-                                  task.status === 'done'
-                                    ? 'line-through text-ink-muted'
-                                    : overdue
-                                    ? 'text-danger font-bold'
-                                    : 'text-ink'
-                                }`}
-                              >
-                                {task.title}
-                              </p>
-
-                              {/* Subtasks Progress Chip with toggle */}
-                              {task.id && (
-                                <SubtaskProgressChip
-                                  parentTaskId={task.id}
-                                  isExpanded={isSubtasksOpen}
-                                  onToggleExpand={(e) => toggleSubtasksExpand(task.id!, e)}
-                                />
-                              )}
-                            </div>
-
-                            {/* Due Date & Action hints */}
-                            <div className="flex items-center gap-2 shrink-0">
-                              {task.dueAt && (
-                                <span
-                                  className={`text-xs font-semibold ${
-                                    overdue
-                                      ? 'text-danger font-bold'
-                                      : 'text-ink-muted'
-                                  }`}
-                                >
-                                  {overdue ? 'Overdue · ' : ''}
-                                  {formatDueDate(task.dueAt)}
-                                </span>
-                              )}
-
-                              {/* Desktop hover actions: Reschedule, Edit, Delete */}
-                              <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setRescheduleTask(task);
-                                  }}
-                                  className="p-1 rounded-lg text-ink-muted hover:text-accent hover:bg-surface-2 transition-colors cursor-pointer"
-                                  title="Reschedule"
-                                >
-                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <rect x="3" y="4" width="18" height="18" rx="2" />
-                                    <line x1="16" y1="2" x2="16" y2="6" />
-                                    <line x1="8" y1="2" x2="8" y2="6" />
-                                    <line x1="3" y1="10" x2="21" y2="10" />
-                                  </svg>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (task.id) handleDeleteTask(task.id);
-                                  }}
-                                  className="p-1 rounded-lg text-ink-muted hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                  title="Delete"
-                                >
-                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Metadata row: Priority Badge, Tags, Source Note */}
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs text-ink-muted">
-                            {/* P1-P4 Priority Badge */}
-                            {prioMeta.level !== 'p4' && (
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${prioMeta.badgeBg}`}>
-                                {prioMeta.shortLabel}
-                              </span>
-                            )}
-
-                            {/* Tags */}
-                            {task.tags &&
-                              task.tags.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-2 text-ink-muted border border-border"
-                                >
-                                  #{tag}
-                                </span>
-                              ))}
-
-                            {/* Linked note */}
-                            {typeof task.sourceNoteId === 'number' && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] text-accent">
-                                <span>Note #{task.sourceNoteId}</span>
-                              </span>
-                            )}
-
-                            {/* Completion time */}
-                            {task.status === 'done' && task.completedAt && (
-                              <span className="text-[10px] text-ink-muted">
-                                · Completed {formatRelativeTime(task.completedAt)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Nested Indented Subtasks Checklist */}
-                      {task.id && isSubtasksOpen && (
-                        <TaskSubtasksChecklist parentTaskId={task.id} />
-                      )}
-                    </div>
-                  );
-                })}
+                {group.tasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    subtaskProgress={task.id ? allSubtaskProgress.get(task.id) : undefined}
+                    isSubtasksOpen={Boolean(task.id && expandedSubtaskParents[task.id])}
+                    onToggleComplete={handleToggleComplete}
+                    onOpenEditor={openEditor}
+                    onToggleSubtasksExpand={toggleSubtasksExpand}
+                    onReschedule={setRescheduleTask}
+                    onDeleteTask={handleDeleteTask}
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
+                  />
+                ))}
               </div>
             </div>
           ))}
@@ -1022,6 +1066,6 @@ interface TaskGroup {
       />
     </div>
   );
-}
+});
 
 export default TasksView;

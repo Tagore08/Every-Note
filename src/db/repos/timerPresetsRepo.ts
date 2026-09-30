@@ -56,7 +56,7 @@ export const timerPresetsRepo = {
   },
 
   async getDefault(): Promise<TimerPreset> {
-    const defaultPreset = await db.timerPresets.where('isDefault').equals(1 as any).first();
+    const defaultPreset = await db.timerPresets.filter((p) => Boolean(p.isDefault)).first();
     if (defaultPreset) return defaultPreset;
 
     const first = await db.timerPresets.toCollection().first();
@@ -93,8 +93,9 @@ export const timerPresetsRepo = {
     const source = await db.timerPresets.get(id);
     if (!source) return null;
 
-    const copy: Omit<TimerPreset, 'id'> = {
-      ...source,
+    const { id: _id, ...rest } = source;
+    const copy = {
+      ...rest,
       name: `${source.name} (Copy)`,
       isDefault: false,
     };

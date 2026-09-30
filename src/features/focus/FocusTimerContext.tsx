@@ -2,11 +2,49 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback, ty
 import type { TimerPreset, FocusSessionKind } from '../../types/focus';
 import { timerPresetsRepo, DEFAULT_TIMER_PRESETS } from '../../db/repos/timerPresetsRepo';
 import { focusRepo } from '../../db/focusRepo';
+import { habitsRepo, toLocalDateStr } from '../../db/habitsRepo';
 
 export type TimerMode = 'focus' | 'shortBreak' | 'longBreak';
 export type TimerStatus = 'idle' | 'running' | 'paused';
-export type PlantType = 'bonsai' | 'sunflower' | 'cactus';
+export type PlantType = string;
 export type PlantStage = 'seed' | 'growing' | 'bloomed' | 'withered';
+
+export interface ActiveFocusSession {
+  targetEndTime: number | null;
+  sessionStartTime: string;
+  mode: TimerMode;
+  status: TimerStatus;
+  remainingSeconds: number;
+  currentCycle: number;
+  selectedTaskId: number | null;
+  selectedHabitId: number | null;
+  plantStage: PlantStage;
+  presetId?: number;
+}
+
+export const FOCUS_ACTIVE_SESSION_KEY = 'notes_app_focus_active_session';
+
+export function saveActiveSession(session: ActiveFocusSession | null): void {
+  try {
+    if (session) {
+      localStorage.setItem(FOCUS_ACTIVE_SESSION_KEY, JSON.stringify(session));
+    } else {
+      localStorage.removeItem(FOCUS_ACTIVE_SESSION_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function loadActiveSession(): ActiveFocusSession | null {
+  try {
+    const raw = localStorage.getItem(FOCUS_ACTIVE_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 interface FocusTimerContextValue {
   mode: TimerMode;
@@ -16,8 +54,12 @@ interface FocusTimerContextValue {
   totalCycles: number;
   preset: TimerPreset;
   presets: TimerPreset[];
+  customFocusMinutes: number;
+  setCustomFocusMinutes: (min: number) => void;
   selectedTaskId: number | null;
   setSelectedTaskId: (id: number | null) => void;
+  selectedHabitId: number | null;
+  setSelectedHabitId: (id: number | null) => void;
   plantType: PlantType;
   setPlantType: (type: PlantType) => void;
   plantStage: PlantStage;
@@ -65,27 +107,65 @@ function playCompletionChime() {
 }
 
 export function FocusTimerProvider({ children }: { children: ReactNode }) {
+  const [initialSession] = useState<ActiveFocusSession | null>(() => {
+    const saved = loadActiveSession();
+    if (!saved) return null;
+    if (saved.status === 'running' && saved.targetEndTime) {
+      const now = Date.now();
+      if (saved.targetEndTime > now) {
+        return {
+          ...saved,
+          remainingSeconds: Math.round((saved.targetEndTime - now) / 1000),
+        };
+      } else {
+        return {
+          ...saved,
+          remainingSeconds: 0,
+        };
+      }
+    }
+    return saved;
+  });
+
   const [presets, setPresets] = useState<TimerPreset[]>([]);
   const [preset, setPreset] = useState<TimerPreset>({
     id: 1,
     ...DEFAULT_TIMER_PRESETS[0],
   });
 
-  const [mode, setMode] = useState<TimerMode>('focus');
-  const [status, setStatus] = useState<TimerStatus>('idle');
-  const [remainingSeconds, setRemainingSeconds] = useState(25 * 60);
-  const [currentCycle, setCurrentCycle] = useState(1);
-  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [customFocusMinutes, setCustomFocusMinutesState] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('notes_app_focus_custom_minutes');
+      return saved ? Math.max(1, Math.min(240, Number(saved))) : 25;
+    } catch {
+      return 25;
+    }
+  });
+
+  const [mode, setMode] = useState<TimerMode>(() => initialSession?.mode || 'focus');
+  const [status, setStatus] = useState<TimerStatus>(() => initialSession?.status || 'idle');
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
+    if (initialSession) return initialSession.remainingSeconds;
+    try {
+      const saved = localStorage.getItem('notes_app_focus_custom_minutes');
+      return saved ? Math.max(1, Math.min(240, Number(saved))) * 60 : 25 * 60;
+    } catch {
+      return 25 * 60;
+    }
+  });
+  const [currentCycle, setCurrentCycle] = useState<number>(() => initialSession?.currentCycle || 1);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(() => initialSession?.selectedTaskId ?? null);
+  const [selectedHabitId, setSelectedHabitId] = useState<number | null>(() => initialSession?.selectedHabitId ?? null);
 
   // Gamification Plant State
   const [plantType, setPlantTypeState] = useState<PlantType>(() => {
     try {
-      return (localStorage.getItem('notes_app_focus_plant') as PlantType) || 'bonsai';
+      return localStorage.getItem('notes_app_focus_plant') || 'bonsai';
     } catch {
       return 'bonsai';
     }
   });
-  const [plantStage, setPlantStage] = useState<PlantStage>('seed');
+  const [plantStage, setPlantStage] = useState<PlantStage>(() => initialSession?.plantStage || 'seed');
 
   const setPlantType = (t: PlantType) => {
     setPlantTypeState(t);
@@ -96,9 +176,27 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setCustomFocusMinutes = useCallback((min: number) => {
+    const valid = Math.max(1, Math.min(240, min));
+    setCustomFocusMinutesState(valid);
+    try {
+      localStorage.setItem('notes_app_focus_custom_minutes', String(valid));
+    } catch {
+      // storage unavailable
+    }
+    if (status === 'idle' && mode === 'focus') {
+      setRemainingSeconds(valid * 60);
+      if (plantStage === 'bloomed' || plantStage === 'withered') {
+        setPlantStage('seed');
+      }
+    }
+  }, [status, mode, plantStage]);
+
   // Absolute end timestamp preventing drift
-  const targetEndTimeRef = useRef<number | null>(null);
-  const sessionStartTimeRef = useRef<Date | null>(null);
+  const targetEndTimeRef = useRef<number | null>(initialSession?.targetEndTime ?? null);
+  const sessionStartTimeRef = useRef<Date | null>(
+    initialSession?.sessionStartTime ? new Date(initialSession.sessionStartTime) : null
+  );
 
   const totalCycles = preset.cycles || 4;
 
@@ -106,14 +204,14 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     (m: TimerMode, p: TimerPreset): number => {
       switch (m) {
         case 'focus':
-          return (p.focusMin || 25) * 60;
+          return customFocusMinutes * 60;
         case 'shortBreak':
           return (p.shortBreakMin || 5) * 60;
         case 'longBreak':
           return (p.longBreakMin || 15) * 60;
       }
     },
-    []
+    [customFocusMinutes]
   );
 
   const totalModeDuration = getDurationForMode(mode, preset);
@@ -124,15 +222,20 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     try {
       const all = await timerPresetsRepo.getAll();
       setPresets(all);
-      const def = all.find((p) => p.isDefault) || all[0];
-      if (def && status === 'idle') {
-        setPreset(def);
-        setRemainingSeconds(getDurationForMode(mode, def));
+      if (initialSession?.presetId) {
+        const matching = all.find((p) => p.id === initialSession.presetId);
+        if (matching) setPreset(matching);
+      } else {
+        const def = all.find((p) => p.isDefault) || all[0];
+        if (def && status === 'idle') {
+          setPreset(def);
+          setRemainingSeconds(getDurationForMode(mode, def));
+        }
       }
     } catch (e) {
       console.error('Failed to load timer presets:', e);
     }
-  }, [mode, status, getDurationForMode]);
+  }, [mode, status, getDurationForMode, initialSession]);
 
   useEffect(() => {
     refreshPresets();
@@ -183,47 +286,105 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
       console.error('Failed to log focus session:', e);
     }
 
+    // Auto-complete selected habit if linked
+    if (mode === 'focus' && selectedHabitId) {
+      try {
+        await habitsRepo.setHabitDone(selectedHabitId, toLocalDateStr(), true);
+      } catch (err) {
+        console.error('Failed to mark linked habit as completed:', err);
+      }
+    }
+
     // Advance cycle / mode
     if (mode === 'focus') {
       setPlantStage('bloomed');
       if (currentCycle >= totalCycles) {
         setMode('longBreak');
-        setRemainingSeconds(getDurationForMode('longBreak', preset));
+        const dur = getDurationForMode('longBreak', preset);
+        setRemainingSeconds(dur);
         setCurrentCycle(1);
         if (preset.autoStartBreaks) {
-          targetEndTimeRef.current = Date.now() + getDurationForMode('longBreak', preset) * 1000;
-          sessionStartTimeRef.current = new Date();
+          const nextTarget = Date.now() + dur * 1000;
+          targetEndTimeRef.current = nextTarget;
+          const nextStart = new Date();
+          sessionStartTimeRef.current = nextStart;
           setStatus('running');
+          saveActiveSession({
+            targetEndTime: nextTarget,
+            sessionStartTime: nextStart.toISOString(),
+            mode: 'longBreak',
+            status: 'running',
+            remainingSeconds: dur,
+            currentCycle: 1,
+            selectedTaskId,
+            selectedHabitId,
+            plantStage: 'bloomed',
+            presetId: preset.id,
+          });
         } else {
           setStatus('idle');
+          saveActiveSession(null);
         }
       } else {
         setMode('shortBreak');
-        setRemainingSeconds(getDurationForMode('shortBreak', preset));
+        const dur = getDurationForMode('shortBreak', preset);
+        setRemainingSeconds(dur);
         if (preset.autoStartBreaks) {
-          targetEndTimeRef.current = Date.now() + getDurationForMode('shortBreak', preset) * 1000;
-          sessionStartTimeRef.current = new Date();
+          const nextTarget = Date.now() + dur * 1000;
+          targetEndTimeRef.current = nextTarget;
+          const nextStart = new Date();
+          sessionStartTimeRef.current = nextStart;
           setStatus('running');
+          saveActiveSession({
+            targetEndTime: nextTarget,
+            sessionStartTime: nextStart.toISOString(),
+            mode: 'shortBreak',
+            status: 'running',
+            remainingSeconds: dur,
+            currentCycle,
+            selectedTaskId,
+            selectedHabitId,
+            plantStage: 'bloomed',
+            presetId: preset.id,
+          });
         } else {
           setStatus('idle');
+          saveActiveSession(null);
         }
       }
     } else {
       // Finished break -> next focus
+      const nextCycle = mode === 'shortBreak' ? currentCycle + 1 : currentCycle;
       if (mode === 'shortBreak') {
-        setCurrentCycle((c) => c + 1);
+        setCurrentCycle(nextCycle);
       }
       setMode('focus');
-      setRemainingSeconds(getDurationForMode('focus', preset));
+      const dur = getDurationForMode('focus', preset);
+      setRemainingSeconds(dur);
       if (preset.autoStartFocus) {
-        targetEndTimeRef.current = Date.now() + getDurationForMode('focus', preset) * 1000;
-        sessionStartTimeRef.current = new Date();
+        const nextTarget = Date.now() + dur * 1000;
+        targetEndTimeRef.current = nextTarget;
+        const nextStart = new Date();
+        sessionStartTimeRef.current = nextStart;
         setStatus('running');
+        saveActiveSession({
+          targetEndTime: nextTarget,
+          sessionStartTime: nextStart.toISOString(),
+          mode: 'focus',
+          status: 'running',
+          remainingSeconds: dur,
+          currentCycle: nextCycle,
+          selectedTaskId,
+          selectedHabitId,
+          plantStage: 'seed',
+          presetId: preset.id,
+        });
       } else {
         setStatus('idle');
+        saveActiveSession(null);
       }
     }
-  }, [mode, preset, currentCycle, totalCycles, selectedTaskId, getDurationForMode]);
+  }, [mode, preset, currentCycle, totalCycles, selectedTaskId, selectedHabitId, getDurationForMode]);
 
   // Main countdown loop with absolute timestamp synchronization
   useEffect(() => {
@@ -261,29 +422,72 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
   }, [status, handleSessionComplete]);
 
   const startTimer = () => {
-    sessionStartTimeRef.current = new Date();
-    targetEndTimeRef.current = Date.now() + remainingSeconds * 1000;
+    const startTime = new Date();
+    const targetEnd = Date.now() + remainingSeconds * 1000;
+    sessionStartTimeRef.current = startTime;
+    targetEndTimeRef.current = targetEnd;
     setStatus('running');
+    const nextPlantStage = mode === 'focus' ? 'growing' : plantStage;
     if (mode === 'focus') {
       setPlantStage('growing');
     }
+    saveActiveSession({
+      targetEndTime: targetEnd,
+      sessionStartTime: startTime.toISOString(),
+      mode,
+      status: 'running',
+      remainingSeconds,
+      currentCycle,
+      selectedTaskId,
+      selectedHabitId,
+      plantStage: nextPlantStage,
+      presetId: preset.id,
+    });
   };
 
   const pauseTimer = () => {
+    let diffSec = remainingSeconds;
     if (targetEndTimeRef.current) {
-      const diffSec = Math.max(0, Math.round((targetEndTimeRef.current - Date.now()) / 1000));
+      diffSec = Math.max(0, Math.round((targetEndTimeRef.current - Date.now()) / 1000));
       setRemainingSeconds(diffSec);
       targetEndTimeRef.current = null;
     }
     setStatus('paused');
+    saveActiveSession({
+      targetEndTime: null,
+      sessionStartTime: (sessionStartTimeRef.current || new Date()).toISOString(),
+      mode,
+      status: 'paused',
+      remainingSeconds: diffSec,
+      currentCycle,
+      selectedTaskId,
+      selectedHabitId,
+      plantStage,
+      presetId: preset.id,
+    });
   };
 
   const resumeTimer = () => {
-    targetEndTimeRef.current = Date.now() + remainingSeconds * 1000;
+    const targetEnd = Date.now() + remainingSeconds * 1000;
+    targetEndTimeRef.current = targetEnd;
     setStatus('running');
+    const nextPlantStage =
+      mode === 'focus' && plantStage !== 'bloomed' && plantStage !== 'withered' ? 'growing' : plantStage;
     if (mode === 'focus' && plantStage !== 'bloomed' && plantStage !== 'withered') {
       setPlantStage('growing');
     }
+    saveActiveSession({
+      targetEndTime: targetEnd,
+      sessionStartTime: (sessionStartTimeRef.current || new Date()).toISOString(),
+      mode,
+      status: 'running',
+      remainingSeconds,
+      currentCycle,
+      selectedTaskId,
+      selectedHabitId,
+      plantStage: nextPlantStage,
+      presetId: preset.id,
+    });
   };
 
   const resetTimer = () => {
@@ -291,6 +495,7 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     setStatus('idle');
     setRemainingSeconds(getDurationForMode(mode, preset));
     setPlantStage('seed');
+    saveActiveSession(null);
   };
 
   const giveUpTimer = () => {
@@ -300,6 +505,7 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
       setPlantStage('withered');
     }
     setRemainingSeconds(getDurationForMode(mode, preset));
+    saveActiveSession(null);
   };
 
   const resetPlant = () => {
@@ -308,6 +514,7 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
     setMode('focus');
     setRemainingSeconds(getDurationForMode('focus', preset));
     setPlantStage('seed');
+    saveActiveSession(null);
   };
 
   const skipStep = () => {
@@ -329,6 +536,7 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
       setMode('focus');
       setRemainingSeconds(getDurationForMode('focus', preset));
     }
+    saveActiveSession(null);
   };
 
   return (
@@ -341,8 +549,12 @@ export function FocusTimerProvider({ children }: { children: ReactNode }) {
         totalCycles,
         preset,
         presets,
+        customFocusMinutes,
+        setCustomFocusMinutes,
         selectedTaskId,
         setSelectedTaskId,
+        selectedHabitId,
+        setSelectedHabitId,
         plantType,
         setPlantType,
         plantStage,

@@ -9,6 +9,7 @@ import { peopleRepo } from '../../db/peopleRepo';
 import { useSnackbar } from '../../context/SnackbarContext';
 import type { Note } from '../../types/note';
 import type { Template } from '../../types/template';
+import { sanitizeTag } from '../../lib/tags';
 
 export interface FileAsSheetProps {
   isOpen: boolean;
@@ -72,7 +73,7 @@ export function FileAsSheet({ isOpen, onClose, note, onFiled }: FileAsSheetProps
 
   // Add tag
   const handleAddTag = () => {
-    const trimmed = tagInput.trim().replace(/^#/, '');
+    const trimmed = sanitizeTag(tagInput);
     if (trimmed && !tags.includes(trimmed)) {
       setTags((prev) => [...prev, trimmed]);
       setTagInput('');
